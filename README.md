@@ -68,3 +68,12 @@ Dashboard.
 
 ### Phase 12
 Model fine-tuning.
+
+## Local Development
+
+### Activate virtual environment
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1

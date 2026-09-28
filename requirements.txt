@@ -1,1 +1,3 @@
-# Fayfort AI Python dependencies
+fastapi
+uvicorn[standard]
+pydantic-settings
