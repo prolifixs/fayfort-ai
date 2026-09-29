@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+HF_API_URL: str = "https://router.huggingface.co/hf-inference/models/HuggingFaceH4/zephyr-7b-beta"
+HF_TOKEN: str
 
 
 settings = Settings()
