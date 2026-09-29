@@ -47,6 +47,7 @@ def build_messages(
     customer_message: str,
     knowledge_context: str = "",
     conversation_history: list[dict[str, Any]] | None = None,
+    conversation_summary: str = "",
 ) -> list[dict[str, str]]:
     """
     Build a proper multi-turn chat message list.
@@ -70,6 +71,20 @@ def build_messages(
                 "content": (
                     "BUSINESS KNOWLEDGE:\n"
                     f"{knowledge_context}"
+                ),
+            }
+        )
+
+    if conversation_summary:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "CONVERSATION MEMORY:\n"
+                    f"{conversation_summary}\n\n"
+                    "Use this memory as background context. "
+                    "Recent conversation messages take precedence "
+                    "if there is any conflict."
                 ),
             }
         )
@@ -129,12 +144,15 @@ def generate_ai_response(
     customer_message: str,
     knowledge_context: str = "",
     conversation_history: list[dict[str, Any]] | None = None,
+    conversation_summary: str = "",
 ) -> str:
 
     messages = build_messages(
         customer_message=customer_message,
         knowledge_context=knowledge_context,
         conversation_history=conversation_history,
+        conversation_summary=conversation_summary,
+
     )
 
     response = requests.post(
@@ -168,4 +186,107 @@ def generate_ai_response(
 
     raise RuntimeError(
         f"AI provider returned an unexpected response: {data}"
+    )
+
+def generate_conversation_summary(
+    previous_summary: str = "",
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> str:
+    """
+    Create a concise long-term memory for the conversation.
+
+    The summary should preserve important customer information,
+    decisions, preferences, requests, and unresolved issues while
+    avoiding unnecessary conversational detail.
+    """
+
+    history = conversation_history or []
+
+    history_text = ""
+
+    for message in history:
+        sender = message.get("sender_type", "unknown")
+        content = (message.get("content") or "").strip()
+
+        if content:
+            history_text += f"{sender}: {content}\n"
+
+    prompt = f"""
+You maintain long-term memory for a customer service conversation.
+
+Your job is to create a concise factual summary that can be used
+in future messages.
+
+PRESERVE IMPORTANT INFORMATION SUCH AS:
+- Customer name or identity information explicitly provided
+- What the customer wants
+- Products or services they are interested in
+- Preferences they have stated
+- Important decisions they have made
+- Requirements or constraints
+- Prices or quantities explicitly discussed
+- Questions that remain unresolved
+- Important promises or next steps
+
+DO NOT:
+- Invent information
+- Add assumptions
+- Include greetings or conversational filler
+- Describe the AI's internal processes
+- Include irrelevant small talk
+
+Keep the summary concise and useful for future conversation.
+
+PREVIOUS SUMMARY:
+{previous_summary or "No previous summary."}
+
+RECENT CONVERSATION:
+{history_text or "No recent conversation."}
+
+Return ONLY the updated summary.
+""".strip()
+
+    response = requests.post(
+        "https://router.huggingface.co/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {settings.HF_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "openai/gpt-oss-120b:fastest",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a conversation memory manager. "
+                        "Return concise factual memory only."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            "temperature": 0.2,
+            "max_tokens": 300,
+            "stream": False,
+        },
+        timeout=60,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    try:
+        content = data["choices"][0]["message"]["content"]
+
+        if content:
+            return content.strip()
+
+    except (KeyError, IndexError, TypeError):
+        pass
+
+    raise RuntimeError(
+        f"AI provider returned an unexpected summary response: {data}"
     )

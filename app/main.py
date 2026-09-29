@@ -19,6 +19,7 @@ from app.database.conversations import (
     get_conversation,
     create_conversation,
     get_or_create_conversation,
+    update_conversation_summary,
 )
 from app.database.messages import (
     list_messages,
@@ -26,7 +27,10 @@ from app.database.messages import (
 )
 
 from app.services.rag import build_business_context
-from app.services.ai_responder import generate_ai_response
+from app.services.ai_responder import (
+    generate_ai_response,
+    generate_conversation_summary,
+)
 
 app = FastAPI(
     title="FayFort AI",
@@ -253,19 +257,49 @@ def send_message(
     knowledge_context = build_business_context(business_id)
 
     # 4. Generate AI response
+    # 4. Generate AI response
+    conversation_summary = conversation.get("summary") or ""
+
     ai_response = generate_ai_response(
         customer_message=content,
         knowledge_context=knowledge_context,
         conversation_history=conversation_history,
+        conversation_summary=conversation_summary,
     )
 
-    # 5. Save AI response
+        # 5. Save AI response
     ai_message = create_message(
         conversation_id=conversation_id,
         external_message_id=str(uuid.uuid4()),
         sender_type="ai",
         content=ai_response,
     )
+
+    # 6. Update long-term conversation memory
+    summary_history = conversation_history + [
+        {
+            "sender_type": "ai",
+            "content": ai_response,
+        }
+    ]
+
+    try:
+        updated_summary = generate_conversation_summary(
+            previous_summary=conversation_summary,
+            conversation_history=summary_history,
+        )
+
+        update_conversation_summary(
+            conversation_id=conversation_id,
+            summary=updated_summary,
+        )
+
+    except Exception as exc:
+        # Summary failure should never prevent the customer
+        # from receiving the AI response.
+        print(
+            f"Warning: conversation summary update failed: {exc}"
+        )
 
     return {
         "conversation_id": conversation_id,
