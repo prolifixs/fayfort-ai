@@ -12,8 +12,10 @@ class Settings(BaseSettings):
     SUPABASE_URL: str 
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
-    HF_API_URL: str = "https://router.huggingface.co/v1/chat/completions"
+    HF_CHAT_COMPLETIONS_URL: str = "https://router.huggingface.co/v1/chat/completions"
+    HF_MODEL: str = "openai/gpt-oss-120b:fastest"
     HF_TOKEN: str
+    DIRECTORY_TOOLS_ENABLED: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
