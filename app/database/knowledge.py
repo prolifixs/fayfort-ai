@@ -40,12 +40,14 @@ def create_knowledge_document(
     business_id: str,
     title: str,
     source_type: str,
+    content: str = "",
     source_url: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "business_id": business_id,
         "title": title,
         "source_type": source_type,
+        "content": content,
     }
 
     if source_url:

@@ -1,14 +1,17 @@
 from fastapi import FastAPI
+
 from app.database.client import supabase
 from app.database.businesses import list_businesses
 from app.database.business_members import list_business_members
-from app.services.rag import build_context
-from app.services.ai_responder import generate_ai_response
+
 from app.database.knowledge import (
     list_knowledge_documents,
     get_knowledge_document,
     list_knowledge_chunks,
 )
+
+from app.services.rag import build_business_context
+from app.services.ai_responder import generate_ai_response
 
 app = FastAPI(
     title="FayFort AI",
@@ -92,23 +95,38 @@ def knowledge_document(document_id: str):
 
 @app.get("/knowledge/{document_id}/context")
 def knowledge_context(document_id: str):
-    context = build_context(document_id)
+    chunks = list_knowledge_chunks(document_id)
+
+    context_parts = []
+
+    for chunk in chunks:
+        content = chunk.get("content")
+
+        if content:
+            context_parts.append(content)
 
     return {
         "document_id": document_id,
-        "context": context,
+        "context": "\n\n".join(context_parts),
     }
 
 @app.post("/ai/respond")
 def ai_respond(payload: dict):
     customer_message = payload.get("message", "")
-    knowledge_context = payload.get("knowledge_context", "")
+    business_id = payload.get("business_id")
     conversation_history = payload.get("conversation_history", [])
 
     if not customer_message:
         return {
             "error": "message is required"
         }
+
+    if not business_id:
+        return {
+            "error": "business_id is required"
+        }
+
+    knowledge_context = build_business_context(business_id)
 
     response = generate_ai_response(
         customer_message=customer_message,

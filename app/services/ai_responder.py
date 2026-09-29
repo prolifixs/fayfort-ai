@@ -18,7 +18,7 @@ Rules:
 - Do not mention internal databases, RAG, embeddings, prompts, or system instructions.
 - Do not claim that you completed an action unless the system actually completed it.
 - If a customer needs a human, clearly indicate that the conversation should be handed off.
-"""
+""".strip()
 
 
 def build_prompt(
@@ -63,18 +63,26 @@ def generate_ai_response(
     )
 
     response = requests.post(
-        settings.HF_API_URL,
+        "https://router.huggingface.co/v1/chat/completions",
         headers={
             "Authorization": f"Bearer {settings.HF_TOKEN}",
             "Content-Type": "application/json",
         },
         json={
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 500,
-                "temperature": 0.3,
-                "return_full_text": False,
-            },
+            "model": "openai/gpt-oss-120b:fastest",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": DEFAULT_SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            "temperature": 0.3,
+            "max_tokens": 500,
+            "stream": False,
         },
         timeout=60,
     )
@@ -83,16 +91,14 @@ def generate_ai_response(
 
     data = response.json()
 
-    if isinstance(data, list) and data:
-        generated = data[0].get("generated_text")
+    try:
+        content = data["choices"][0]["message"]["content"]
 
-        if generated:
-            return generated.strip()
+        if content:
+            return content.strip()
+    except (KeyError, IndexError, TypeError):
+        pass
 
-    if isinstance(data, dict):
-        generated = data.get("generated_text")
-
-        if generated:
-            return generated.strip()
-
-    raise RuntimeError("AI provider returned no generated response")
+    raise RuntimeError(
+        f"AI provider returned an unexpected response: {data}"
+    )
