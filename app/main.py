@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import uuid
 
 from app.database.client import supabase
 from app.database.businesses import list_businesses
@@ -12,6 +13,16 @@ from app.database.knowledge import (
     create_knowledge_document,
     update_knowledge_document,
     delete_knowledge_chunks,
+)
+from app.database.conversations import (
+    list_conversations,
+    get_conversation,
+    create_conversation,
+    get_or_create_conversation,
+)
+from app.database.messages import (
+    list_messages,
+    create_message,
 )
 
 from app.services.rag import build_business_context
@@ -148,6 +159,119 @@ def knowledge_context(document_id: str):
     return {
         "document_id": document_id,
         "context": "\n\n".join(context_parts),
+    }
+
+@app.post("/conversations")
+def create_or_get_conversation(payload: dict):
+    business_id = payload.get("business_id")
+    customer_external_id = payload.get("customer_external_id")
+    channel = payload.get("channel")
+
+    if not business_id:
+        return {
+            "error": "business_id is required"
+        }
+
+    if not customer_external_id:
+        return {
+            "error": "customer_external_id is required"
+        }
+
+    if not channel:
+        return {
+            "error": "channel is required"
+        }
+
+    conversation = get_or_create_conversation(
+        business_id=business_id,
+        customer_external_id=customer_external_id,
+        channel=channel,
+    )
+
+    return {
+        "conversation": conversation
+    }
+
+@app.get("/conversations/{conversation_id}/messages")
+def conversation_messages(conversation_id: str):
+    conversation = get_conversation(conversation_id)
+
+    if conversation is None:
+        return {
+            "error": "Conversation not found"
+        }
+
+    return {
+        "conversation_id": conversation_id,
+        "messages": list_messages(conversation_id),
+    }
+
+@app.post("/conversations/{conversation_id}/messages")
+def send_message(
+    conversation_id: str,
+    payload: dict,
+):
+    content = payload.get("content", "")
+
+    if not content:
+        return {
+            "error": "content is required"
+        }
+
+    conversation = get_conversation(conversation_id)
+
+    if conversation is None:
+        return {
+            "error": "Conversation not found"
+        }
+
+    business_id = conversation["business_id"]
+
+    # 1. Save customer message
+    customer_message = create_message(
+        conversation_id=conversation_id,
+        external_message_id=str(uuid.uuid4()),
+        sender_type="customer",
+        content=content,
+    )
+
+    # 2. Get conversation history
+    messages = list_messages(
+    conversation_id,
+    limit=20,
+    )
+
+    conversation_history = [
+        {
+            "sender_type": message.get("sender_type"),
+            "content": message.get("content"),
+        }
+        for message in messages
+    ]
+
+    # 3. Get business knowledge
+    knowledge_context = build_business_context(business_id)
+
+    # 4. Generate AI response
+    ai_response = generate_ai_response(
+        customer_message=content,
+        knowledge_context=knowledge_context,
+        conversation_history=conversation_history,
+    )
+
+    # 5. Save AI response
+    ai_message = create_message(
+        conversation_id=conversation_id,
+        external_message_id=str(uuid.uuid4()),
+        sender_type="ai",
+        content=ai_response,
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "customer_message": customer_message,
+        "ai_message": ai_message,
+        "response": ai_response,
     }
 
 @app.post("/ai/respond")

@@ -5,17 +5,24 @@ from app.database.client import supabase
 
 def list_messages(
     conversation_id: str,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    response = (
+    query = (
         supabase
         .table("messages")
         .select("*")
         .eq("conversation_id", conversation_id)
-        .order("sent_at", desc=False)
-        .execute()
+        .order("created_at", desc=True)
     )
 
-    return response.data or []
+    if limit:
+        query = query.limit(limit)
+
+    response = query.execute()
+
+    messages = response.data or []
+
+    return list(reversed(messages))
 
 
 def get_message(
