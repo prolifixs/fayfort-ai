@@ -3,11 +3,15 @@ from fastapi import FastAPI
 from app.database.client import supabase
 from app.database.businesses import list_businesses
 from app.database.business_members import list_business_members
+from app.services.knowledge_ingestion import ingest_knowledge
 
 from app.database.knowledge import (
     list_knowledge_documents,
     get_knowledge_document,
     list_knowledge_chunks,
+    create_knowledge_document,
+    update_knowledge_document,
+    delete_knowledge_chunks,
 )
 
 from app.services.rag import build_business_context
@@ -78,6 +82,42 @@ def business_knowledge(business_id: str):
         "documents": list_knowledge_documents(business_id),
     }
 
+@app.post("/businesses/{business_id}/knowledge")
+def add_knowledge(
+    business_id: str,
+    payload: dict,
+):
+    title = payload.get("title", "")
+    content = payload.get("content", "")
+    source_type = payload.get("source_type", "manual")
+
+    if not title:
+        return {
+            "error": "title is required"
+        }
+
+    if not content:
+        return {
+            "error": "content is required"
+        }
+
+    document = create_knowledge_document(
+        business_id=business_id,
+        title=title,
+        source_type=source_type,
+        content=content,
+    )
+
+    chunks = ingest_knowledge(
+        document["id"],
+        content,
+    )
+
+    return {
+        "document": document,
+        "chunks": chunks,
+    }
+
 
 @app.get("/knowledge/{document_id}")
 def knowledge_document(document_id: str):
@@ -136,4 +176,56 @@ def ai_respond(payload: dict):
 
     return {
         "response": response
+    }
+
+@app.put("/knowledge/{document_id}")
+def update_knowledge(
+    document_id: str,
+    payload: dict,
+):
+    title = payload.get("title")
+    content = payload.get("content")
+    source_type = payload.get("source_type", "manual")
+
+    if not title:
+        return {
+            "error": "title is required"
+        }
+
+    if not content:
+        return {
+            "error": "content is required"
+        }
+
+    document = get_knowledge_document(document_id)
+
+    if document is None:
+        return {
+            "error": "Knowledge document not found"
+        }
+
+    updated_document = update_knowledge_document(
+        document_id=document_id,
+        title=title,
+        content=content,
+        source_type=source_type,
+    )
+
+    if updated_document is None:
+        return {
+            "error": "Knowledge document could not be updated"
+        }
+
+    # Remove old chunks
+    delete_knowledge_chunks(document_id)
+
+    # Create new chunks from updated content
+    chunks = ingest_knowledge(
+        document_id=document_id,
+        content=content,
+    )
+
+    return {
+        "document": updated_document,
+        "chunks": chunks,
     }
