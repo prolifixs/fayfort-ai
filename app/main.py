@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Header
+from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import logging
 import requests
@@ -23,6 +24,7 @@ from app.database.conversations import (
     get_or_create_conversation,
     update_conversation_summary,
 )
+from app.database.handoffs import active_handoff_for_conversation
 from app.database.messages import (
     list_messages,
     create_message,
@@ -54,6 +56,16 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -326,6 +338,16 @@ def send_message(
         content=content,
     )
 
+    active_handoff = active_handoff_for_conversation(business_id, conversation_id)
+    if active_handoff:
+        return {
+            "conversation_id": conversation_id,
+            "customer_message": customer_message,
+            "ai_message": None,
+            "response": "Your message has been added to the conversation for the assigned human agent.",
+            "handoff": {"id": active_handoff["id"], "status": active_handoff["status"]},
+            "automation_paused": True,
+        }
     # 2. Get conversation history
     messages = list_messages(
     conversation_id,
@@ -477,6 +499,23 @@ def send_message(
         "response": ai_response,
     }
 
+from app.channels.router import create_manual_channel_router
+from app.channels.instagram import create_instagram_webhook_router
+from app.channels.outbound import deliver_instagram_text
+app.include_router(create_manual_channel_router(send_message))
+from app.connections.router import create_connections_router
+app.include_router(create_connections_router())
+from app.automations.router import create_automations_router
+app.include_router(create_automations_router())
+from app.handoffs.router import create_handoffs_router
+app.include_router(create_handoffs_router())
+from app.events.router import create_events_router
+app.include_router(create_events_router())
+from app.dashboard.router import create_dashboard_router
+from app.dashboard.modules import create_workspace_modules_router
+app.include_router(create_dashboard_router())
+app.include_router(create_workspace_modules_router())
+
 @app.post("/ai/respond")
 def ai_respond(payload: dict):
     customer_message = payload.get("message", "")
@@ -556,3 +595,5 @@ def update_knowledge(
         "document": updated_document,
         "chunks": chunks,
     }
+
+app.include_router(create_instagram_webhook_router(send_message, deliver_instagram_text))

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     HF_MODEL: str = "openai/gpt-oss-120b:fastest"
     HF_TOKEN: str
     DIRECTORY_TOOLS_ENABLED: bool = False
+    META_VERIFY_TOKEN: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

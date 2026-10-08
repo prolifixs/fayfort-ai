@@ -48,12 +48,15 @@ def create_conversation(
     business_id: str,
     customer_external_id: str,
     channel: str,
+    business_connection_id: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "business_id": business_id,
         "customer_external_id": customer_external_id,
         "channel": channel,
     }
+    if business_connection_id:
+        payload["business_connection_id"] = business_connection_id
 
     response = (
         supabase
@@ -71,8 +74,9 @@ def find_conversation(
     business_id: str,
     customer_external_id: str,
     channel: str,
+    business_connection_id: str | None = None,
 ) -> dict[str, Any] | None:
-    response = (
+    query = (
         supabase
         .table("conversations")
         .select("*")
@@ -82,8 +86,12 @@ def find_conversation(
         .eq("status", "open")
         .order("created_at", desc=True)
         .limit(1)
-        .execute()
     )
+
+    if business_connection_id:
+        query = query.eq("business_connection_id", business_connection_id)
+
+    response = query.execute()
 
     if not response.data:
         return None
@@ -94,11 +102,13 @@ def get_or_create_conversation(
     business_id: str,
     customer_external_id: str,
     channel: str,
+    business_connection_id: str | None = None,
 ) -> dict[str, Any]:
     conversation = find_conversation(
         business_id=business_id,
         customer_external_id=customer_external_id,
         channel=channel,
+        business_connection_id=business_connection_id,
     )
 
     if conversation:
@@ -108,6 +118,7 @@ def get_or_create_conversation(
         business_id=business_id,
         customer_external_id=customer_external_id,
         channel=channel,
+        business_connection_id=business_connection_id,
     )
 
 
