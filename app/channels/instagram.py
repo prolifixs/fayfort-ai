@@ -16,6 +16,7 @@ from app.database.connections import (
     get_connection_credentials,
     list_instagram_connections_for_account,
 )
+from app.database.channel_events import mark_inbound_delivery_outcome
 from app.schemas.channel import ManualInboundPayload
 
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 def create_instagram_webhook_router(
     message_handler: Callable[[str, dict[str, str], str | None], dict[str, Any]],
     outbound_handler: Callable[..., dict[str, Any]] | None = None,
+    inbound_message_handler: Callable[..., dict[str, Any]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/webhooks/instagram", tags=["instagram"])
 
@@ -69,7 +71,8 @@ def create_instagram_webhook_router(
                 matches = list_instagram_connections_for_account(account_id)
                 if not matches:
                     # Meta dashboard tests use synthetic account IDs; acknowledge without side effects.
-                    logger.warning("Instagram webhook acknowledged without processing: account_id=%s; entries=%d; object=%s", account_id, len(entries), payload.get("object", "unknown"))
+                    account_fingerprint = hashlib.sha256(account_id.encode("utf-8")).hexdigest()[:12]
+                    logger.warning("Instagram webhook acknowledged without processing: account_fingerprint=%s; entries=%d; object=%s", account_fingerprint, len(entries), payload.get("object", "unknown"))
                     continue
                 if len(matches) != 1:
                     raise HTTPException(status_code=409, detail="Instagram webhook account is not uniquely connected.")
@@ -137,6 +140,10 @@ def create_instagram_webhook_router(
                     channel_override="instagram",
                     require_identity=False,
                     connection_id=connection["id"],
+                    inbound_message_handler=inbound_message_handler,
+                    automation_reply_enabled=(
+                        (connection.get("safe_settings") or {}).get("auto_reply_enabled") is True
+                    ),
                 )
                 logger.warning("Instagram inbound event outcome: %s", result.get("status", "unknown"))
                 if (
@@ -160,11 +167,30 @@ def create_instagram_webhook_router(
                             require_auto_reply=True,
                         )
                         logger.warning("Instagram AI outbound status: %s", delivery.get("status", "unknown"))
+                        delivery_status = str(delivery.get("status") or "unknown")
+                        if delivery_status not in {"sent", "rejected", "unknown", "blocked"}:
+                            delivery_status = "unknown"
+                        try:
+                            mark_inbound_delivery_outcome(
+                                str(result["ai_message"]["id"]),
+                                delivery_status,
+                                delivery.get("safe_error_code"),
+                            )
+                        except Exception:
+                            logger.exception("Could not reconcile inbound event with provider delivery ledger")
                     except Exception:
                         # A provider send outcome must not make Meta replay an
                         # already-processed inbound event; the delivery record
                         # is the source for reconciliation and safe retry.
                         logger.exception("Instagram outbound delivery failed after inbound processing")
+                        try:
+                            mark_inbound_delivery_outcome(
+                                str(result["ai_message"]["id"]),
+                                "unknown",
+                                "provider_result_uncertain",
+                            )
+                        except Exception:
+                            logger.exception("Could not preserve uncertain inbound delivery state")
                 processed += 1
         logger.warning("Instagram webhook complete; processed=%d", processed)
         return {"status": "accepted", "processed": processed}

@@ -13,9 +13,14 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
     HF_CHAT_COMPLETIONS_URL: str = "https://router.huggingface.co/v1/chat/completions"
-    HF_MODEL: str = "openai/gpt-oss-120b:fastest"
+    HF_MODEL: str = "openai/gpt-oss-20b:deepinfra"
     HF_TOKEN: str
+    AI_MAX_INPUT_BYTES: int = 65536
+    AI_MODEL_INPUT_PRICE_USD_PER_MILLION: str = "0.04"
+    AI_MODEL_OUTPUT_PRICE_USD_PER_MILLION: str = "0.17"
     DIRECTORY_TOOLS_ENABLED: bool = False
+    AUTOMATION_SCHEDULER_ENABLED: bool = False
+    INBOUND_RECONCILIATION_ENABLED: bool = True
     META_VERIFY_TOKEN: str = ""
 
     model_config = SettingsConfigDict(

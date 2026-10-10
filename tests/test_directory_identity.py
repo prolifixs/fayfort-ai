@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.directory.identity import has_trusted_business_identity
+from app.directory.identity import has_trusted_business_identity, trusted_platform_admin
 
 
 class DirectoryIdentityTests(unittest.TestCase):
@@ -18,6 +18,29 @@ class DirectoryIdentityTests(unittest.TestCase):
 
         get_member.return_value = {"user_id": "user-1", "status": "inactive"}
         self.assertFalse(has_trusted_business_identity("Bearer valid-token", "business-1"))
+
+    @patch("app.directory.identity.supabase.auth.get_user")
+    def test_platform_admin_requires_server_managed_app_metadata(self, get_user):
+        get_user.return_value = SimpleNamespace(
+            user=SimpleNamespace(
+                id="business-admin",
+                app_metadata={},
+                user_metadata={"platform_admin": True},
+            )
+        )
+        self.assertIsNone(trusted_platform_admin("Bearer valid-token"))
+
+        get_user.return_value = SimpleNamespace(
+            user=SimpleNamespace(
+                id="platform-admin",
+                app_metadata={"platform_admin": True},
+                user_metadata={},
+            )
+        )
+        self.assertEqual(
+            trusted_platform_admin("Bearer valid-token"),
+            {"user_id": "platform-admin"},
+        )
 
     @patch("app.directory.identity.supabase.auth.get_user")
     def test_missing_malformed_or_invalid_token_fails_closed(self, get_user):

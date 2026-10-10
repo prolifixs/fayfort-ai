@@ -91,3 +91,20 @@ class InstagramCredentials(BaseModel):
         if not value:
             raise ValueError("credential must not be blank")
         return value
+
+
+class MessengerCredentials(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    app_id: str = Field(min_length=1, max_length=256)
+    app_secret: str = Field(min_length=1, max_length=2048)
+    page_id: str = Field(min_length=1, max_length=256)
+    page_access_token: str = Field(min_length=1, max_length=8192)
+
+    @field_validator("app_id", "app_secret", "page_id", "page_access_token")
+    @classmethod
+    def trim_credential(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("credential must not be blank")
+        return value

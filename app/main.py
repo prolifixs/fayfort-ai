@@ -1,8 +1,11 @@
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+import asyncio
 import uuid
 import logging
 import requests
+from typing import Any
 
 from app.database.client import supabase
 from app.database.businesses import list_businesses
@@ -17,6 +20,7 @@ from app.database.knowledge import (
     update_knowledge_document,
     delete_knowledge_chunks,
 )
+from app.knowledge.router import create_business_faq_router
 from app.database.conversations import (
     list_conversations,
     get_conversation,
@@ -39,6 +43,7 @@ from app.database.actions import create_action
 from app.directory.service import lookup_for_message
 from app.directory.response import format_directory_response
 from app.config.settings import settings
+from app.directory.identity import trusted_business_member
 
 from app.services.rag import build_business_context
 from app.services.intent_engine import analyze_intent
@@ -49,12 +54,70 @@ from app.services.ai_responder import (
     generate_ai_response,
     generate_conversation_summary,
 )
+from app.services.ai_budget import AIBudgetExceeded, AIBudgetUnavailable
+from app.services.faq_matching import match_approved_faq
 
 app = FastAPI(
     title="FayFort AI",
     description="AI-powered social media customer service platform",
     version="0.1.0",
 )
+
+
+class AiRespondHistoryMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    sender_type: str = Field(default="customer", max_length=30)
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class AiRespondPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    business_id: str = Field(min_length=1, max_length=80)
+    message: str = Field(min_length=1, max_length=4000)
+    conversation_history: list[AiRespondHistoryMessage] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def limit_total_prompt_input(self):
+        total_chars = len(self.message) + sum(len(item.content) for item in self.conversation_history)
+        if total_chars > 16000:
+            raise ValueError("message and conversation history may contain at most 16000 characters")
+        return self
+
+_automation_scheduler_task: asyncio.Task | None = None
+_inbound_reconciliation_task: asyncio.Task | None = None
+
+
+@app.on_event("startup")
+async def start_automation_scheduler() -> None:
+    global _automation_scheduler_task, _inbound_reconciliation_task
+    if not settings.AUTOMATION_SCHEDULER_ENABLED:
+        logger.info("Automation scheduler is disabled by configuration")
+    else:
+        from app.automations.scheduler import scheduler_loop
+        if _automation_scheduler_task is None or _automation_scheduler_task.done():
+            _automation_scheduler_task = asyncio.create_task(
+                scheduler_loop(), name="fayfort-automation-scheduler"
+            )
+            logger.info("Automation scheduler started; polling every 15 seconds")
+    if settings.INBOUND_RECONCILIATION_ENABLED:
+        from app.automations.reconciliation import reconciliation_loop
+        if _inbound_reconciliation_task is None or _inbound_reconciliation_task.done():
+            _inbound_reconciliation_task = asyncio.create_task(
+                reconciliation_loop(), name="fayfort-inbound-reconciliation"
+            )
+            logger.info("Inbound ledger reconciliation started; polling every 15 seconds")
+
+
+@app.on_event("shutdown")
+async def stop_automation_scheduler() -> None:
+    global _automation_scheduler_task, _inbound_reconciliation_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task) if task is not None]
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _automation_scheduler_task = None
+    _inbound_reconciliation_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,6 +128,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_private_network=True,
 )
 logger = logging.getLogger(__name__)
 
@@ -95,6 +159,7 @@ def _persist_intent_and_action(
         "source_message_id": source_message_id,
         "metadata": {
             **intent_result.metadata,
+            "language": intent_result.language,
             "clarification_needed": intent_result.clarification_needed,
             "can_handle_automatically": intent_result.can_handle_automatically,
             "classification_status": str(intent_result.classification_status),
@@ -188,8 +253,22 @@ def business_members(business_id: str):
         "members": list_business_members(business_id),
     }
 
+def _authorize_knowledge_access(
+    business_id: str,
+    authorization: str | None,
+    *,
+    manage: bool = False,
+) -> dict[str, Any]:
+    member = trusted_business_member(authorization, business_id)
+    if not member:
+        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+    if manage and member.get("role") not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="An active business owner or admin is required to change business knowledge.")
+    return member
+
 @app.get("/businesses/{business_id}/knowledge")
-def business_knowledge(business_id: str):
+def business_knowledge(business_id: str, authorization: str | None = Header(default=None)):
+    _authorize_knowledge_access(business_id, authorization)
     return {
         "business_id": business_id,
         "documents": list_knowledge_documents(business_id),
@@ -199,7 +278,9 @@ def business_knowledge(business_id: str):
 def add_knowledge(
     business_id: str,
     payload: dict,
+    authorization: str | None = Header(default=None),
 ):
+    _authorize_knowledge_access(business_id, authorization, manage=True)
     title = payload.get("title", "")
     content = payload.get("content", "")
     source_type = payload.get("source_type", "manual")
@@ -233,13 +314,12 @@ def add_knowledge(
 
 
 @app.get("/knowledge/{document_id}")
-def knowledge_document(document_id: str):
+def knowledge_document(document_id: str, authorization: str | None = Header(default=None)):
     document = get_knowledge_document(document_id)
 
     if document is None:
-        return {
-            "error": "Knowledge document not found"
-        }
+        raise HTTPException(status_code=404, detail="Knowledge document not found.")
+    _authorize_knowledge_access(document["business_id"], authorization)
 
     return {
         "document": document,
@@ -247,7 +327,11 @@ def knowledge_document(document_id: str):
     }
 
 @app.get("/knowledge/{document_id}/context")
-def knowledge_context(document_id: str):
+def knowledge_context(document_id: str, authorization: str | None = Header(default=None)):
+    document = get_knowledge_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Knowledge document not found.")
+    _authorize_knowledge_access(document["business_id"], authorization)
     chunks = list_knowledge_chunks(document_id)
 
     context_parts = []
@@ -294,25 +378,39 @@ def create_or_get_conversation(payload: dict):
         "conversation": conversation
     }
 
+def _authorized_legacy_conversation(conversation_id: str, authorization: str | None) -> dict[str, Any]:
+    try:
+        conversation = get_conversation(conversation_id)
+    except Exception as exc:
+        logger.exception("Could not load conversation for legacy message route")
+        raise HTTPException(status_code=503, detail="Conversation could not be loaded.") from exc
+    business_id = str(conversation.get("business_id") or "") if conversation else ""
+    # Use the same not-found response for unknown and cross-business IDs to avoid
+    # exposing whether another business owns a conversation.
+    if not business_id or not trusted_business_member(authorization, business_id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return conversation
+
+
 @app.get("/conversations/{conversation_id}/messages")
-def conversation_messages(conversation_id: str):
-    conversation = get_conversation(conversation_id)
-
-    if conversation is None:
-        return {
-            "error": "Conversation not found"
-        }
-
+def conversation_messages(conversation_id: str, authorization: str | None = Header(default=None)):
+    _authorized_legacy_conversation(conversation_id, authorization)
+    try:
+        messages = list_messages(conversation_id, limit=100)
+    except Exception as exc:
+        logger.exception("Could not load legacy conversation messages")
+        raise HTTPException(status_code=503, detail="Messages could not be loaded.") from exc
     return {
         "conversation_id": conversation_id,
-        "messages": list_messages(conversation_id),
+        "messages": [{key: message.get(key) for key in ("id", "sender_type", "content", "created_at")} for message in messages],
     }
 
-@app.post("/conversations/{conversation_id}/messages")
-def send_message(
+def _send_message_core(
     conversation_id: str,
     payload: dict,
-    authorization: str | None = Header(default=None),
+    authorization: str | None = None,
+    *,
+    inbound_context: dict[str, Any] | None = None,
 ):
     content = payload.get("content", "")
 
@@ -372,6 +470,9 @@ def send_message(
         knowledge_context=knowledge_context,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
+        business_id=business_id,
+        conversation_id=conversation_id,
+        source_message_id=str(customer_message.get("id") or "") or None,
     )
 
     try:
@@ -420,10 +521,58 @@ def send_message(
     if not directory_result or not directory_result.requires_human:
         action_decision = prepare_action(response_intent)
 
+    response_generation_enabled = not (
+        inbound_context is not None
+        and inbound_context.get("channel") in {"instagram", "messenger"}
+        and inbound_context.get("automation_reply_enabled") is not True
+    )
+    approved_faq = None
+    if (
+        response_generation_enabled
+        and not directory_result
+        and not action_decision.needs_human
+        and response_intent.action in {NextAction.ANSWER_QUESTION, NextAction.SEARCH_KNOWLEDGE}
+    ):
+        try:
+            approved_faq = match_approved_faq(business_id, content)
+        except Exception as exc:
+            logger.warning("Approved FAQ lookup unavailable: error=%s", type(exc).__name__)
+
     # 5. Keep directory output faithful to the gateway's authorized field set.
-    # The model can add unsupported claims even when given a constrained result.
-    if directory_result:
+    # A static approved reply can be used only on an authenticated inbound path,
+    # with explicit connection auto-reply opt-in, and when no directory/human gate
+    # requires a different answer.
+    approved_reply = None
+    if (
+        inbound_context
+        and inbound_context.get("automation_reply_enabled") is True
+        and inbound_context.get("provider_event_id")
+        and not directory_result
+        and not action_decision.needs_human
+    ):
+        from app.automations.service import select_approved_reply_automation
+        approved_reply = select_approved_reply_automation(
+            business_id,
+            channel=str(inbound_context.get("channel") or ""),
+            intent=str(response_intent.intent),
+            language=str(response_intent.language or "und"),
+        )
+
+    # Persist and classify every inbound message, but do not call the response
+    # or summary models for provider messaging when auto-reply is disabled.
+    # This preserves the conversation/automation ledger without generating a
+    # reply that cannot be sent.
+    if not response_generation_enabled:
+        ai_response = None
+        logger.info(
+            "Skipping AI response generation because provider auto-reply is disabled"
+        )
+    elif approved_reply:
+        ai_response = approved_reply["response_text"]
+    elif directory_result:
         ai_response = format_directory_response(directory_result)
+    elif approved_faq:
+        ai_response = approved_faq["answer"]
     else:
         try:
             ai_response = generate_ai_response(
@@ -434,20 +583,30 @@ def send_message(
                 intent_result=response_intent,
                 action_decision=action_decision,
                 customer_state=customer_state,
+                business_id=business_id,
+                conversation_id=conversation_id,
+                source_message_id=str(customer_message.get("id") or "") or None,
             )
         except requests.RequestException as exc:
             logger.warning("AI response provider request failed: %s", type(exc).__name__)
             ai_response = (
                 "I’m having trouble responding right now. Please try again in a moment."
             )
+        except (AIBudgetExceeded, AIBudgetUnavailable) as exc:
+            logger.warning("AI response skipped by budget control: %s", type(exc).__name__)
+            ai_response = (
+                "Automated replies are temporarily unavailable. Please use the business’s listed contact options for help."
+            )
 
     # 6. Save AI response
-    ai_message = create_message(
-        conversation_id=conversation_id,
-        external_message_id=str(uuid.uuid4()),
-        sender_type="ai",
-        content=ai_response,
-    )
+    ai_message = None
+    if ai_response is not None:
+        ai_message = create_message(
+            conversation_id=conversation_id,
+            external_message_id=str(uuid.uuid4()),
+            sender_type="ai",
+            content=ai_response,
+        )
 
     # Intent/action persistence is operational metadata. A DB write failure
     # should be logged without withholding the already generated customer reply.
@@ -467,23 +626,28 @@ def send_message(
         logger.exception("Could not persist intent/action for conversation %s", conversation_id)
 
     # 7. Update long-term conversation memory
-    summary_history = conversation_history + [
-        {
-            "sender_type": "ai",
-            "content": ai_response,
-        }
-    ]
+    summary_history = conversation_history
+    if ai_response is not None:
+        summary_history = summary_history + [
+            {
+                "sender_type": "ai",
+                "content": ai_response,
+            }
+        ]
 
     try:
-        updated_summary = generate_conversation_summary(
-            previous_summary=conversation_summary,
-            conversation_history=summary_history,
-        )
-
-        update_conversation_summary(
-            conversation_id=conversation_id,
-            summary=updated_summary,
-        )
+        if ai_response is not None and not approved_reply:
+            updated_summary = generate_conversation_summary(
+                previous_summary=conversation_summary,
+                conversation_history=summary_history,
+                business_id=business_id,
+                conversation_id=conversation_id,
+                source_message_id=str(customer_message.get("id") or "") or None,
+            )
+            update_conversation_summary(
+                conversation_id=conversation_id,
+                summary=updated_summary,
+            )
 
     except Exception as exc:
         # Summary failure should never prevent the customer
@@ -497,12 +661,14 @@ def send_message(
         "customer_message": customer_message,
         "ai_message": ai_message,
         "response": ai_response,
+        "approved_reply_automation_id": approved_reply.get("automation_id") if approved_reply else None,
     }
 
 from app.channels.router import create_manual_channel_router
 from app.channels.instagram import create_instagram_webhook_router
+from app.channels.messenger import create_messenger_webhook_router
 from app.channels.outbound import deliver_instagram_text
-app.include_router(create_manual_channel_router(send_message))
+from app.channels.messenger_outbound import deliver_messenger_text
 from app.connections.router import create_connections_router
 app.include_router(create_connections_router())
 from app.automations.router import create_automations_router
@@ -515,30 +681,68 @@ from app.dashboard.router import create_dashboard_router
 from app.dashboard.modules import create_workspace_modules_router
 app.include_router(create_dashboard_router())
 app.include_router(create_workspace_modules_router())
+app.include_router(create_business_faq_router())
+
+@app.post("/conversations/{conversation_id}/messages")
+def send_message(
+    conversation_id: str,
+    payload: dict,
+    authorization: str | None = Header(default=None),
+):
+    # Direct API calls cannot activate internal inbound automation context.
+    _authorized_legacy_conversation(conversation_id, authorization)
+    return _send_message_core(conversation_id, payload, authorization)
+
+
+def send_inbound_message(
+    conversation_id: str,
+    payload: dict[str, str],
+    authorization: str | None,
+    *,
+    channel: str,
+    provider_event_id: str,
+    automation_reply_enabled: bool,
+) -> dict[str, Any]:
+    return _send_message_core(
+        conversation_id,
+        payload,
+        authorization,
+        inbound_context={
+            "channel": channel,
+            "provider_event_id": provider_event_id,
+            "automation_reply_enabled": automation_reply_enabled,
+        },
+    )
+
+
+app.include_router(create_manual_channel_router(send_message, send_inbound_message))
+
 
 @app.post("/ai/respond")
-def ai_respond(payload: dict):
-    customer_message = payload.get("message", "")
-    business_id = payload.get("business_id")
-    conversation_history = payload.get("conversation_history", [])
-
-    if not customer_message:
-        return {
-            "error": "message is required"
-        }
-
-    if not business_id:
-        return {
-            "error": "business_id is required"
-        }
-
+def ai_respond(payload: AiRespondPayload, authorization: str | None = Header(default=None)):
+    business_id = payload.business_id
+    if not trusted_business_member(authorization, business_id):
+        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+    try:
+        approved_faq = match_approved_faq(business_id, payload.message)
+    except Exception as exc:
+        logger.warning("Approved FAQ lookup unavailable: error=%s", type(exc).__name__)
+        approved_faq = None
+    if approved_faq:
+        return {"response": approved_faq["answer"]}
     knowledge_context = build_business_context(business_id)
 
-    response = generate_ai_response(
-        customer_message=customer_message,
-        knowledge_context=knowledge_context,
-        conversation_history=conversation_history,
-    )
+    try:
+        response = generate_ai_response(
+            customer_message=payload.message,
+            knowledge_context=knowledge_context,
+            conversation_history=[item.model_dump() for item in payload.conversation_history],
+            business_id=business_id,
+        )
+    except AIBudgetExceeded as exc:
+        raise HTTPException(status_code=429, detail="The business monthly AI budget has been reached.") from exc
+    except AIBudgetUnavailable as exc:
+        raise HTTPException(status_code=503, detail="AI usage pricing or budget controls are unavailable.") from exc
 
     return {
         "response": response
@@ -548,7 +752,13 @@ def ai_respond(payload: dict):
 def update_knowledge(
     document_id: str,
     payload: dict,
+    authorization: str | None = Header(default=None),
 ):
+    document = get_knowledge_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Knowledge document not found.")
+    _authorize_knowledge_access(document["business_id"], authorization, manage=True)
+
     title = payload.get("title")
     content = payload.get("content")
     source_type = payload.get("source_type", "manual")
@@ -561,13 +771,6 @@ def update_knowledge(
     if not content:
         return {
             "error": "content is required"
-        }
-
-    document = get_knowledge_document(document_id)
-
-    if document is None:
-        return {
-            "error": "Knowledge document not found"
         }
 
     updated_document = update_knowledge_document(
@@ -596,4 +799,5 @@ def update_knowledge(
         "chunks": chunks,
     }
 
-app.include_router(create_instagram_webhook_router(send_message, deliver_instagram_text))
+app.include_router(create_instagram_webhook_router(send_message, deliver_instagram_text, send_inbound_message))
+app.include_router(create_messenger_webhook_router(settings.META_VERIFY_TOKEN, send_message, deliver_messenger_text, send_inbound_message))

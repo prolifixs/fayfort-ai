@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 def create_manual_channel_router(
     message_handler: Callable[[str, dict[str, str], str | None], dict[str, Any]],
+    inbound_message_handler: Callable[..., dict[str, Any]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/channels", tags=["channels"])
 
@@ -24,7 +25,7 @@ def create_manual_channel_router(
         authorization: str | None = Header(default=None),
     ):
         try:
-            return process_manual_inbound(payload, authorization, message_handler)
+            return process_manual_inbound(payload, authorization, message_handler, inbound_message_handler=inbound_message_handler)
         except ManualChannelAuthorizationError:
             raise HTTPException(
                 status_code=401,

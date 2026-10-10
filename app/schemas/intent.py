@@ -54,6 +54,7 @@ class IntentResult(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     intent: IntentName
+    language: str = "und"
     action: NextAction
     confidence: float = Field(ge=0.0, le=1.0)
     known_information: dict[str, Any] = Field(default_factory=dict)

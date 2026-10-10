@@ -6,6 +6,10 @@ from app.database.client import supabase
 def list_conversations(
     business_id: str,
     status: str | None = None,
+    channel: str | None = None,
+    *,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     query = (
         supabase
@@ -16,10 +20,15 @@ def list_conversations(
 
     if status:
         query = query.eq("status", status)
+    if channel:
+        query = query.eq("channel", channel)
 
+    safe_limit = min(max(int(limit), 1), 101)
+    safe_offset = max(int(offset), 0)
     response = (
         query
         .order("last_message_at", desc=True)
+        .range(safe_offset, safe_offset + safe_limit - 1)
         .execute()
     )
 

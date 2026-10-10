@@ -23,7 +23,14 @@ def create_automations_router() -> APIRouter:
     def add_automation(business_id: str, payload: AutomationCreate, authorization: str | None = Header(default=None)):
         authorize(business_id, authorization)
         try:
-            automation = create_automation(business_id, payload.model_dump())
+            data = payload.model_dump(exclude_none=True)
+            response_text = data.pop("response_text", None)
+            data["action_config"] = (
+                {"response_text": response_text}
+                if data["action_type"] == "send_approved_reply"
+                else {}
+            )
+            automation = create_automation(business_id, data)
             publish_business_event(business_id, "automation.created", "business_automation", str(automation["id"]))
             return {"automation": automation}
         except Exception: raise HTTPException(status_code=503, detail="Automation could not be created.")
@@ -43,6 +50,7 @@ def create_automations_router() -> APIRouter:
         except Exception: raise HTTPException(status_code=503, detail="Automation run could not be recorded.")
         if result.get("error") == "not_found": raise HTTPException(status_code=404, detail="Automation not found.")
         if result.get("error") == "disabled": raise HTTPException(status_code=409, detail="Enable the automation before executing it.")
+        if result.get("error") == "inbound_only": raise HTTPException(status_code=409, detail="Approved replies can only run for matching inbound messages.")
         if not result.get("duplicate") and result.get("execution"):
             publish_business_event(business_id, "automation.execution_recorded", "automation_execution", str(result["execution"]["id"]), {"status":result["status"], "automation_id":automation_id, "execution_id":str(result["execution"]["id"])})
         return result

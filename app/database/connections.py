@@ -76,7 +76,7 @@ def save_connection_credentials(business_id: str, connection_id: str, payload: d
         (supabase.table("business_connections").update({
             "health_checked_at": None,
             "health_error_code": None,
-        }).eq("business_id", business_id).eq("id", connection_id).eq("provider", "instagram").execute())
+        }).eq("business_id", business_id).eq("id", connection_id).execute())
     return saved
 
 
@@ -119,5 +119,40 @@ def list_instagram_connections_for_account(account_id: str) -> list[dict[str, An
         .select("id,business_id,provider,provider_account_id,status,safe_settings")
         .eq("provider", "instagram")
         .eq("provider_account_id", account_id)
+        .execute())
+    return response.data or []
+
+
+def mark_connection_messenger_verified(
+    business_id: str, connection_id: str, page_id: str, page_name: str
+) -> dict[str, Any] | None:
+    response = (supabase.table("business_connections").update({
+        "provider_account_id": page_id,
+        "provider_username": page_name,
+        "status": "connected",
+        "health_checked_at": datetime.now(timezone.utc).isoformat(),
+        "health_error_code": None,
+    }).eq("business_id", business_id).eq("id", connection_id)
+      .eq("provider", "messenger").select(SAFE_FIELDS).execute())
+    return response.data[0] if response.data else None
+
+
+def mark_connection_messenger_error(
+    business_id: str, connection_id: str, error_code: str
+) -> dict[str, Any] | None:
+    response = (supabase.table("business_connections").update({
+        "status": "error",
+        "health_checked_at": datetime.now(timezone.utc).isoformat(),
+        "health_error_code": error_code,
+    }).eq("business_id", business_id).eq("id", connection_id)
+      .eq("provider", "messenger").select(SAFE_FIELDS).execute())
+    return response.data[0] if response.data else None
+
+
+def list_messenger_connections_for_page(page_id: str) -> list[dict[str, Any]]:
+    response = (supabase.table("business_connections")
+        .select("id,business_id,provider,provider_account_id,status,safe_settings")
+        .eq("provider", "messenger")
+        .eq("provider_account_id", page_id)
         .execute())
     return response.data or []

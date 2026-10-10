@@ -51,5 +51,89 @@ class AutomationApiTests(unittest.TestCase):
         result = run_automation(BUSINESS, AUTOMATION, dry_run=False, idempotency_key="same-key", trigger_id=None, conversation_id=None)
         self.assertTrue(result["duplicate"])
         self.assertEqual(result["result"]["saved"], "original")
+    def test_inbound_intent_condition_reuses_active_layer4_intent(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"intent": "shipping"}}
+        execution = {"id": "execution-1", "status": "succeeded"}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "Shipping"}) as active_intent, \
+             patch("app.automations.service.run_automation", return_value={"execution": execution, "status": "succeeded", "duplicate": False}) as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-1", conversation_id="conversation-1")
+        active_intent.assert_called_once_with("conversation-1")
+        run.assert_called_once()
+        self.assertEqual(result[0]["status"], "succeeded")
+
+    def test_inbound_intent_mismatch_does_not_execute_rule(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"intent": "shipping"}}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "product_sourcing"}), \
+             patch("app.automations.service.run_automation") as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-2", conversation_id="conversation-1")
+        self.assertEqual(result, [])
+        run.assert_not_called()
+
+    def test_missing_intent_records_skipped(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"intent": "shipping"}}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value=None), \
+             patch("app.automations.service.create_execution", return_value=(True, {"status": "skipped"})) as save, \
+             patch("app.automations.service.run_automation") as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-3", conversation_id="conversation-1")
+        self.assertEqual(result[0]["status"], "skipped")
+        self.assertEqual(save.call_args.args[0]["error_code"], "condition_data_unavailable")
+        run.assert_not_called()
+
+
+    def test_inbound_language_condition_reuses_active_layer4_result(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"language": "zh-Hant"}}
+        execution = {"id": "execution-language", "status": "succeeded"}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "unknown", "metadata": {"language": "zh_Hant"}}) as active_intent, \
+             patch("app.automations.service.run_automation", return_value={"execution": execution, "status": "succeeded", "duplicate": False}) as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-lang-1", conversation_id="conversation-1")
+        active_intent.assert_called_once_with("conversation-1")
+        run.assert_called_once()
+        self.assertEqual(result[0]["status"], "succeeded")
+
+    def test_intent_and_language_rules_share_one_layer4_read(self):
+        from app.automations.service import run_inbound_automations
+        rules = [
+            {"id": AUTOMATION, "conditions": {"intent": "shipping", "language": "zh-Hant"}},
+            {"id": "00000000-0000-0000-0000-000000000003", "conditions": {"language": "zh_Hant"}},
+        ]
+        execution = {"id": "execution-shared-intent", "status": "succeeded"}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=rules), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "shipping", "metadata": {"language": "zh_Hant"}}) as active_intent, \
+             patch("app.automations.service.run_automation", return_value={"execution": execution, "status": "succeeded", "duplicate": False}) as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-lang-shared", conversation_id="conversation-1")
+        active_intent.assert_called_once_with("conversation-1")
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual([item["status"] for item in result], ["succeeded", "succeeded"])
+
+    def test_language_mismatch_does_not_execute_rule(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"language": "en"}}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "greeting", "metadata": {"language": "fr"}}), \
+             patch("app.automations.service.run_automation") as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-lang-mismatch", conversation_id="conversation-1")
+        self.assertEqual(result, [])
+        run.assert_not_called()
+
+    def test_unknown_language_records_skipped(self):
+        from app.automations.service import run_inbound_automations
+        rule = {"id": AUTOMATION, "conditions": {"language": "en"}}
+        with patch("app.automations.service.list_enabled_trigger_automations", return_value=[rule]), \
+             patch("app.automations.service.get_active_intent", return_value={"intent_key": "greeting", "metadata": {"language": "und"}}), \
+             patch("app.automations.service.create_execution", return_value=(True, {"status": "skipped"})) as save, \
+             patch("app.automations.service.run_automation") as run:
+            result = run_inbound_automations(BUSINESS, channel="instagram", provider_event_id="event-lang-2", conversation_id="conversation-1")
+        self.assertEqual(result[0]["status"], "skipped")
+        self.assertEqual(save.call_args.args[0]["error_code"], "condition_data_unavailable")
+        run.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

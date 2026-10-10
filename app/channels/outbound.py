@@ -76,6 +76,14 @@ def deliver_instagram_text(
             json={"recipient": {"id": recipient}, "message": {"text": text}},
             timeout=15,
         )
+    except requests.ConnectTimeout as exc:
+        # No connection was established, so the provider could not have
+        # accepted this request. Requests documents ConnectTimeout as safe to retry.
+        logger.warning("Instagram outbound connection timed out before provider response (%s)", type(exc).__name__)
+        finished = finish_delivery_attempt(
+            delivery["id"], attempt_number, "rejected", "connect_timeout"
+        )
+        return {"status": "rejected", "delivery_id": finished["id"], "safe_error_code": "connect_timeout"}
     except requests.RequestException as exc:
         logger.warning("Instagram outbound result is uncertain (%s)", type(exc).__name__)
         finished = finish_delivery_attempt(
@@ -99,10 +107,25 @@ def deliver_instagram_text(
 
     provider_error = result.get("error") if isinstance(result.get("error"), dict) else {}
     provider_code = provider_error.get("code")
-    safe_code = f"meta_error_{provider_code}" if isinstance(provider_code, int) else f"meta_http_{response.status_code}"
-    # Non-success 4xx responses are explicit rejections. A 5xx or malformed 200
-    # may have followed an accepted send, so mark it uncertain and never replay it.
-    status = "rejected" if 400 <= response.status_code < 500 else "unknown"
+    provider_subcode = provider_error.get("error_subcode")
+    if isinstance(provider_code, int):
+        safe_code = f"meta_error_{provider_code}"
+        if isinstance(provider_subcode, int):
+            safe_code += f"_subcode_{provider_subcode}"
+        logger.warning(
+            "Instagram outbound rejected: http_status=%s provider_code=%s provider_subcode=%s",
+            response.status_code, provider_code, provider_subcode if isinstance(provider_subcode, int) else None,
+        )
+    else:
+        safe_code = f"meta_http_{response.status_code}"
+    # Ordinary client rejections did not accept the send. Timeout/early-data
+    # statuses can still follow provider processing, so retain them as unknown.
+    # A 5xx or malformed 200 may likewise follow an accepted send.
+    status = (
+        "rejected"
+        if 400 <= response.status_code < 500 and response.status_code not in {408, 425}
+        else "unknown"
+    )
     if response.status_code == 200:
         status, safe_code = "unknown", "provider_receipt_missing"
     finished = finish_delivery_attempt(delivery["id"], attempt_number, status, safe_code)

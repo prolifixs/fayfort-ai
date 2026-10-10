@@ -8,13 +8,13 @@ from app.database.client import supabase
 
 logger = logging.getLogger(__name__)
 EVENT_TYPES = {
-    "channel.inbound.processed", "connection.created", "connection.status_changed",
-    "automation.created", "automation.enabled_changed", "automation.execution_recorded",
+    "channel.inbound.processed", "channel.delivery_retried", "channel.delivery_reconciled", "channel.delivery_reconciliation_issue", "connection.created", "connection.status_changed",
+    "automation.created", "automation.enabled_changed", "automation.execution_recorded", "automation.reconciliation_failed", "automation.reconciliation_recovered",
     "handoff.requested", "handoff.assigned", "handoff.taken_over", "handoff.returned_to_automation",
-    "request.status_changed", "entitlement.granted", "entitlement.revoked",
-    "directory.verification_reviewed", "business.settings_updated", "connection.settings_updated",
+    "request.status_changed", "request.updated", "entitlement.granted", "entitlement.revoked",
+    "directory.verification_reviewed", "business.settings_updated", "connection.settings_updated", "handoff.agent_availability_changed",
 }
-SAFE_PAYLOAD_KEYS = {"channel", "status", "conversation_id", "handoff_id", "connection_id", "automation_id", "execution_id", "provider_event_id", "response_message_id", "agent_id", "request_id", "updated_by", "tool_id", "access_level", "source_type", "verification_status", "reviewed_by", "updated_fields"}
+SAFE_PAYLOAD_KEYS = {"channel", "status", "delivery_status", "error_code", "channel_event_id", "conversation_id", "handoff_id", "connection_id", "delivery_id", "automation_id", "execution_id", "provider_event_id", "response_message_id", "agent_id", "actor_id", "request_id", "updated_by", "tool_id", "access_level", "source_type", "verification_status", "reviewed_by", "updated_fields", "available_until", "max_active_handoffs"}
 
 def publish_business_event(business_id: str, event_type: str, entity_type: str, entity_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if event_type not in EVENT_TYPES:

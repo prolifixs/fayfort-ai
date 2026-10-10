@@ -1,8 +1,21 @@
 from __future__ import annotations
 import asyncio
-from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect
+import logging
+from fastapi import APIRouter, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from app.database.events import consume_event_ticket, issue_event_ticket, list_business_events
 from app.directory.identity import trusted_business_member
+
+logger = logging.getLogger(__name__)
+
+
+async def _close_websocket(websocket: WebSocket, *, code: int, reason: str) -> None:
+    """Close only while the peer is still present; disconnects are normal."""
+    try:
+        await websocket.close(code=code, reason=reason)
+    except (WebSocketDisconnect, RuntimeError):
+        # A browser tab can close between the last receive/send and this close.
+        # Starlette can surface that race as WebSocketDisconnect(1006).
+        return
 
 
 def create_events_router() -> APIRouter:
@@ -13,7 +26,7 @@ def create_events_router() -> APIRouter:
         return member
 
     @router.get("")
-    def event_feed(business_id: str, after_id: int = 0, limit: int = 100, authorization: str | None = Header(default=None)):
+    def event_feed(business_id: str, after_id: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=200), authorization: str | None = Header(default=None)):
         identity(business_id, authorization)
         try:
             events = list_business_events(business_id, after_id, limit)
@@ -35,13 +48,17 @@ def create_events_router() -> APIRouter:
             auth_message = await asyncio.wait_for(websocket.receive_json(), timeout=10)
             ticket = auth_message.get("ticket") if isinstance(auth_message, dict) else None
             if not isinstance(ticket, str) or len(ticket) < 24:
-                await websocket.close(code=4401, reason="A valid one-time event ticket is required")
+                await _close_websocket(websocket, code=4401, reason="A valid one-time event ticket is required")
                 return
             user_id = await asyncio.to_thread(consume_event_ticket, business_id, ticket)
             if not user_id:
-                await websocket.close(code=4401, reason="The event ticket is invalid, expired, or already used")
+                await _close_websocket(websocket, code=4401, reason="The event ticket is invalid, expired, or already used")
                 return
-            cursor = int(auth_message.get("after_id", 0) or 0)
+            raw_cursor = auth_message.get("after_id", 0)
+            if type(raw_cursor) is not int or raw_cursor < 0:
+                await _close_websocket(websocket, code=4400, reason="The event cursor must be a non-negative integer")
+                return
+            cursor = raw_cursor
             await websocket.send_json({"type":"ready", "after_id":cursor})
             while True:
                 events = await asyncio.to_thread(list_business_events, business_id, cursor, 100)
@@ -52,7 +69,8 @@ def create_events_router() -> APIRouter:
         except WebSocketDisconnect:
             return
         except asyncio.TimeoutError:
-            await websocket.close(code=4408, reason="Timed out waiting for event ticket")
+            await _close_websocket(websocket, code=4408, reason="Timed out waiting for event ticket")
         except Exception:
-            await websocket.close(code=1011, reason="The event stream ended unexpectedly")
+            logger.exception("Dashboard event stream failed")
+            await _close_websocket(websocket, code=1011, reason="The event stream ended unexpectedly")
     return router

@@ -30,8 +30,10 @@ class ManualChannelTests(unittest.TestCase):
             )
         self.assertEqual(called, [])
 
+    @patch("app.channels.manual.mark_inbound_automation_complete")
+    @patch("app.channels.manual.run_inbound_automations", return_value=[])
     @patch("app.channels.manual.publish_business_event")
-    def test_processes_once_and_records_response(self, publish_event):
+    def test_processes_once_and_records_response(self, publish_event, run_automations, complete_automation):
         calls = []
         result = process_manual_inbound(
             self.payload, "Bearer trusted",
@@ -46,6 +48,56 @@ class ManualChannelTests(unittest.TestCase):
         self.assertEqual(result["response"], "Hello back")
         self.assertEqual(calls[0]["event_id"], "event-row")
         self.assertEqual(calls[0]["response_message_id"], "response-id")
+        self.assertEqual(calls[0]["delivery_status"], "not_required")
+        self.assertTrue(calls[0]["automation_pending"])
+        complete_automation.assert_called_once_with("event-row")
+        run_automations.assert_called_once()
+
+    @patch("app.channels.manual.mark_inbound_automation_retryable")
+    @patch("app.channels.manual.mark_inbound_automation_complete")
+    @patch("app.channels.manual.run_inbound_automations", side_effect=RuntimeError("temporary ledger failure"))
+    @patch("app.channels.manual.publish_business_event")
+    def test_automation_ledger_failure_preserves_the_saved_response_and_pending_event(self, _publish, run_automations, complete_automation, mark_retryable):
+        completion = []
+        result = process_manual_inbound(
+            self.payload, "Bearer trusted",
+            lambda cid, body, auth: {"conversation_id": cid, "response": "Saved reply", "ai_message": {"id": "response-id"}},
+            identity_check=lambda *_: True,
+            conversation_resolver=lambda **_: {"id": "conversation-id"},
+            event_claimer=lambda **_: (True, {"id": "event-row"}),
+            event_completer=lambda **kwargs: completion.append(kwargs),
+            event_failer=lambda **_kwargs: self.fail("saved response should not be marked as pipeline failure"),
+        )
+        self.assertEqual(result["response"], "Saved reply")
+        self.assertTrue(completion[0]["automation_pending"])
+        mark_retryable.assert_called_once_with("event-row")
+        complete_automation.assert_not_called()
+        run_automations.assert_called_once()
+
+    @patch("app.channels.manual.mark_inbound_automation_complete")
+    @patch("app.channels.manual.run_inbound_automations", return_value=[])
+    @patch("app.channels.manual.publish_business_event")
+    def test_opted_in_instagram_turn_starts_provider_delivery_reconciliation(self, _publish, _run, _complete):
+        completion = []
+        process_manual_inbound(
+            self.payload, None, lambda *_args: self.fail("internal inbound handler should be used"),
+            identity_check=lambda *_: True,
+            conversation_resolver=lambda **_: {"id": "conversation-id"},
+            event_claimer=lambda **_: (True, {"id": "event-row"}),
+            event_completer=lambda **kwargs: completion.append(kwargs),
+            event_failer=lambda **_kwargs: self.fail("unexpected failure"),
+            channel_override="instagram",
+            require_identity=False,
+            inbound_message_handler=lambda *_args, **_kwargs: {
+                "conversation_id": "conversation-id",
+                "response": "Saved reply",
+                "ai_message": {"id": "response-id"},
+                "approved_reply_automation_id": "automation-id",
+            },
+            automation_reply_enabled=True,
+        )
+        self.assertEqual(completion[0]["delivery_status"], "pending")
+        self.assertEqual(completion[0]["approved_reply_automation_id"], "automation-id")
 
     def test_duplicate_event_does_not_run_pipeline(self):
         calls = []

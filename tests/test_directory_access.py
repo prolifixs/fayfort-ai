@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from unittest.mock import Mock, patch
 
 from app.directory.access_gateway import lookup_directory
@@ -111,6 +112,48 @@ class DirectoryAccessTests(unittest.TestCase):
         self.assertEqual(result.outcome, DirectoryOutcome.HUMAN_REQUIRED)
         self.assertTrue(result.requires_human)
         self.assertEqual(result.records, [])
+
+    def test_verification_required_when_human_review_is_not_configured(self):
+        self.tool = sample_tool(
+            human_on_unverified=False,
+            search=Mock(return_value=[{"service": "freight", "verification_status": "unknown"}]),
+        )
+        result = self.lookup()
+        self.assertEqual(result.outcome, DirectoryOutcome.VERIFY_REQUIRED)
+        self.assertFalse(result.requires_human)
+        self.assertEqual(result.records, [])
+
+    def test_no_match_is_audited_and_returns_no_records(self):
+        result = self.lookup()
+        self.assertEqual(result.outcome, DirectoryOutcome.NOT_FOUND)
+        self.assertEqual(result.records, [])
+        self.audit.assert_called_once()
+        self.assertEqual(self.audit.call_args.kwargs["reason_code"], "no_match")
+
+    def test_every_registered_tool_returns_only_its_registered_projection(self):
+        for registered_tool in REGISTRY.values():
+            with self.subTest(tool_id=registered_tool.tool_id):
+                fields = set(registered_tool.public_fields) | set(registered_tool.premium_fields)
+                row = {field: f"value-{field}" for field in fields}
+                row.update({field: "must-not-leak" for field in registered_tool.blocked_fields})
+                row["verification_status"] = "verified"
+                search = Mock(return_value=[row])
+                self.tool = replace(registered_tool, search=search)
+                self.audit.reset_mock()
+                query = f"show {registered_tool.premium_terms[0]}" if registered_tool.premium_terms else "find public guidance"
+                result = lookup_directory(
+                    tool_id=registered_tool.tool_id,
+                    query=query,
+                    context=self.context,
+                    entitlement_check=Mock(return_value=True),
+                    audit_writer=self.audit,
+                )
+                self.assertEqual(result.outcome, DirectoryOutcome.ALLOW)
+                self.assertEqual(len(result.records), 1)
+                self.assertLessEqual(set(result.records[0]), fields - set(registered_tool.blocked_fields))
+                self.assertTrue(set(registered_tool.blocked_fields).isdisjoint(result.records[0]))
+                self.assertEqual(result.allowed_fields, sorted(result.records[0]))
+                self.audit.assert_called_once()
 
     def test_unknown_location_keeps_taxonomy_but_hides_location_and_address(self):
         self.tool = sample_tool(

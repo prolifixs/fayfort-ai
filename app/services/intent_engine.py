@@ -13,6 +13,14 @@ from app.schemas.intent import (
     IntentResult,
     NextAction,
 )
+from app.services.ai_usage import normalize_provider_usage, record_ai_usage, resolved_provider_model
+from app.services.ai_budget import (
+    AIBudgetError,
+    AIBudgetExceeded,
+    cost_from_provider_usage,
+    reserve_ai_usage_budget,
+    settle_ai_usage_budget,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +28,9 @@ _STATE_CONFIDENCE_THRESHOLD = 0.55
 
 _SYSTEM_PROMPT = f"""
 You classify customer messages for FayFort and return one JSON object only.
+Detect the language of the latest customer message, not the business knowledge or
+older conversation. Return a short BCP-47 language code (for example en, zh,
+zh-Hant); use und when the message is too short or ambiguous to identify.
 Choose exactly one intent from: {", ".join(item.value for item in IntentName)}.
 Choose exactly one action from: {", ".join(item.value for item in NextAction)}.
 Use the full conversation, summary, and business knowledge. Keep existing facts
@@ -39,7 +50,7 @@ related when it starts a separate request tied to the same opportunity, new for
 an unrelated request, and unclear when the relationship cannot be determined.
 Set request_lifecycle_update to cancel only when the customer explicitly
 cancels; otherwise use none. Do not claim a request is completed.
-Return keys: intent, action, confidence, known_information,
+Return keys: intent, language, action, confidence, known_information,
 required_information, missing_information, customer_information,
 cleared_information, cleared_customer_information, request_relationship,
 request_lifecycle_update, clarification_needed, can_handle_automatically,
@@ -110,6 +121,11 @@ def _parse_model_result(content: Any) -> IntentResult:
         elif value is None:
             parsed[field] = []
 
+    parsed.setdefault("language", "und")
+    if not isinstance(parsed["language"], str) or not parsed["language"].strip():
+        parsed["language"] = "und"
+    else:
+        parsed["language"] = parsed["language"].strip().replace("_", "-").lower()
     parsed.setdefault("customer_information", {})
     parsed.setdefault("known_information", {})
     parsed.setdefault("request_relationship", "unclear")
@@ -147,12 +163,34 @@ def analyze_intent(
     conversation_history: list[dict[str, Any]] | None = None,
     conversation_summary: str = "",
     knowledge_context: str = "",
+    business_id: str | None = None,
+    conversation_id: str | None = None,
+    source_message_id: str | None = None,
 ) -> IntentResult:
     """Analyze a turn and return a validated, non-executing intent decision."""
     if not customer_message.strip():
         raise ValueError("customer_message cannot be empty")
 
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": _context_message(
+                customer_message,
+                conversation_history,
+                conversation_summary,
+                knowledge_context,
+            ),
+        },
+    ]
+    reservation = None
     try:
+        reservation = reserve_ai_usage_budget(
+            business_id=business_id,
+            operation="intent",
+            messages=messages,
+            max_output_tokens=700,
+        )
         response = requests.post(
             settings.HF_CHAT_COMPLETIONS_URL,
             headers={
@@ -161,18 +199,7 @@ def analyze_intent(
             },
             json={
                 "model": settings.HF_MODEL,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": _context_message(
-                            customer_message,
-                            conversation_history,
-                            conversation_summary,
-                            knowledge_context,
-                        ),
-                    },
-                ],
+                "messages": messages,
                 "temperature": 0,
                 "max_tokens": 700,
                 "stream": False,
@@ -182,10 +209,37 @@ def analyze_intent(
         )
         response.raise_for_status()
         body = response.json()
+        usage = normalize_provider_usage(body)
+        actual_cost = cost_from_provider_usage(reservation, usage)
+        settle_ai_usage_budget(reservation, actual_cost)
+        record_ai_usage(
+            business_id=business_id, operation="intent", model=resolved_provider_model(body, settings.HF_MODEL),
+            request_status="completed", usage=normalize_provider_usage(body),
+            conversation_id=conversation_id, source_message_id=source_message_id,
+            request_id=reservation.request_id, provider=reservation.provider,
+            estimated_cost_micro_usd=reservation.reserved_micro_usd,
+            actual_cost_micro_usd=actual_cost,
+            budget_reservation_id=reservation.request_id,
+        )
         content = body["choices"][0]["message"]["content"]
         return _parse_model_result(content)
+    except AIBudgetError as exc:
+        reason = "budget_exceeded" if isinstance(exc, AIBudgetExceeded) else "budget_unavailable"
+        logger.warning("Intent inference skipped by AI budget control: %s", reason)
+        return _fallback(reason)
     except requests.RequestException as exc:
         logger.warning("Intent provider request failed: %s", type(exc).__name__)
+        if reservation is not None:
+            settle_ai_usage_budget(reservation, None)
+        record_ai_usage(
+            business_id=business_id, operation="intent", model=settings.HF_MODEL,
+            request_status="unknown",
+            conversation_id=conversation_id, source_message_id=source_message_id,
+            request_id=reservation.request_id if reservation else None,
+            provider=reservation.provider if reservation else None,
+            estimated_cost_micro_usd=reservation.reserved_micro_usd if reservation else None,
+            budget_reservation_id=reservation.request_id if reservation else None,
+        )
         return _fallback("provider_error")
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning("Intent provider response was invalid: %s", type(exc).__name__)
