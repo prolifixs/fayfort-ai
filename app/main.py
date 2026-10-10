@@ -8,7 +8,7 @@ import requests
 from typing import Any
 
 from app.database.client import supabase
-from app.database.businesses import list_businesses
+from app.database.dashboard import list_businesses_for_user
 from app.database.business_members import list_business_members
 from app.services.knowledge_ingestion import ingest_knowledge
 
@@ -43,7 +43,7 @@ from app.database.actions import create_action
 from app.directory.service import lookup_for_message
 from app.directory.response import format_directory_response
 from app.config.settings import settings
-from app.directory.identity import trusted_business_member
+from app.directory.identity import trusted_business_member, trusted_user_id
 
 from app.services.rag import build_business_context
 from app.services.intent_engine import analyze_intent
@@ -241,16 +241,26 @@ def database_health():
         }
 
 @app.get("/businesses")
-def businesses():
-    return {
-        "businesses": list_businesses()
-    }
+def businesses(authorization: str | None = Header(default=None)):
+    user_id = trusted_user_id(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="A valid signed-in user is required.")
+    try:
+        return {"businesses": list_businesses_for_user(user_id)}
+    except Exception as exc:
+        logger.exception("Could not list businesses for authenticated user")
+        raise HTTPException(status_code=503, detail="Business workspaces could not be loaded.") from exc
 
 @app.get("/businesses/{business_id}/members")
-def business_members(business_id: str):
+def business_members(business_id: str, authorization: str | None = Header(default=None)):
+    if not trusted_business_member(authorization, business_id):
+        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
     return {
         "business_id": business_id,
-        "members": list_business_members(business_id),
+        "members": [
+            {key: member.get(key) for key in ("user_id", "role", "status", "joined_at")}
+            for member in list_business_members(business_id)
+        ],
     }
 
 def _authorize_knowledge_access(
@@ -348,7 +358,7 @@ def knowledge_context(document_id: str, authorization: str | None = Header(defau
     }
 
 @app.post("/conversations")
-def create_or_get_conversation(payload: dict):
+def create_or_get_conversation(payload: dict, authorization: str | None = Header(default=None)):
     business_id = payload.get("business_id")
     customer_external_id = payload.get("customer_external_id")
     channel = payload.get("channel")
@@ -357,6 +367,9 @@ def create_or_get_conversation(payload: dict):
         return {
             "error": "business_id is required"
         }
+
+    if not trusted_business_member(authorization, str(business_id)):
+        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
 
     if not customer_external_id:
         return {
@@ -680,6 +693,8 @@ app.include_router(create_events_router())
 from app.dashboard.router import create_dashboard_router
 from app.dashboard.modules import create_workspace_modules_router
 app.include_router(create_dashboard_router())
+from app.accounts.router import create_accounts_router
+app.include_router(create_accounts_router())
 app.include_router(create_workspace_modules_router())
 app.include_router(create_business_faq_router())
 

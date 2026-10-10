@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
+    WORKER_INVITE_REDIRECT_URL: str = "http://127.0.0.1:5173/worker/accept"
 
     SUPABASE_URL: str 
     SUPABASE_ANON_KEY: str

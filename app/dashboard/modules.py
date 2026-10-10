@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.database.client import supabase
 from app.database.conversations import list_conversations, get_conversation
 from app.database.directory.access_events import create_access_event
@@ -71,6 +71,113 @@ class VerificationReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     verification_status: Literal["verified", "unverified", "conflicting", "unknown"]
     reason: str = Field(min_length=8, max_length=500)
+
+
+class DirectoryProductCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=160)
+    category_ref: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=2000)
+    availability_status: Literal["available", "sourcing", "unavailable"] = "sourcing"
+    active: bool = True
+    media_url: str | None = Field(default=None, max_length=2000)
+    media_type: Literal["image", "video"] | None = None
+    media_source: Literal["url", "instagram", "upload"] | None = None
+    media_storage_path: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_media_fields(self):
+        if self.media_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.media_url)
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise ValueError("media_url must be an https URL")
+            if not self.media_type or not self.media_source:
+                raise ValueError("media_type and media_source are required when media_url is set")
+            if self.media_source == "instagram":
+                if (parsed.hostname or "").lower() not in {"instagram.com", "www.instagram.com"}:
+                    raise ValueError("Instagram media must use an instagram.com URL")
+                if not any(part in parsed.path.split("/") for part in ("p", "reel", "tv")):
+                    raise ValueError("Use a public Instagram post, Reel, or video URL")
+            if self.media_source == "upload" and not self.media_storage_path:
+                raise ValueError("uploaded media requires its storage path")
+        elif any((self.media_type, self.media_source, self.media_storage_path)):
+            raise ValueError("media fields require media_url")
+        return self
+
+    @field_validator("name", "category_ref", "description")
+    @classmethod
+    def trim_product_text(cls, value: str):
+        return value.strip()
+
+    @field_validator("name", "category_ref")
+    @classmethod
+    def reject_blank_required_text(cls, value: str):
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+
+class DirectoryProductUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    category_ref: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=2000)
+    availability_status: Literal["available", "sourcing", "unavailable"] | None = None
+    active: bool | None = None
+    media_url: str | None = Field(default=None, max_length=2000)
+    media_type: Literal["image", "video"] | None = None
+    media_source: Literal["url", "instagram", "upload"] | None = None
+    media_storage_path: str | None = Field(default=None, max_length=500)
+
+    @field_validator("name", "category_ref", "description")
+    @classmethod
+    def trim_product_text(cls, value: str | None):
+        return value.strip() if value is not None else value
+
+    @field_validator("name", "category_ref")
+    @classmethod
+    def reject_blank_required_text(cls, value: str | None):
+        if value is not None and not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_media_fields(self):
+        media_url = self.media_url
+        media_type = self.media_type
+        media_source = self.media_source
+        media_storage_path = self.media_storage_path
+        if media_url is None and media_type is None and media_source is None and media_storage_path is None:
+            return self
+        if not media_url:
+            if media_type is None and media_source is None and media_storage_path is None:
+                return self
+            raise ValueError("media_url is required when changing media fields")
+        from urllib.parse import urlparse
+        parsed = urlparse(media_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("media_url must be an https URL")
+        if not media_type or not media_source:
+            raise ValueError("media_type and media_source are required when media_url is set")
+        if media_source == "instagram":
+            if (parsed.hostname or "").lower() not in {"instagram.com", "www.instagram.com"} or not any(part in parsed.path.split("/") for part in ("p", "reel", "tv")):
+                raise ValueError("Use a public Instagram post, Reel, or video URL")
+        if media_source == "upload" and not media_storage_path:
+            raise ValueError("uploaded media requires its storage path")
+        return self
+
+    @model_validator(mode="after")
+    def require_update_value(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one product field must be updated.")
+        return self
+
+    def changes(self) -> dict:
+        data = self.model_dump(exclude_unset=True)
+        if not data:
+            raise ValueError("At least one product field must be updated.")
+        return data
 
 
 def _has_request_value(value: object) -> bool:
@@ -378,6 +485,64 @@ def create_workspace_modules_router() -> APIRouter:
     def directory_tools(business_id: str, authorization: str | None = Header(default=None)):
         authorize(business_id, authorization)
         return {"tools": [{"tool_id": tool.tool_id, "family": tool.family, "description": tool.description, "visibility": tool.visibility, "entitlement_key": tool.entitlement_key, "verification_policy": tool.verification_policy, "active": tool.active} for tool in TOOLS]}
+
+    @router.get("/directory/products")
+    def directory_products(business_id: str, authorization: str | None = Header(default=None)):
+        authorize(business_id, authorization)
+        can_manage = bool(trusted_platform_admin(authorization))
+        try:
+            query = (supabase.table("directory_products")
+                .select("id,name,category_ref,description,availability_status,active,media_url,media_type,media_source,media_storage_path,created_at,updated_at"))
+            if not can_manage:
+                query = query.eq("active", True)
+            products = query.order("name").limit(500).execute().data or []
+            categories = (supabase.table("directory_categories")
+                .select("source_ref,category,product_type")
+                .order("category").limit(2000).execute().data or [])
+            return {"products": products, "categories": categories, "can_manage": can_manage}
+        except Exception:
+            raise HTTPException(status_code=503, detail="The product catalog could not be loaded.")
+
+    @router.post("/directory/products", status_code=201)
+    def create_directory_product(business_id: str, payload: DirectoryProductCreate, authorization: str | None = Header(default=None)):
+        admin = authorize_platform_admin(business_id, authorization)
+        try:
+            category = (supabase.table("directory_categories").select("source_ref")
+                .eq("source_ref", payload.category_ref).limit(1).execute().data or [])
+            if not category:
+                raise HTTPException(status_code=422, detail="Choose an existing directory category.")
+            row = {**payload.model_dump(), "created_by": admin["user_id"], "updated_by": admin["user_id"]}
+            created = supabase.table("directory_products").insert(row).execute().data or []
+            if not created:
+                raise HTTPException(status_code=503, detail="The product could not be saved.")
+            return {"product": created[0]}
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail="The product could not be saved.")
+
+    @router.patch("/directory/products/{product_id}")
+    def update_directory_product(business_id: str, product_id: str, payload: DirectoryProductUpdate, authorization: str | None = Header(default=None)):
+        admin = authorize_platform_admin(business_id, authorization)
+        try:
+            changes = payload.changes()
+            if "category_ref" in changes:
+                category = (supabase.table("directory_categories").select("source_ref")
+                    .eq("source_ref", changes["category_ref"]).limit(1).execute().data or [])
+                if not category:
+                    raise HTTPException(status_code=422, detail="Choose an existing directory category.")
+            changes["updated_by"] = admin["user_id"]
+            updated = (supabase.table("directory_products").update(changes)
+                .eq("id", product_id).execute().data or [])
+            if not updated:
+                raise HTTPException(status_code=404, detail="Product not found.")
+            return {"product": updated[0]}
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception:
+            raise HTTPException(status_code=503, detail="The product could not be updated.")
 
     @router.get("/channels")
     def channels(business_id: str, authorization: str | None = Header(default=None)):

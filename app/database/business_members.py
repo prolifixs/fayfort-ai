@@ -33,7 +33,7 @@ def list_business_members(
     response = (
         supabase
         .table("business_members")
-        .select("*")
+        .select("user_id,role,status,joined_at")
         .eq("business_id", business_id)
         .execute()
     )

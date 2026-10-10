@@ -1,11 +1,17 @@
 import { cleanup,fireEvent,render,screen,waitFor,within } from "@testing-library/react";
 import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
-import { DashboardWorkspace } from "./App";
+import { App,DashboardWorkspace,WorkerInvitationAcceptancePage,WorkerPasswordResetPage,WorkerProvisioningPage } from "./App";
 
-afterEach(()=>cleanup());
+const authMocks=vi.hoisted(()=>({updateUser:vi.fn(),getSession:vi.fn(),onAuthStateChange:vi.fn()}));
+vi.mock("../lib/supabase",()=>({dashboardAuthConfigured:true,supabaseClient:{auth:{updateUser:authMocks.updateUser,getSession:authMocks.getSession,onAuthStateChange:authMocks.onAuthStateChange}}}));
+
+afterEach(()=>{cleanup();window.history.replaceState({},"","/");});
 const business = { business_id:"business-1", name:"FayFort Test Workspace", role:"owner" };
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(()=>{
+  authMocks.updateUser.mockReset();
+  authMocks.getSession.mockResolvedValue({data:{session:{access_token:"worker-recovery-token",user:{email:"member@example.com"}}},error:null});
+  authMocks.onAuthStateChange.mockReturnValue({data:{subscription:{unsubscribe:vi.fn()}}});
   fetchMock=vi.fn(async (input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input);
     let data:unknown={};
@@ -28,6 +34,149 @@ afterEach(()=>vi.unstubAllGlobals());
 const renderWorkspace=()=>render(<DashboardWorkspace accessToken="test-access-token" eventStreaming={false}/>);
 
 describe("authenticated dashboard workspace",()=>{
+ it("shows an empty giveaways placeholder to platform staff without campaign controls",async()=>{
+  render(<DashboardWorkspace accessToken="test-access-token" platformAdmin eventStreaming={false}/>);
+  const nav=screen.getByRole("navigation",{name:"Main navigation"});
+  fireEvent.click(within(nav).getByRole("button",{name:/Giveaways/}));
+  expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
+  expect(screen.getByRole("heading",{name:"No giveaways yet"})).toBeInTheDocument();
+  expect(screen.queryByRole("button",{name:/upload|campaign|create giveaway/i})).not.toBeInTheDocument();
+ });
+
+ it("lets an active FayFort worker open Giveaways without a business workspace",async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   const url=String(input);
+   if(url.endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
+   if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  renderWorkspace();
+  const nav=screen.getByRole("navigation",{name:"Main navigation"});
+  fireEvent.click(await within(nav).findByRole("button",{name:/Giveaways/}));
+  expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
+ });
+
+ it("routes a Supabase recovery callback to the password form",async()=>{
+  window.history.replaceState({},"","/worker/accept?type=recovery");
+  render(<App/>);
+  expect(await screen.findByRole("heading",{name:"Set your password"})).toBeInTheDocument();
+ });
+
+ it("shows the verified member profile, points, and tier without client-side tier controls",async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   if(String(input).endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1",display_name:"Jordan Member",points_balance:250,rank_level:3,subrank:4}}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  window.history.replaceState({},"","/member/account");
+  render(<App/>);
+  expect(await screen.findByRole("region",{name:"Member profile"})).toBeInTheDocument();
+  expect(screen.getByText("Jordan Member")).toBeInTheDocument();
+  expect(screen.getByText("member@example.com")).toBeInTheDocument();
+  expect(await screen.findByRole("region",{name:"Member rewards and tier"})).toBeInTheDocument();
+  expect(screen.getByText("250")).toBeInTheDocument();
+  expect(screen.getByText("Rank 3 · Subrank 4")).toBeInTheDocument();
+  expect(screen.getByText(/points are not earned or spent yet/)).toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([input,init])=>String(input).endsWith("/members/me")&&init?.method&&init.method!=="GET")).toBe(false);
+ });
+
+ it("browses active member products and saves/removes them through the member API",async()=>{
+  let isSaved=false;
+  const product={id:"product-1",name:"Sample widget",category_ref:"cat-1",description:"Catalog item",availability_status:"available",media_url:"https://cdn.example.test/widget.jpg",media_type:"image",media_source:"url"};
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=String(input);
+   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
+   if(url.includes("/members/products/")){
+    if(init?.method==="POST")isSaved=true;
+    if(init?.method==="DELETE")isSaved=false;
+    return {ok:true,status:200,json:async()=>({product_id:"product-1",saved:isSaved}),headers:new Headers()} as Response;
+   }
+   if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[product],saved_product_ids:isSaved?["product-1"]:[],categories:[{source_ref:"cat-1",category:"Tools",product_type:"Widget"}]}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  window.history.replaceState({},"","/member/products");
+  render(<App/>);
+  expect(await screen.findByRole("region",{name:"Available products"})).toBeInTheDocument();
+  expect(screen.getByRole("heading",{name:"Sample widget"})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"Save product"}));
+  expect(await screen.findByRole("button",{name:"Remove saved product"})).toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([input,init])=>String(input).includes("/members/products/product-1/saved")&&init?.method==="POST")).toBe(true);
+  fireEvent.click(screen.getByRole("button",{name:"Remove saved product"}));
+  expect(await screen.findByRole("button",{name:"Save product"})).toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([input,init])=>String(input).includes("/members/products/product-1/saved")&&init?.method==="DELETE")).toBe(true);
+ });
+
+ it("requires matching password confirmation before updating worker credentials",async()=>{
+  render(<WorkerPasswordResetPage/>);
+  fireEvent.change(screen.getByLabelText("New password"),{target:{value:"first-password-123"}});
+  fireEvent.change(screen.getByLabelText("Confirm password"),{target:{value:"different-password-123"}});
+  fireEvent.click(screen.getByRole("button",{name:"Update password"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("The passwords do not match.");
+  expect(authMocks.updateUser).not.toHaveBeenCalled();
+ });
+
+ it("updates the password through Supabase Auth and confirms completion",async()=>{
+  authMocks.updateUser.mockResolvedValue({error:null});
+  render(<WorkerPasswordResetPage/>);
+  fireEvent.change(screen.getByLabelText("New password"),{target:{value:"new-worker-password-123"}});
+  fireEvent.change(screen.getByLabelText("Confirm password"),{target:{value:"new-worker-password-123"}});
+  fireEvent.click(screen.getByRole("button",{name:"Update password"}));
+  expect(await screen.findByRole("status")).toHaveTextContent("Your password has been updated");
+  expect(authMocks.updateUser).toHaveBeenCalledWith({password:"new-worker-password-123"});
+ });
+
+ it("shows Supabase recovery errors without claiming the password changed",async()=>{
+  authMocks.updateUser.mockResolvedValue({error:new Error("Recovery link expired.")});
+  render(<WorkerPasswordResetPage/>);
+  fireEvent.change(screen.getByLabelText("New password"),{target:{value:"new-worker-password-123"}});
+  fireEvent.change(screen.getByLabelText("Confirm password"),{target:{value:"new-worker-password-123"}});
+  fireEvent.click(screen.getByRole("button",{name:"Update password"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Recovery link expired.");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+ });
+
+ it("shows worker invitation acceptance only after the worker API confirms active status",async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   if(String(input).endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  render(<WorkerInvitationAcceptancePage accessToken="worker-token"/>);
+  expect(await screen.findByRole("heading",{name:"Invitation accepted"})).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("verified and active");
+  expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/workers\/me$/),expect.objectContaining({headers:expect.objectContaining({Authorization:"Bearer worker-token"})}));
+ });
+
+ it("explains worker status lookup failures and lets the worker retry",async()=>{
+  let attempts=0;
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   if(String(input).endsWith("/workers/me")){
+    attempts++;
+    if(attempts===1)throw new TypeError("Failed to fetch");
+    return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
+   }
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  render(<WorkerInvitationAcceptancePage accessToken="worker-token"/>);
+  expect(await screen.findByRole("heading",{name:"Unable to confirm worker account"})).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Failed to fetch");
+  fireEvent.click(screen.getByRole("button",{name:"Retry"}));
+  expect(await screen.findByRole("heading",{name:"Invitation accepted"})).toBeInTheDocument();
+ });
+
+ it("allows the platform worker invitation workflow through its protected API",async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   if(String(input).endsWith("/platform/workers"))return {ok:true,status:201,json:async()=>({worker:{email:"worker@example.com",status:"invited"}}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  render(<WorkerProvisioningPage accessToken="platform-admin-token"/>);
+  fireEvent.change(screen.getByLabelText("Worker email"),{target:{value:"worker@example.com"}});
+  fireEvent.click(screen.getByRole("button",{name:"Invite worker"}));
+  expect(await screen.findByRole("status")).toHaveTextContent("Invitation sent to worker@example.com. Worker status: invited.");
+  const request=fetchMock.mock.calls.find(([input])=>String(input).endsWith("/platform/workers"));
+  expect(request?.[1]?.method).toBe("POST");
+  expect(JSON.parse(String(request?.[1]?.body))).toEqual({email:"worker@example.com"});
+  expect(new Headers(request?.[1]?.headers).get("Authorization")).toBe("Bearer platform-admin-token");
+ });
  it("offers reauthentication when the business list rejects an expired session",async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
    if(String(input).endsWith("/dashboard/businesses"))return {ok:false,status:401,json:async()=>({detail:"A valid signed-in user is required."}),headers:new Headers()} as Response;
@@ -239,5 +388,17 @@ describe("authenticated dashboard workspace",()=>{
   renderWorkspace();const nav=screen.getByRole("navigation",{name:"Main navigation"});fireEvent.click(within(nav).getByRole("button",{name:/Directory & Tools/}));
   fireEvent.change(await screen.findByRole("textbox",{name:"Search query"}),{target:{value:"hotel near the station"}});fireEvent.click(screen.getByRole("button",{name:"Search directory"}));
   expect(await screen.findByRole("heading",{name:"Search decision: HUMAN REQUIRED"})).toBeInTheDocument();expect(screen.getByText("This result requires a human review before it can be used.")).toBeInTheDocument();
+ });
+ it("shows the sixth Products list with existing category labels",async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   const url=String(input);let data:unknown={};
+   if(url.endsWith("/dashboard/businesses"))data={businesses:[business]};
+   else if(url.endsWith("/directory/tools"))data={tools:[{tool_id:"hotel_search",family:"hotel",description:"Hotels",verification_policy:"verified_records_only",active:true}]};
+   else if(url.includes("/conversations"))data={conversations:[],has_more:false};
+   else if(url.endsWith("/directory/products"))data={products:[{id:"product-1",name:"Sample widget",category_ref:"cat-1",description:"Catalog item",availability_status:"available",active:true,media_url:"https://cdn.example.test/widget.jpg",media_type:"image",media_source:"url",updated_at:"2026-10-10T12:00:00Z"}],categories:[{source_ref:"cat-1",category:"Tools",product_type:"Widget"}],can_manage:false};
+   return {ok:true,status:200,json:async()=>data,headers:new Headers()} as Response;
+  });
+  renderWorkspace();const nav=screen.getByRole("navigation",{name:"Main navigation"});fireEvent.click(within(nav).getByRole("button",{name:/Directory & Tools/}));
+  expect(await screen.findByRole("region",{name:"Products catalog"})).toBeInTheDocument();expect(screen.getByText("Sample widget")).toBeInTheDocument();expect(screen.getByText(/Tools · available/)).toBeInTheDocument();expect(screen.getByRole("img",{name:"Sample widget preview"})).toHaveAttribute("src","https://cdn.example.test/widget.jpg");expect(screen.queryByRole("button",{name:"Add product"})).not.toBeInTheDocument();
  });
 });
