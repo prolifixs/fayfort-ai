@@ -1,6 +1,6 @@
 -- Layer 8 member-owned purchasing requests and append-only milestones.
 -- Authenticated clients may read their own request timeline. All writes go
--- through the verified-member / active-worker API using service_role.
+-- through verified-member, assigned-worker, or platform-admin APIs using service_role.
 
 create table if not exists public.member_purchase_requests (
     id uuid primary key default gen_random_uuid(),
@@ -29,7 +29,7 @@ create table if not exists public.member_request_events (
         'options_sent', 'purchase_confirmed', 'in_transit', 'delivered', 'cancelled'
     )),
     member_note text check (member_note is null or length(member_note) <= 1000),
-    actor_user_id uuid not null references auth.users(id) on delete restrict,
+    actor_user_id uuid references auth.users(id) on delete set null,
     created_at timestamptz not null default now(),
     unique (request_id, sequence_no)
 );
@@ -65,8 +65,9 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-    if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
-        return old;
+    if pg_trigger_depth() > 1 then
+        if tg_op = 'DELETE' then return old; end if;
+        return new;
     end if;
     raise exception 'member request timeline events are append-only';
 end;

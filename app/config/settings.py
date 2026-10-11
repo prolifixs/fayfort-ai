@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     DIRECTORY_TOOLS_ENABLED: bool = False
     AUTOMATION_SCHEDULER_ENABLED: bool = False
     INBOUND_RECONCILIATION_ENABLED: bool = True
+    REQUEST_MEDIA_RETENTION_ENABLED: bool = True
+    MEMBER_CHAT_RETENTION_ENABLED: bool = True
     META_VERIFY_TOKEN: str = ""
 
     model_config = SettingsConfigDict(

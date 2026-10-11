@@ -8,7 +8,7 @@ import requests
 from typing import Any
 
 from app.database.client import supabase
-from app.database.dashboard import list_businesses_for_user
+from app.database.dashboard import list_client_accounts_for_staff
 from app.database.business_members import list_business_members
 from app.services.knowledge_ingestion import ingest_knowledge
 
@@ -43,7 +43,7 @@ from app.database.actions import create_action
 from app.directory.service import lookup_for_message
 from app.directory.response import format_directory_response
 from app.config.settings import settings
-from app.directory.identity import trusted_business_member, trusted_user_id
+from app.directory.identity import trusted_business_member, trusted_fayfort_staff
 
 from app.services.rag import build_business_context
 from app.services.intent_engine import analyze_intent
@@ -85,11 +85,14 @@ class AiRespondPayload(BaseModel):
 
 _automation_scheduler_task: asyncio.Task | None = None
 _inbound_reconciliation_task: asyncio.Task | None = None
+_request_media_retention_task: asyncio.Task | None = None
+_member_chat_retention_task: asyncio.Task | None = None
+_member_review_retention_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task
     if not settings.AUTOMATION_SCHEDULER_ENABLED:
         logger.info("Automation scheduler is disabled by configuration")
     else:
@@ -106,18 +109,41 @@ async def start_automation_scheduler() -> None:
                 reconciliation_loop(), name="fayfort-inbound-reconciliation"
             )
             logger.info("Inbound ledger reconciliation started; polling every 15 seconds")
+    if settings.REQUEST_MEDIA_RETENTION_ENABLED:
+        from app.accounts.request_media_retention import request_media_retention_loop
+        if _request_media_retention_task is None or _request_media_retention_task.done():
+            _request_media_retention_task = asyncio.create_task(
+                request_media_retention_loop(), name="fayfort-request-media-retention"
+            )
+            logger.info("Member request evidence retention sweep enabled; source screenshots expire 30 days after completion")
+    if settings.MEMBER_CHAT_RETENTION_ENABLED:
+        from app.accounts.member_chat_retention import member_chat_retention_loop
+        if _member_chat_retention_task is None or _member_chat_retention_task.done():
+            _member_chat_retention_task = asyncio.create_task(
+                member_chat_retention_loop(), name="fayfort-member-chat-retention"
+            )
+            logger.info("Member chat retention sweep enabled; removes unheld chats after 30 days of inactivity")
+        from app.accounts.member_chat_review_retention import member_review_media_retention_loop
+        if _member_review_retention_task is None or _member_review_retention_task.done():
+            _member_review_retention_task = asyncio.create_task(
+                member_review_media_retention_loop(), name="fayfort-member-review-media-retention"
+            )
+            logger.info("Member review media retention sweep enabled; removes expired photos daily")
 
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
     _automation_scheduler_task = None
     _inbound_reconciliation_task = None
+    _request_media_retention_task = None
+    _member_chat_retention_task = None
+    _member_review_retention_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -242,19 +268,18 @@ def database_health():
 
 @app.get("/businesses")
 def businesses(authorization: str | None = Header(default=None)):
-    user_id = trusted_user_id(authorization)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="A valid signed-in user is required.")
+    if not trusted_fayfort_staff(authorization):
+        raise HTTPException(status_code=403, detail="An active FayFort worker account is required.")
     try:
-        return {"businesses": list_businesses_for_user(user_id)}
+        return {"businesses": list_client_accounts_for_staff()}
     except Exception as exc:
-        logger.exception("Could not list businesses for authenticated user")
+        logger.exception("Could not list client accounts for FayFort staff")
         raise HTTPException(status_code=503, detail="Business workspaces could not be loaded.") from exc
 
 @app.get("/businesses/{business_id}/members")
 def business_members(business_id: str, authorization: str | None = Header(default=None)):
     if not trusted_business_member(authorization, business_id):
-        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
     return {
         "business_id": business_id,
         "members": [
@@ -271,9 +296,9 @@ def _authorize_knowledge_access(
 ) -> dict[str, Any]:
     member = trusted_business_member(authorization, business_id)
     if not member:
-        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
     if manage and member.get("role") not in {"owner", "admin"}:
-        raise HTTPException(status_code=403, detail="An active business owner or admin is required to change business knowledge.")
+        raise HTTPException(status_code=403, detail="FayFort team access is required to change client knowledge.")
     return member
 
 @app.get("/businesses/{business_id}/knowledge")
@@ -369,7 +394,7 @@ def create_or_get_conversation(payload: dict, authorization: str | None = Header
         }
 
     if not trusted_business_member(authorization, str(business_id)):
-        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
 
     if not customer_external_id:
         return {
@@ -737,7 +762,7 @@ app.include_router(create_manual_channel_router(send_message, send_inbound_messa
 def ai_respond(payload: AiRespondPayload, authorization: str | None = Header(default=None)):
     business_id = payload.business_id
     if not trusted_business_member(authorization, business_id):
-        raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
     try:
         approved_faq = match_approved_faq(business_id, payload.message)
     except Exception as exc:

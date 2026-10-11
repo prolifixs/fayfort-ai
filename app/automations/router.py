@@ -11,7 +11,7 @@ def create_automations_router() -> APIRouter:
     router = APIRouter(prefix="/businesses/{business_id}/automations", tags=["automations"])
     def authorize(business_id: str, authorization: str | None) -> None:
         if not has_trusted_business_identity(authorization, business_id):
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
 
     @router.get("")
     def get_automations(business_id: str, authorization: str | None = Header(default=None)):

@@ -45,6 +45,7 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         query = MagicMock()
         query.maybe_single.return_value.execute.return_value.data = {
             "user_id": USER, "display_name": None, "points_balance": 0, "rank_level": 1, "subrank": 1,
+            "member_tier": "free", "selected_theme": "base",
             "created_at": "2026-10-10T00:00:00Z",
         }
         table.return_value.select.return_value.eq.return_value = query
@@ -52,8 +53,82 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["profile"]["user_id"], USER)
         table.assert_called_once_with("member_profiles")
-        table.return_value.select.assert_called_once_with("user_id,display_name,points_balance,rank_level,subrank,created_at")
+        table.return_value.select.assert_called_once_with("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
         table.return_value.select.return_value.eq.assert_called_once_with("user_id", USER)
+
+    @patch("app.accounts.router.supabase.table")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="2026-10-10T00:00:00Z")))
+    @patch("app.accounts.router.trusted_user_id", return_value=USER)
+    def test_verified_member_can_update_own_shipping_details(self, identity, get_user, table):
+        profile = {
+            "user_id": USER, "shipping_phone": "+1 (555) 123-4567", "shipping_address_line1": "10 Main St",
+            "shipping_address_line2": None, "shipping_city": "Oakland", "shipping_region": "CA",
+            "shipping_postal_code": "94612", "shipping_country": "US",
+        }
+        table.return_value.update.return_value.eq.return_value.select.return_value.execute.return_value.data = [profile]
+        response = self.client.patch("/members/me", headers={"Authorization": "Bearer member-token"}, json={
+            "shipping_phone": " +1 (555) 123-4567 ", "shipping_address_line1": " 10 Main St ",
+            "shipping_address_line2": "", "shipping_city": " Oakland ", "shipping_region": " CA ",
+            "shipping_postal_code": "94612", "shipping_country": " US ",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["profile"]["shipping_city"], "Oakland")
+        table.assert_called_once_with("member_profiles")
+        table.return_value.update.assert_called_once_with({
+            "shipping_phone": "+1 (555) 123-4567", "shipping_address_line1": "10 Main St",
+            "shipping_address_line2": None, "shipping_city": "Oakland", "shipping_region": "CA",
+            "shipping_postal_code": "94612", "shipping_country": "US",
+        })
+        table.return_value.update.return_value.eq.assert_called_once_with("user_id", USER)
+
+    @patch("app.accounts.router.supabase.table")
+    def test_shipping_details_reject_invalid_phone_and_incomplete_address(self, table):
+        headers = {"Authorization": "Bearer member-token"}
+        invalid_phone = self.client.patch("/members/me", headers=headers, json={"shipping_phone": "not a phone"})
+        incomplete_address = self.client.patch("/members/me", headers=headers, json={"shipping_city": "Oakland"})
+        self.assertEqual(invalid_phone.status_code, 422)
+        self.assertEqual(incomplete_address.status_code, 422)
+        table.assert_not_called()
+
+    @patch("app.accounts.router.supabase.table")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="2026-10-10T00:00:00Z")))
+    @patch("app.accounts.router.trusted_user_id", return_value=USER)
+    def test_member_cannot_change_tier_or_profile_fields_through_shipping_update(self, identity, get_user, table):
+        response = self.client.patch("/members/me", headers={"Authorization": "Bearer member-token"}, json={
+            "shipping_phone": "+1 555 123 4567", "member_tier": "pro",
+        })
+        self.assertEqual(response.status_code, 422)
+        table.assert_not_called()
+
+    @patch("app.accounts.router.supabase.table")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="2026-10-10T00:00:00Z")))
+    @patch("app.accounts.router.trusted_user_id", return_value=USER)
+    def test_member_can_only_select_currently_available_base_theme(self, identity, get_user, table):
+        table.return_value.update.return_value.eq.return_value.select.return_value.execute.return_value.data = [{"selected_theme": "base"}]
+        response = self.client.put("/members/me/theme", headers={"Authorization": "Bearer member-token"}, json={"theme_id": "base"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"selected_theme": "base"})
+        table.return_value.update.assert_called_once_with({"selected_theme": "base"})
+        table.return_value.update.return_value.eq.assert_called_once_with("user_id", USER)
+        table.return_value.update.return_value.eq.return_value.select.assert_called_once_with("selected_theme")
+
+    @patch("app.accounts.router.supabase.table")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="2026-10-10T00:00:00Z")))
+    @patch("app.accounts.router.trusted_user_id", return_value=USER)
+    def test_member_cannot_select_unlaunched_premium_theme(self, identity, get_user, table):
+        response = self.client.put("/members/me/theme", headers={"Authorization": "Bearer member-token"}, json={"theme_id": "premium-midnight"})
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("published theme", response.json()["detail"])
+        self.assertEqual([call.args[0] for call in table.call_args_list], ["member_profiles", "member_themes"])
+        table.return_value.update.assert_not_called()
+
+    @patch("app.accounts.router.supabase.table")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="2026-10-10T00:00:00Z")))
+    @patch("app.accounts.router.trusted_user_id", return_value=USER)
+    def test_theme_request_cannot_smuggle_client_managed_tier(self, identity, get_user, table):
+        response = self.client.put("/members/me/theme", headers={"Authorization": "Bearer member-token"}, json={"theme_id": "base", "member_tier": "pro"})
+        self.assertEqual(response.status_code, 422)
+        table.assert_not_called()
 
     @patch("app.accounts.router.supabase.auth.admin.invite_user_by_email")
     @patch("app.accounts.router.trusted_platform_admin", return_value=None)

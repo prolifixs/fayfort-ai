@@ -19,11 +19,11 @@ def list_handoffs(business_id: str, status: str | None = None, *, limit: int = 5
 
 def handoff_capacity_summary(business_id: str) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
-    active_members = (supabase.table("business_members")
-        .select("user_id,handoff_max_active").eq("business_id", business_id).eq("status", "active")
+    active_members = (supabase.table("fayfort_workers")
+        .select("user_id,handoff_max_active").eq("status", "active")
         .eq("handoff_availability", "available").gt("handoff_available_until", now.isoformat()).execute().data or [])
     assigned_rows = (supabase.table("conversation_handoffs").select("assigned_to")
-        .eq("business_id", business_id).in_("status", ["assigned", "active"]).execute().data or [])
+        .in_("status", ["assigned", "active"]).execute().data or [])
     active_by_agent: dict[str, int] = {}
     for row in assigned_rows:
         if row.get("assigned_to"):

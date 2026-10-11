@@ -204,20 +204,20 @@ def create_workspace_modules_router() -> APIRouter:
 
     def authorize(business_id: str, authorization: str | None) -> None:
         if not trusted_business_member(authorization, business_id):
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
 
     def authorize_admin(business_id: str, authorization: str | None) -> dict:
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         return member
 
     def authorize_platform_admin(business_id: str, authorization: str | None) -> dict:
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         admin = trusted_platform_admin(authorization)
         if not admin:
             raise HTTPException(status_code=403, detail="A FayFort platform administrator is required for this action.")
@@ -371,7 +371,7 @@ def create_workspace_modules_router() -> APIRouter:
     def update_request_status(business_id: str, request_id: str, payload: RequestStatusUpdate, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         try:
             customers = (supabase.table("customers").select("id").eq("business_id", business_id).limit(5000).execute()).data or []
             customer_ids = [row["id"] for row in customers]
@@ -458,7 +458,7 @@ def create_workspace_modules_router() -> APIRouter:
     def search_directory(business_id: str, payload: DirectorySearchRequest, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         try:
             conversation = get_conversation(payload.conversation_id)
             if not conversation or str(conversation.get("business_id")) != business_id:

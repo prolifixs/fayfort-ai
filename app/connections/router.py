@@ -22,7 +22,7 @@ def create_connections_router() -> APIRouter:
 
     def authorize(business_id: str, authorization: str | None) -> None:
         if not has_trusted_business_identity(authorization, business_id):
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
 
     @router.get("")
     def get_connections(business_id: str, authorization: str | None = Header(default=None)):
@@ -47,9 +47,9 @@ def create_connections_router() -> APIRouter:
     def save_instagram_credentials(business_id: str, connection_id: str, payload: InstagramCredentials, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         try:
             connection = next((item for item in list_connections(business_id) if item["id"] == connection_id), None)
             if connection is None:
@@ -70,9 +70,9 @@ def create_connections_router() -> APIRouter:
     def verify_instagram_connection(business_id: str, connection_id: str, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         try:
             connection = next((item for item in list_connections(business_id) if item["id"] == connection_id), None)
             if connection is None:
@@ -150,9 +150,9 @@ def create_connections_router() -> APIRouter:
     def save_messenger_credentials(business_id: str, connection_id: str, payload: MessengerCredentials, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         try:
             connection = next((item for item in list_connections(business_id) if item["id"] == connection_id), None)
             if connection is None:
@@ -173,9 +173,9 @@ def create_connections_router() -> APIRouter:
     def verify_messenger_connection(business_id: str, connection_id: str, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         try:
             connection = next((item for item in list_connections(business_id) if item["id"] == connection_id), None)
             if connection is None:
@@ -251,9 +251,9 @@ def create_connections_router() -> APIRouter:
     def update_settings(business_id: str, connection_id: str, payload: ConnectionSettingsUpdate, authorization: str | None = Header(default=None)):
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required for this action.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required for this action.")
         try:
             current = get_connection(business_id, connection_id)
             if current is None:

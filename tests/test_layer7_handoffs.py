@@ -37,17 +37,17 @@ class HandoffApiTests(unittest.TestCase):
         capacity.assert_called_once_with(BUSINESS)
 
     @patch("app.handoffs.router.publish_business_event")
-    @patch("app.handoffs.router.update_handoff_availability", return_value={"handoff_availability":"available","handoff_available_until":"2026-10-09T20:00:00+00:00","handoff_max_active":4,"handoff_availability_updated_at":"2026-10-09T19:00:00+00:00"})
+    @patch("app.handoffs.router.update_fayfort_agent_availability", return_value={"handoff_availability":"available","handoff_available_until":"2026-10-09T20:00:00+00:00","handoff_max_active":4,"handoff_availability_updated_at":"2026-10-09T19:00:00+00:00"})
     @patch("app.handoffs.router.trusted_business_member", return_value={"user_id":USER,"role":"member"})
     def test_agent_can_set_bounded_self_availability_with_audited_capacity(self, identity, update, publish):
         until = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
         response = self.client.patch(f"/businesses/{BUSINESS}/handoffs/availability", headers={"Authorization":"Bearer test"}, json={"availability":"available","available_until":until,"max_active_handoffs":4})
         self.assertEqual(response.status_code, 200)
         update.assert_called_once()
-        self.assertEqual(update.call_args.args[:3], (BUSINESS, USER, "available"))
+        self.assertEqual(update.call_args.args[:2], (USER, "available"))
         publish.assert_called_once()
 
-    @patch("app.handoffs.router.update_handoff_availability")
+    @patch("app.handoffs.router.update_fayfort_agent_availability")
     @patch("app.handoffs.router.trusted_business_member", return_value={"user_id":USER,"role":"member"})
     def test_available_state_requires_timezone_aware_expiry_and_never_writes_when_invalid(self, identity, update):
         response = self.client.patch(f"/businesses/{BUSINESS}/handoffs/availability", headers={"Authorization":"Bearer test"}, json={"availability":"available","available_until":"2026-10-09T20:00:00","max_active_handoffs":4})
@@ -64,18 +64,18 @@ class HandoffApiTests(unittest.TestCase):
         self.assertEqual(create.call_args.args[:3], (BUSINESS, CONVERSATION, USER))
 
     @patch("app.handoffs.router.assign_handoff")
-    @patch("app.handoffs.router.get_business_member", return_value={"user_id":USER,"status":"active"})
+    @patch("app.handoffs.router.get_fayfort_agent", return_value={"user_id":USER,"status":"active"})
     @patch("app.handoffs.router.trusted_business_member", return_value={"user_id":USER,"role":"owner"})
-    def test_assignment_requires_active_business_member(self, identity, member, assign):
+    def test_assignment_requires_active_fayfort_worker(self, identity, worker, assign):
         assign.return_value = ("ok", {"id":HANDOFF,"status":"assigned"})
         response = self.client.post(f"/businesses/{BUSINESS}/handoffs/{HANDOFF}/assign", headers={"Authorization":"Bearer test"}, json={"agent_id":USER})
         self.assertEqual(response.status_code, 200)
-        member.assert_called_once_with(BUSINESS, USER)
+        worker.assert_called_once_with(USER)
 
     @patch("app.handoffs.router.assign_handoff")
-    @patch("app.handoffs.router.get_business_member", return_value={"user_id":USER,"status":"inactive"})
+    @patch("app.handoffs.router.get_fayfort_agent", return_value=None)
     @patch("app.handoffs.router.trusted_business_member", return_value={"user_id":USER,"role":"owner"})
-    def test_assignment_rejects_inactive_agent_before_mutating_handoff(self, identity, member, assign):
+    def test_assignment_rejects_inactive_worker_before_mutating_handoff(self, identity, worker, assign):
         response = self.client.post(f"/businesses/{BUSINESS}/handoffs/{HANDOFF}/assign", headers={"Authorization":"Bearer test"}, json={"agent_id":USER})
         self.assertEqual(response.status_code, 422)
         assign.assert_not_called()
@@ -87,13 +87,13 @@ class HandoffApiTests(unittest.TestCase):
         response = self.client.post(f"/businesses/{BUSINESS}/handoffs/{HANDOFF}/take-over", headers={"Authorization":"Bearer test"})
         self.assertEqual(response.status_code, 403)
 
-    @patch("app.handoffs.router.list_active_business_members", return_value=[{"user_id":USER,"role":"owner"}])
+    @patch("app.handoffs.router.list_active_fayfort_agents", return_value=[{"user_id":USER,"status":"active"}])
     @patch("app.handoffs.router.trusted_business_member", return_value={"user_id":USER,"role":"owner"})
-    def test_agent_directory_requires_business_membership_and_is_scoped(self, identity, agents):
+    def test_agent_directory_requires_fayfort_staff_and_lists_active_workers(self, identity, agents):
         response = self.client.get(f"/businesses/{BUSINESS}/handoffs/agents", headers={"Authorization":"Bearer test"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"agents":[{"user_id":USER,"role":"owner"}]})
-        agents.assert_called_once_with(BUSINESS)
+        self.assertEqual(response.json(), {"agents":[{"user_id":USER,"status":"active"}]})
+        agents.assert_called_once_with()
 
     @patch("app.handoffs.router.list_handoff_events", return_value=[{"id":"event-1","event_type":"taken_over"}])
     @patch("app.handoffs.router.get_handoff", return_value={"id":HANDOFF,"business_id":BUSINESS})

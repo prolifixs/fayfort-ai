@@ -29,7 +29,7 @@ def create_manual_channel_router(
         except ManualChannelAuthorizationError:
             raise HTTPException(
                 status_code=401,
-                detail="A valid signed-in business member is required.",
+                detail="An active FayFort team account is required.",
             )
         except Exception:
             logger.exception("Manual inbound event could not be processed")

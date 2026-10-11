@@ -8,16 +8,28 @@ from app.directory.identity import has_trusted_business_identity, trusted_platfo
 
 
 class DirectoryIdentityTests(unittest.TestCase):
-    @patch("app.directory.identity.get_business_member")
+    @patch("app.directory.identity.supabase.table")
     @patch("app.directory.identity.supabase.auth.get_user")
-    def test_valid_token_requires_active_membership(self, get_user, get_member):
-        get_user.return_value = SimpleNamespace(user=SimpleNamespace(id="user-1"))
-        get_member.return_value = {"user_id": "user-1", "status": "active"}
+    def test_control_center_requires_active_fayfort_worker_not_business_membership(self, get_user, table):
+        get_user.return_value = SimpleNamespace(user=SimpleNamespace(
+            id="user-1", email_confirmed_at="verified", app_metadata={}
+        ))
+        query = table.return_value.select.return_value.eq.return_value.maybe_single.return_value
+        query.execute.return_value = SimpleNamespace(data={"status": "active"})
         self.assertTrue(has_trusted_business_identity("Bearer valid-token", "business-1"))
-        get_member.assert_called_once_with("business-1", "user-1")
+        table.assert_called_once_with("fayfort_workers")
 
-        get_member.return_value = {"user_id": "user-1", "status": "inactive"}
+        query.execute.return_value = SimpleNamespace(data=None)
         self.assertFalse(has_trusted_business_identity("Bearer valid-token", "business-1"))
+
+    @patch("app.directory.identity.supabase.table")
+    @patch("app.directory.identity.supabase.auth.get_user")
+    def test_platform_admin_is_staff_without_worker_or_business_membership(self, get_user, table):
+        get_user.return_value = SimpleNamespace(user=SimpleNamespace(
+            id="platform-admin", app_metadata={"platform_admin": True}
+        ))
+        self.assertTrue(has_trusted_business_identity("Bearer valid-token", "business-1"))
+        table.assert_not_called()
 
     @patch("app.directory.identity.supabase.auth.get_user")
     def test_platform_admin_requires_server_managed_app_metadata(self, get_user):

@@ -41,13 +41,13 @@ def create_business_faq_router() -> APIRouter:
     def authorize(business_id: str, authorization: str | None) -> dict:
         member = trusted_business_member(authorization, business_id)
         if not member:
-            raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+            raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         return member
 
     def authorize_admin(business_id: str, authorization: str | None) -> dict:
         member = authorize(business_id, authorization)
         if member.get("role") not in {"owner", "admin"}:
-            raise HTTPException(status_code=403, detail="An active business owner or admin is required to manage FAQs.")
+            raise HTTPException(status_code=403, detail="FayFort team access is required to manage FAQs.")
         return member
 
     def normalize_rpc_result(result: dict | None) -> dict:

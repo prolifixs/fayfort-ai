@@ -10,6 +10,7 @@ def list_active_business_members(business_id: str) -> list[dict[str, Any]]:
     return response.data or []
 
 
+
 def update_handoff_availability(
     business_id: str,
     user_id: str,

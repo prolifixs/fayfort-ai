@@ -22,7 +22,7 @@ def create_events_router() -> APIRouter:
     router = APIRouter(prefix="/businesses/{business_id}/events", tags=["business-events"])
     def identity(business_id: str, authorization: str | None):
         member = trusted_business_member(authorization, business_id)
-        if not member: raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        if not member: raise HTTPException(status_code=401, detail="An active FayFort team account is required.")
         return member
 
     @router.get("")

@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Header, HTTPException, Query
-from app.database.business_members import get_business_member, list_active_business_members, update_handoff_availability
+from app.database.worker_agents import get_fayfort_agent, list_active_fayfort_agents, update_fayfort_agent_availability
 from app.database.handoffs import assign_handoff, conversation_belongs_to_business, create_handoff, get_handoff, handoff_capacity_summary, list_handoff_events, list_handoffs, return_to_automation, send_human_reply, take_over_handoff
 from app.database.conversations import get_conversation
 from app.database.connections import get_connection, get_connection_credentials
@@ -21,7 +21,7 @@ def create_handoffs_router() -> APIRouter:
     router = APIRouter(prefix="/businesses/{business_id}/handoffs", tags=["human-handoff"])
     def identity(business_id: str, authorization: str | None) -> dict:
         member = trusted_business_member(authorization, business_id)
-        if not member: raise HTTPException(status_code=401, detail="A valid signed-in business member is required.")
+        if not member: raise HTTPException(status_code=403, detail="An active FayFort worker account is required.")
         return member
     def respond(outcome, handoff):
         if outcome == "not_found": raise HTTPException(status_code=404, detail="Handoff not found.")
@@ -43,15 +43,15 @@ def create_handoffs_router() -> APIRouter:
     @router.get("/agents")
     def list_agents(business_id: str, authorization: str | None = Header(default=None)):
         identity(business_id, authorization)
-        try: return {"agents": list_active_business_members(business_id)}
-        except Exception: raise HTTPException(status_code=503, detail="Active business agents could not be loaded.")
+        try: return {"agents": list_active_fayfort_agents()}
+        except Exception: raise HTTPException(status_code=503, detail="Active FayFort workers could not be loaded.")
 
     @router.get("/availability")
     def get_availability(business_id: str, authorization: str | None = Header(default=None)):
         member = identity(business_id, authorization)
         try:
-            current = get_business_member(business_id, member["user_id"])
-            if not current or current.get("status") != "active": raise HTTPException(status_code=403, detail="An active business membership is required.")
+            current = get_fayfort_agent(member["user_id"])
+            if not current: raise HTTPException(status_code=403, detail="An active FayFort worker account is required.")
             return {"availability": current.get("handoff_availability", "offline"), "available_until": current.get("handoff_available_until"), "max_active_handoffs": current.get("handoff_max_active", 3), "updated_at": current.get("handoff_availability_updated_at")}
         except HTTPException: raise
         except Exception: raise HTTPException(status_code=503, detail="Agent availability could not be loaded.")
@@ -66,9 +66,9 @@ def create_handoffs_router() -> APIRouter:
             until = until.astimezone(timezone.utc)
             if until <= now or until > now + timedelta(hours=16): raise HTTPException(status_code=422, detail="Availability must end within the next 16 hours.")
         try:
-            result = update_handoff_availability(business_id, member["user_id"], payload.availability, until.isoformat() if until else None, payload.max_active_handoffs)
-            if not result: raise HTTPException(status_code=403, detail="An active business membership is required.")
-            publish_business_event(business_id, "handoff.agent_availability_changed", "business_member", member["user_id"], {"agent_id": member["user_id"], "status": payload.availability, "available_until": until.isoformat() if until else None, "max_active_handoffs": payload.max_active_handoffs})
+            result = update_fayfort_agent_availability(member["user_id"], payload.availability, until.isoformat() if until else None, payload.max_active_handoffs)
+            if not result: raise HTTPException(status_code=403, detail="An active FayFort worker account is required.")
+            publish_business_event(business_id, "handoff.agent_availability_changed", "fayfort_worker", member["user_id"], {"agent_id": member["user_id"], "status": payload.availability, "available_until": until.isoformat() if until else None, "max_active_handoffs": payload.max_active_handoffs})
             return {"availability": result.get("handoff_availability"), "available_until": result.get("handoff_available_until"), "max_active_handoffs": result.get("handoff_max_active"), "updated_at": result.get("handoff_availability_updated_at")}
         except HTTPException: raise
         except Exception: raise HTTPException(status_code=503, detail="Agent availability could not be saved.")
@@ -96,8 +96,8 @@ def create_handoffs_router() -> APIRouter:
     @router.post("/{handoff_id}/assign")
     def assign(business_id: str, handoff_id: str, payload: HandoffAssign, authorization: str | None = Header(default=None)):
         member = identity(business_id, authorization)
-        target = get_business_member(business_id, payload.agent_id)
-        if not target or target.get("status") != "active": raise HTTPException(status_code=422, detail="The assigned agent must be an active member of this business.")
+        target = get_fayfort_agent(payload.agent_id)
+        if not target: raise HTTPException(status_code=422, detail="The assigned agent must be an active FayFort worker.")
         try: outcome, handoff = assign_handoff(business_id, handoff_id, payload.agent_id, member["user_id"])
         except Exception: raise HTTPException(status_code=503, detail="The handoff could not be assigned.")
         return respond(outcome, handoff)
