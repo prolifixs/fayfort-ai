@@ -14,7 +14,7 @@ test("operator signs in, selects a workspace, and creates a safe connection setu
       user: { id: "user-test-1", aud: "authenticated", role: "authenticated", email: "operator@example.test", app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, created_at: "2026-09-29T00:00:00Z" },
     } });
   });
-  await page.route("http://127.0.0.1:8000/**", async route => {
+  await page.route("http://127.0.0.1:8001/**", async route => {
     apiAuthorization = route.request().headers()["authorization"] || "";
     const url = new URL(route.request().url());
     if (url.pathname === "/dashboard/businesses") {

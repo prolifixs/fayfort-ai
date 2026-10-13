@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.accounts.member_notifications import create_member_notifications_router
+from app.accounts.member_notifications import _project_notifications, create_member_notifications_router
 
 MEMBER = "00000000-0000-0000-0000-000000000010"
 NOTIFICATION = "00000000-0000-0000-0000-000000000020"
@@ -96,6 +96,35 @@ class MemberNotificationTests(unittest.TestCase):
             response = TestClient(app).get("/members/notifications")
         self.assertEqual(response.status_code, 403)
         table.assert_not_called()
+
+    @patch("app.accounts.member_notifications.supabase.table")
+    def test_projects_recurring_schedule_event_only_for_own_schedule(self, table):
+        event_query = MagicMock()
+        event_query.select.return_value.in_.return_value.execute.return_value.data = [{
+            "id": "schedule-event", "schedule_id": "schedule-1", "event_type": "occurrence_created",
+            "occurrence_number": 2, "created_at": "2026-10-12T10:00:00Z",
+        }]
+        schedule_query = MagicMock()
+        schedule_query.select.return_value.eq.return_value.in_.return_value.execute.return_value.data = [{
+            "id": "schedule-1", "originating_request_id": REQUEST,
+        }]
+        request_query = MagicMock()
+        request_query.select.return_value.eq.return_value.in_.return_value.execute.return_value.data = [{
+            "id": REQUEST, "request_title": "Find a blue jacket",
+        }]
+        table.side_effect = [event_query, schedule_query, request_query]
+
+        projected = _project_notifications([{
+            "id": NOTIFICATION, "notification_type": "recurring_schedule_update",
+            "schedule_event_id": "schedule-event", "created_at": "2026-10-12T10:00:00Z",
+            "read_at": None, "banner_dismissed_at": None,
+        }], MEMBER)
+
+        self.assertEqual(len(projected), 1)
+        self.assertEqual(projected[0]["title"], "Find a blue jacket")
+        self.assertEqual(projected[0]["body"], "A new sourcing request was created for this schedule. · cycle 2")
+        self.assertEqual(projected[0]["href"], "/member/products")
+        self.assertEqual(schedule_query.select.return_value.eq.call_args.args, ("member_id", MEMBER))
 
 
 if __name__ == "__main__":

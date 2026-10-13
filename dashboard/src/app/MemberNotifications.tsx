@@ -5,7 +5,7 @@ import { playMemberSound } from "./memberSound";
 
 export type MemberNotification = {
   id: string;
-  notification_type: "request_milestone" | "worker_reply" | "photo_review_status";
+  notification_type: "request_milestone" | "worker_reply" | "photo_review_status" | "recurring_schedule_update";
   title: string;
   body: string;
   href: string;

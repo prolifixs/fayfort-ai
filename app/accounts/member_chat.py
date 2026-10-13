@@ -144,6 +144,15 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             rows = (supabase.table("member_conversations")
                 .select("id,title,linked_request_id,retention_hold,last_activity_at,created_at")
                 .eq("member_id", member_id).order("last_activity_at", desc=True).limit(100).execute().data or [])
+            conversation_ids = [str(row["id"]) for row in rows if row.get("id")]
+            work_items = (supabase.table("operations_work_items")
+                .select("id,member_conversation_id,status")
+                .in_("member_conversation_id", conversation_ids).execute().data or []) if conversation_ids else []
+            support_by_conversation = {str(item["member_conversation_id"]): item
+                for item in work_items if item.get("member_conversation_id")}
+            rows = [{**row, "support_work_item_id": support_by_conversation.get(str(row["id"]), {}).get("id"),
+                     "support_status": support_by_conversation.get(str(row["id"]), {}).get("status")}
+                    for row in rows]
             return {"conversations": rows}
         except Exception as exc:
             logger.exception("Could not list member conversations")
@@ -161,6 +170,31 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
         except Exception as exc:
             logger.exception("Could not create member conversation")
             raise HTTPException(status_code=503, detail="A new chat could not be created.") from exc
+
+    @router.post("/members/conversations/{conversation_id}/request-support")
+    def request_member_conversation_support(conversation_id: uuid.UUID,
+                                            authorization: str | None = Header(default=None)):
+        member_id = require_verified_member(authorization)
+        try:
+            result = supabase.rpc("request_member_conversation_support", {
+                "p_member_id": member_id, "p_conversation_id": str(conversation_id),
+            }).execute()
+            work_item = result.data
+            if isinstance(work_item, list):
+                work_item = work_item[0] if work_item else None
+            if not isinstance(work_item, dict) or not work_item.get("id"):
+                raise RuntimeError("Support request returned no work item")
+            return {"work_item_id": work_item["id"], "status": work_item.get("status", "open")}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not request member conversation support")
+            message = str(exc).casefold()
+            if "not found" in message or "not owned" in message:
+                raise HTTPException(status_code=404, detail="Chat not found.") from exc
+            if "linked request" in message or "read only" in message:
+                raise HTTPException(status_code=409, detail="This chat is linked to a sourcing request. Follow its progress in Requests.") from exc
+            raise HTTPException(status_code=503, detail="Staff support could not be requested right now.") from exc
 
     @router.delete("/members/conversations/{conversation_id}")
     def delete_member_conversation(conversation_id: uuid.UUID,

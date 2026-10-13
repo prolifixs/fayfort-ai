@@ -77,3 +77,16 @@ Windows PowerShell:
 
 ```powershell
 .venv\Scripts\Activate.ps1
+```
+
+### Start the local API
+
+The dashboard API port is **8001**. Start the backend from the repository root with:
+
+```powershell
+.\scripts\start-local-api.ps1
+```
+
+The launcher starts the project's virtualenv Uvicorn on `127.0.0.1:8001`. It watches backend files under `app/` only and bounds graceful shutdown to five seconds so open browser connections cannot stall reloads indefinitely. If a healthy FayFort API with Operations routes already owns that port, it reports that and exits. If another or stale process owns the port, it reports the PID and stops without killing anything. Do not restart this dashboard's API on port 8000.
+
+Run the dashboard separately from `dashboard` with `npm run dev`; Vite uses `127.0.0.1:5173` and fails clearly if that port is already occupied instead of silently switching ports.

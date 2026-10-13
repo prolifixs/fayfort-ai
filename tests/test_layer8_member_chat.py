@@ -64,6 +64,21 @@ class Layer8MemberChatTests(unittest.TestCase):
         self.assertEqual(table.call_count, 1)
 
     @patch("app.accounts.member_chat.supabase.rpc")
+    def test_verified_member_requests_staff_support_through_deduplicating_rpc(self, rpc):
+        rpc.return_value.execute.return_value.data = {"id": "work-item-1", "status": "open"}
+
+        response = self.client.post(
+            f"/members/conversations/{CONVERSATION}/request-support",
+            headers={"Authorization": "Bearer member-token"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"work_item_id": "work-item-1", "status": "open"})
+        rpc.assert_called_once_with("request_member_conversation_support", {
+            "p_member_id": MEMBER, "p_conversation_id": CONVERSATION,
+        })
+
+    @patch("app.accounts.member_chat.supabase.rpc")
     @patch("app.accounts.member_chat.fetch_pinned_provider_prices", return_value=(1000, 2000))
     @patch("app.accounts.member_chat._configured_model_route", return_value=("model-a", "provider-a"))
     def test_member_ai_rate_limit_fails_closed_before_provider_call(self, route, prices, rpc):

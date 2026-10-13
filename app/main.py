@@ -240,6 +240,7 @@ def root():
 def health_check():
     return {
         "status": "healthy",
+        "api_contract": "departmental-flow-worker-request-bridge-v1",
     }
 
 @app.get("/health/database")

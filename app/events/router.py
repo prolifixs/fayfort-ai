@@ -70,6 +70,10 @@ def create_events_router() -> APIRouter:
             return
         except asyncio.TimeoutError:
             await _close_websocket(websocket, code=4408, reason="Timed out waiting for event ticket")
+        except asyncio.CancelledError:
+            # Uvicorn cancels long-lived streams when its bounded dev reload
+            # timeout expires; treat that shutdown as a normal disconnect.
+            return
         except Exception:
             logger.exception("Dashboard event stream failed")
             await _close_websocket(websocket, code=1011, reason="The event stream ended unexpectedly")

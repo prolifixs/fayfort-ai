@@ -37,7 +37,7 @@ def create_member_notifications_router(require_verified_member) -> APIRouter:
         member_id = require_verified_member(authorization)
         try:
             rows = (supabase.table("member_notifications")
-                .select("id,notification_type,request_event_id,worker_message_id,review_id,review_status,created_at,read_at,banner_dismissed_at")
+                .select("id,notification_type,request_event_id,worker_message_id,review_id,review_status,schedule_event_id,created_at,read_at,banner_dismissed_at")
                 .eq("member_id", member_id).order("created_at", desc=True).order("id", desc=True)
                 .limit(limit).execute().data or [])
             unread_result = (supabase.table("member_notifications").select("id", count="exact")
@@ -121,6 +121,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
     event_ids = [row["request_event_id"] for row in rows if row.get("request_event_id")]
     message_ids = [row["worker_message_id"] for row in rows if row.get("worker_message_id")]
     review_ids = [row["review_id"] for row in rows if row.get("review_id")]
+    schedule_event_ids = [row["schedule_event_id"] for row in rows if row.get("schedule_event_id")]
 
     events = (supabase.table("member_request_events")
         .select("id,request_id,stage,member_note,created_at").in_("id", event_ids).execute().data or []) if event_ids else []
@@ -142,6 +143,21 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
     chat_by_id = {row["id"]: row for row in chats}
     message_by_id = {row["id"]: row for row in messages}
     review_by_id = {row["id"]: row for row in reviews}
+
+    schedule_events = (supabase.table("member_request_schedule_events")
+        .select("id,schedule_id,event_type,occurrence_number,created_at")
+        .in_("id", schedule_event_ids).execute().data or []) if schedule_event_ids else []
+    schedule_event_by_id = {row["id"]: row for row in schedule_events}
+    schedule_ids = list(dict.fromkeys(row["schedule_id"] for row in schedule_events))
+    schedules = (supabase.table("member_request_schedules")
+        .select("id,originating_request_id")
+        .eq("member_id", member_id).in_("id", schedule_ids).execute().data or []) if schedule_ids else []
+    schedule_by_id = {row["id"]: row for row in schedules}
+    originating_request_ids = list(dict.fromkeys(row["originating_request_id"] for row in schedules))
+    originating_requests = (supabase.table("member_purchase_requests")
+        .select("id,request_title").eq("member_id", member_id)
+        .in_("id", originating_request_ids).execute().data or []) if originating_request_ids else []
+    originating_request_by_id = {row["id"]: row for row in originating_requests}
 
     projected = []
     for row in rows:
@@ -168,7 +184,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
             body = chat.get("title") or "Open your conversation to read the update."
             href = f"/member/chat?conversation={message['conversation_id']}"
             source_id = message["conversation_id"]
-        else:
+        elif kind == "photo_review_status":
             review = review_by_id.get(row.get("review_id"))
             chat = chat_by_id.get(review["conversation_id"]) if review else None
             if not review or not chat:
@@ -182,6 +198,27 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
             }.get(status, "Your photo review status changed.")
             href = f"/member/chat?conversation={review['conversation_id']}"
             source_id = review["conversation_id"]
+        else:
+            event = schedule_event_by_id.get(row.get("schedule_event_id"))
+            schedule = schedule_by_id.get(event["schedule_id"]) if event else None
+            request = originating_request_by_id.get(schedule["originating_request_id"]) if schedule else None
+            if not event or not schedule or not request:
+                continue
+            occurrence = f" · cycle {event['occurrence_number']}" if event.get("occurrence_number") else ""
+            title = request["request_title"]
+            body = {
+                "activated": "Your recurring request schedule is active.",
+                "paused": "Your recurring request schedule is paused.",
+                "resumed": "Your recurring request schedule has resumed.",
+                "cancelled": "Future requests in this schedule are cancelled.",
+                "occurrence_created": "A new sourcing request was created for this schedule.",
+                "occurrence_skipped": "A missed schedule cycle was skipped.",
+                "quote_accepted": "Your quote selection was saved. No purchase or charge was made.",
+                "completed": "Your recurring request schedule is complete.",
+                "schedule_edited": "The quantity or date for a future recurring request was updated.",
+            }.get(event["event_type"], "Your recurring request schedule was updated.") + occurrence
+            href = "/member/products"
+            source_id = schedule["id"]
         projected.append({
             "id": row["id"], "notification_type": kind, "title": title, "body": body,
             "href": href, "source_id": source_id, "created_at": row["created_at"],
