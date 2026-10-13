@@ -320,7 +320,7 @@ export function DashboardWorkspace({
           ))}
           {(activeWorker || platformAdmin) && (
             <section aria-label="Worker requests">
-              <h2>{platformAdmin ? "Platform" : "Worker tools"}</h2>
+              <h2>{platformAdmin ? "Member work" : "Worker tools"}</h2>
               <button
                 className={active === "Member Requests" ? "nav-item active" : "nav-item"}
                 aria-current={active === "Member Requests" ? "page" : undefined}
@@ -335,7 +335,7 @@ export function DashboardWorkspace({
           )}
           {(platformAdmin || activeWorker) && (
             <section aria-label="Platform administration">
-              <h2>Platform</h2>
+              <h2>{platformAdmin ? "Platform admin" : "Platform"}</h2>
               {platformAdmin && (
                 <>
                   <button

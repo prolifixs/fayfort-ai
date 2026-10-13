@@ -57,6 +57,9 @@ DNS records move to Cloudflare. **The domain stays registered at Hostinger**; on
 | D7 | Messenger (L7-024) | **Approved: deferred.** Moved to P2 in `LAYER7_COMPLETION_TRACKER.md` until FAYFORT has a Facebook Page; Instagram is the live channel. |
 | D8 | Visual identity | **Approved:** the public site keeps its FAYFORT look; shared logo, colour and type tokens with the app |
 | D9 | LANDED | **Owner requirement:** LANDED has real Shopify buyers and is the one old-site feature that must be handled with care. See "LANDED protection" below; it overrides any other step in this plan. |
+| D10 | Video consultations (`/book`) | **Not migrated (owner, 2026-10-13).** Production fayfort.com is deployed from the old repository's `DEV` branch, which adds a `/book` consultation flow. The owner classes it as a concept that doesn't work properly. Consultations and booking will be designed inside FayFort AI later. When the domain switches (Gate 5), `/book` and its subpaths return 404 like every other retired path. |
+| D11 | Migration scope | **Owner rule, 2026-10-13.** Only two parts of the old site are working systems: **LANDED with its Shopify checkout**, and the **normal public pages** (`/`, `/services`, `/about-us`, `/terms`, `/terms-ebooks`). Anything else that is incomplete or doesn't work is not migrated. That covers the enterprise app, Stripe, the old Supabase projects, FaySource, `/book`, and the `ENABLE_ENTERPRISE` enquiry path. So `web/` carries no Supabase, Stripe or video-host entries in its CSP or image settings. |
+| D12 | WondaOps | **Owner rule, 2026-10-13.** WondaOps is a separate AI-employee agency product. It will be integrated into FayFort AI in the future and is not implemented yet. Any trace of it is a mock or a comment, never a dependency. "Fayfort Ops", mentioned in the old `DEV` branch, is not WondaOps; it belongs to the `/book` concept and is out of scope with it. |
 
 ## LANDED protection (non-negotiable)
 
@@ -88,7 +91,7 @@ LANDED (`/ebook/landed`) is a live product: the $99 LANDED directory sold throug
 1. **No URL changes.** `https://www.fayfort.com/ebook/landed`, `/terms-ebooks` (with `#refunds`) and `/terms` keep working at every step, including during the DNS move and the hosting switch.
 2. **No checkout changes.** The shop domain, storefront token, product ID, button destination and checkout URL are copied byte-for-byte. Price changes happen only on the owner's instruction, in Shopify and in `config.ts` together.
 3. **No change to the Shopify side.** This plan never edits the Shopify store, product, Buy Button channel or storefront token.
-4. **CSP parity.** Every Shopify CSP entry above is carried into `web/` and checked by an automated test.
+4. **CSP parity.** Every Shopify CSP entry above is carried into `web/` and checked by an automated test. Entries for the retired enterprise app are dropped (D11).
 5. **Switch gates.** Before any production switch (DNS in Gate 1, hosting in Gate 5, cutover in Gate 7), on the new deployment:
    - the page renders;
    - the Shopify iframe button replaces the fallback link;
@@ -101,23 +104,23 @@ LANDED (`/ebook/landed`) is a live product: the $99 LANDED directory sold throug
 
 | Gate | Built locally (no live change) | Live acceptance still needed |
 | --- | --- | --- |
-| 0 | Decisions D1–D9 recorded. Public DNS lookup: mail is Google (`MX 1 smtp.google.com`). LANDED dependency audit is in the "LANDED protection" section. | Hostinger zone export; Vercel/Meta/Supabase/Google configuration record; LANDED baseline screenshots of production |
+| 0 | Decisions D1–D9 recorded. Hostinger zone recorded (7 records; see the Gate 0 record). LANDED dependency audit is in the "LANDED protection" section. Pushed to GitHub as `3cc5069`; all suites pass on the pushed copy. | Cloudflare account approval (pending since 2026-10-13); Vercel/Meta/Supabase/Google configuration record; LANDED baseline screenshots of production |
 | 1 | — | Cloudflare account and zone, record reconciliation, nameserver switch (owner actions A2–A4) |
 | 2 | `PUBLIC_API_URL` in `.env`. The preflight defaults to it. `start-local-api.ps1` reports the cloudflared Windows service. `start-tunnel.ps1` stays as a fallback. | Named tunnel `fayfort-api-dev` and the `api-dev` hostname (created from the Infrastructure page once Cloudflare is connected); connector service on the PC; Meta callback set once |
 | 3 | **Built.** Migrations `20261013100000_platform_infrastructure_cloudflare` (vault-backed platform integration, webhook endpoint registry, append-only audit) and `20261013110000_platform_infrastructure_health_alerts` (health ledger; one admin inbox alert per state change), both verified on PostgreSQL 16 with Supabase-equivalent roles. Admin-only `/platform/infrastructure` API: Cloudflare verify, tunnels, guarded `api*` hostname routing that never overwrites unmanaged DNS, audited connector install command, webhook save and server-side preflight. Infrastructure page in the Control Center. Health monitor (`INFRASTRUCTURE_MONITOR_ENABLED`). 17 backend tests and 2 UI tests. | Apply both migrations; connect Cloudflare; live tunnel status; preflight; stop/recover the tunnel to see the alert |
 | 4 | `APP_PUBLIC_URL` and `ALLOWED_ORIGINS` settings. CORS and the worker invitation redirect are derived from them. The dashboard API address is derived from `.env`. | Cloudflare Pages project; Supabase Auth and Google redirect URLs; signed-in checks at `app.fayfort.com` |
-| 5 | **Built.** `web/` holds the six public routes and LANDED. Compared with the old production build: same status codes, identical security headers, identical text, links, images, meta tags and structured data, and pixel-identical screenshots (12/12). LANDED protection tests are in place, and they were checked by deliberately breaking the CSP. Retired-URL redirects switch on with `FAYFORT_APP_URL`. | Point the Vercel project at this repository (root `web/`); preview check; production switch |
+| 5 | **Built.** `web/` holds the six public routes and LANDED. Compared with the old production build: same status codes, identical security headers, identical text, links, images, meta tags and structured data, and pixel-identical screenshots (12/12). LANDED protection tests are in place, and they were checked by deliberately breaking the CSP. Retired-URL redirects switch on with `FAYFORT_APP_URL`. On 2026-10-13 the old enterprise app's CSP and image hosts (Supabase, Stripe, YouTube, Vimeo) were removed, per D11. | New Vercel project `fayfort-web` (root `web/`, no domains) for previews; preview check against production; production switch |
 | 6–7 | — | Hostinger VPS; production tunnel; cutover and decommission |
 
 ## Owner action queue
 
 These steps need the owner's accounts. Everything else continues without waiting.
 
-1. **A1 — Commit and push.** Commit the working-tree changes in `fayfort-ai` and push them to GitHub. Vercel (Gate 5) and Cloudflare Pages (Gate 4) build from GitHub. In the same commit, stop tracking `dashboard/node_modules`:
+1. **A1 — Commit and push.** Done 2026-10-13 (`3cc5069`). Commit the working-tree changes in `fayfort-ai` and push them to GitHub. Vercel (Gate 5) and Cloudflare Pages (Gate 4) build from GitHub. In the same commit, stop tracking `dashboard/node_modules`:
    ```
    git rm -r --cached dashboard/node_modules dashboard/tsconfig.tsbuildinfo dashboard/test-results
    ```
-2. **A2 — Hostinger DNS export (Gate 0).** In Hostinger, open Domains → fayfort.com → DNS / Nameservers and export or screenshot every record.
+2. **A2 — Hostinger DNS export (Gate 0).** Done 2026-10-13 (screenshot; see the Gate 0 record).
 3. **A3 — Cloudflare account (Gate 1).**
    - Create a free Cloudflare account and add `fayfort.com`.
    - Create an API token with Account › Cloudflare Tunnel › Edit and Zone › DNS › Edit (fayfort.com only).
@@ -169,6 +172,23 @@ These steps need the owner's accounts. Everything else continues without waiting
   - the response headers, including the CSP.
 - **Decisions.** Record D1–D9. **Done 2026-10-13.**
 - **Acceptance:** the export is stored, the configuration record is written, the LANDED baseline is recorded, and the decisions are recorded.
+
+#### Gate 0 record: Hostinger zone for `fayfort.com` (owner screenshot, 2026-10-13)
+
+| Type | Name | Content | TTL | Purpose | In Cloudflare (Gate 1) |
+| --- | --- | --- | --- | --- | --- |
+| ALIAS | `@` | `cname.vercel-dns.com` | 14400 | Website on Vercel | CNAME `@` → `cname.vercel-dns.com` (Cloudflare flattens it at the apex), **DNS only** |
+| CNAME | `www` | `fayfort.com` | 300 | Website on Vercel | Same, **DNS only** |
+| MX | `@` | `SMTP.GOOGLE.COM`, priority 1 | 14400 | Google Workspace mail for support@ | Same, DNS only (MX is never proxied) |
+| TXT | `_dmarc` | `v=DMARC1; p=none;` | 14400 | DMARC, monitoring only | Same |
+| CNAME | `o3gslxc2alb2` | `gv-7evcukqvtjrxsx.dv.googlehosted.com` | 14400 | Google domain verification | Same, **DNS only** |
+| CNAME | `mail` | `custom.resend.com` | 3600 | Resend (old site's email sending) | Same, **DNS only** |
+| TXT | `send.mail` | `v=spf1 include:amazonses.com ~all` | 14400 | Resend SPF for `mail.fayfort.com` | Same |
+
+**Notes:**
+- There is no SPF record at the root and no Google DKIM record (`google._domainkey`) for Google Workspace mail. Adding them would improve deliverability of mail from `support@fayfort.com`; this is an owner choice, separate from this plan.
+- Resend normally also needs a DKIM TXT record and a `send.mail` MX record. Neither appears in the screenshot, so check Resend's domain page before Gate 1. If Resend is only used by the retired old app, these records can be removed at Gate 7.
+- Nothing in this zone changes until Gate 1. At Gate 1, every row above is recreated in Cloudflare exactly, and the Cloudflare-scanned zone is reconciled against this table before the nameservers are switched.
 
 ### Gate 1 — Cloudflare zone onboarding (10)
 
@@ -260,7 +280,7 @@ Platform-admin only. No member or business user sees any of this.
    - add "Member sign in" / "Request sourcing" entry points linking to `app.fayfort.com/member/...`;
    - the contact options stay as they are.
 5. Shared brand tokens (logo, colours, type) in one place, used by `web/` and `dashboard/` (D8).
-6. Point the existing Vercel project at this repository with root directory `web/`, keeping the same domains. Previews deploy on pull requests.
+6. Previews come from a new Vercel project, `fayfort-web` (root directory `web/`, no domains), so a push to `fayfort-ai` can never reach fayfort.com. At the production switch, after owner sign-off, the domains move from `fayfort-international` to `fayfort-web`. The old project stays intact for rollback until Gate 7.
 - **Acceptance:**
   - a preview deploy matches production for all six routes (side-by-side screenshots, plus every sitemap URL returning 200 with the same titles/OG tags);
   - `/terms` is unchanged;

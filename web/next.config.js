@@ -1,17 +1,18 @@
-const SUPABASE_HOST = 'uxbakpeeqydatgvvdyaa.supabase.co'
 const SHOPIFY_STORE = 'https://8kjjz9-ei.myshopify.com'
 
-// Allowlist of what the pages load. Next.js injects inline bootstrap scripts, so
+// Allowlist of what the public pages load: the site itself and Shopify for LANDED. The old
+// enterprise app's Supabase, Stripe and video hosts were dropped with it (owner decision D11).
+// Next.js injects inline bootstrap scripts, so
 // script-src needs 'unsafe-inline' until a nonce-based CSP is set up; dev mode
 // also needs 'unsafe-eval' for fast refresh.
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com https://js.stripe.com`,
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://cdn.shopify.com https://${SUPABASE_HOST} https://img.youtube.com https://i.vimeocdn.com`,
+  `img-src 'self' data: blob: https://cdn.shopify.com`,
   "font-src 'self' data:",
-  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com https://${SUPABASE_HOST} wss://${SUPABASE_HOST} https://api.stripe.com`,
-  `frame-src ${SHOPIFY_STORE} https://js.stripe.com https://hooks.stripe.com https://www.youtube.com https://player.vimeo.com`,
+  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com`,
+  `frame-src ${SHOPIFY_STORE}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -33,14 +34,8 @@ const nextConfig = {
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },
-  images: {
-    // Exact hosts only: the image optimizer fetches whatever these patterns allow.
-    remotePatterns: [
-      { protocol: 'https', hostname: SUPABASE_HOST },
-      { protocol: 'https', hostname: 'img.youtube.com' },
-      { protocol: 'https', hostname: 'i.vimeocdn.com' },
-    ],
-  },
+  // No remote image hosts: every image is in /public, so the optimizer fetches nothing external.
+  images: { remotePatterns: [] },
   output: 'standalone',
   async redirects() {
     // FaySource is closed: anyone who reaches it goes back to the homepage (unchanged from the old site).
