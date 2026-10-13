@@ -150,15 +150,15 @@ These steps need the owner's accounts. Everything else continues without waiting
 
 | Gate | Weight | Accepted | Summary |
 | --- | ---: | ---: | --- |
-| 0. Inventory, backups and decisions | 5 | 0 | Everything needed to change DNS/hosting safely, plus decisions D1–D9 |
+| 0. Inventory, backups and decisions | 5 | 5 | Everything needed to change DNS/hosting safely, plus decisions D1–D9 |
 | 1. Cloudflare zone onboarding | 10 | 0 | `fayfort.com` served by Cloudflare DNS with no website or email interruption |
 | 2. Permanent API tunnel (development) | 10 | 0 | `api-dev.fayfort.com` → PC API as a Windows service; Meta webhook URL permanent |
-| 3. Cloudflare inside FayFort AI | 20 | 0 | Platform admin Infrastructure view: Cloudflare connection, tunnel health, hostnames, webhook endpoints, preflight |
+| 3. Cloudflare inside FayFort AI | 20 | 10 | Platform admin Infrastructure view: Cloudflare connection, tunnel health, hostnames, webhook endpoints, preflight |
 | 4. App hosting at `app.fayfort.com` | 10 | 0 | Dashboard on Cloudflare Pages against the public API; auth/CORS/redirects updated |
-| 5. Public site moved into the monorepo | 20 | 0 | `web/` serves the same public pages from this repo; enterprise code left behind |
+| 5. Public site moved into the monorepo | 20 | 18 | `web/` serves the same public pages from this repo; enterprise code left behind |
 | 6. Production API host | 15 | 0 | `api.fayfort.com` served from an always-on host; PC stays on `api-dev` |
 | 7. Cutover and decommission | 10 | 0 | Old repo/Vercel/Supabase retired, redirects in place, docs and trackers closed |
-| **Total** | **100** | **0** | |
+| **Total** | **100** | **33** | Updated 2026-10-13. Gate 3 has 10 left, for connecting Cloudflare and a live tunnel/hostname check once the account is approved. Gate 5 has 2 left, for the owner's checkout click-through on the live domain. |
 
 ### Gate 0 — Inventory, backups and decisions (5)
 
@@ -292,6 +292,21 @@ Platform-admin only. No member or business user sees any of this.
   - the LANDED protection checks pass on the preview, and the CSP parity test passes;
   - no enterprise route or `/api/*` route exists in `web/`;
   - the production switch happens only after owner sign-off.
+
+#### Gate 5 production switch record (2026-10-13, about 15:45 PT)
+
+- **Owner approval.** Given in chat on 2026-10-13: "Switch now".
+- **What changed.** In Vercel, `www.fayfort.com` (Production) and `fayfort.com` (308 redirect to `www`) moved from the project `fayfort-international` to `fayfort-web`, with Vercel's "Move 2 domains". DNS at Hostinger was not touched. Web Analytics was enabled on `fayfort-web` and production redeployed first, so visitor counting continues.
+- **Live checks right after the switch:**
+  - `/`, `/services`, `/about-us`, `/terms`, `/terms-ebooks`, `/ebook/landed` and `/sitemap.xml` all return 200.
+  - `/book` and `/login` return 404.
+  - `fayfort.com/terms-ebooks#refunds` redirects to `www` with the anchor.
+  - The CSP is the new one, with no Stripe or Supabase entries.
+  - The Shopify Buy Button iframe renders.
+  - The storefront API call succeeds and there are no CSP errors.
+  - The analytics script loads.
+- **Pending (owner):** click "Get the directory $99" in a normal browser and confirm the Shopify checkout opens for LANDED at $99. The built-in browser pane used for these checks doesn't open the checkout popup.
+- **Rollback.** In Vercel → `fayfort-web` → Settings → Domains, move both domains back to `fayfort-international`. That project is unchanged and still has its last production deployment. It stays as it is until Gate 7.
 
 ### Gate 6 — Production API host (15)
 
