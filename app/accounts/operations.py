@@ -1137,6 +1137,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             return {
                 "message": {key: message.get(key) for key in ("id", "sender_type", "content", "created_at")},
                 "delivery_status": delivery.get("status"),
+                "delivery_error_code": delivery.get("safe_error_code"),
             }
         except Exception as exc:
             logger.exception("Could not send Operations business handoff reply")

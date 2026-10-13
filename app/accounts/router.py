@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.database.client import supabase
 from app.directory.identity import trusted_fayfort_staff, trusted_platform_admin, trusted_user_id
-from app.config.settings import settings
+from app.config.settings import settings, worker_invite_redirect_url
 from app.accounts.member_chat import create_member_chat_router
 from app.accounts.member_chat_review import create_member_chat_review_router
 from app.accounts.member_notifications import create_member_notifications_router
@@ -1348,7 +1348,7 @@ def create_accounts_router() -> APIRouter:
         try:
             invited = supabase.auth.admin.invite_user_by_email(
                 payload.email,
-                options={"redirect_to": settings.WORKER_INVITE_REDIRECT_URL},
+                options={"redirect_to": worker_invite_redirect_url()},
             )
             user = getattr(invited, "user", None)
             user_id = getattr(user, "id", None)

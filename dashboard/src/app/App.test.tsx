@@ -91,30 +91,35 @@ describe("authenticated dashboard workspace",()=>{
   expect(await screen.findByRole("heading",{name:"Set your password"})).toBeInTheDocument();
  });
 
- it("shows the verified member profile, points, and tier without client-side tier controls",async()=>{
+ it("shows verified member account details and server-managed points and tier without client-side tier controls",async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
-   if(String(input).endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1",display_name:"Jordan Member",points_balance:250,rank_level:3,subrank:4}}),headers:new Headers()} as Response;
+   const url=String(input);
+   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1",display_name:"Jordan Member",points_balance:250,rank_level:3,subrank:4}}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/conversations"))return {ok:true,status:200,json:async()=>({conversations:[]}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
   window.history.replaceState({},"","/member/account");
-  render(<App/>);
-  expect(await screen.findByRole("region",{name:"Member profile"})).toBeInTheDocument();
-  expect(screen.getByText("Jordan Member")).toBeInTheDocument();
-  expect(screen.getByText("member@example.com")).toBeInTheDocument();
-  expect(await screen.findByRole("region",{name:"Member rewards and tier"})).toBeInTheDocument();
-  expect(screen.getByText("250")).toBeInTheDocument();
-  expect(screen.getByText("Rank 3 · Subrank 4")).toBeInTheDocument();
-  expect(screen.getByRole("region",{name:"Sign-in methods"})).toBeInTheDocument();
-  expect(screen.getByRole("button",{name:"Link Google"})).toBeInTheDocument();
-  expect(screen.queryByRole("button",{name:/Apple/})).not.toBeInTheDocument();
-  expect(screen.getByText(/points are not earned or spent yet/)).toBeInTheDocument();
+  const account=render(<App/>);
+  const details=await screen.findByRole("region",{name:"Member account details"});
+  expect(within(details).getByText("member@example.com")).toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button",{name:/Apple/})).not.toBeInTheDocument();
+  account.unmount();
+  window.history.replaceState({},"","/member/chat");
+  render(<App/>);
+  const menu=await screen.findByRole("menu");
+  expect(within(menu).getByText("Jordan Member")).toBeInTheDocument();
+  expect(within(menu).getByRole("menuitem",{name:/Virtual points\s*250/})).toHaveAttribute("href","/member/rewards?view=points");
+  expect(within(menu).getByRole("menuitem",{name:/Rank 3 · Subrank 4/})).toHaveAttribute("href","/member/rewards?view=tier");
+  expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([input,init])=>String(input).endsWith("/members/me")&&init?.method&&init.method!=="GET")).toBe(false);
  });
 
  it("links Google to the current member identity rather than starting a new sign-in",async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL)=>String(input).endsWith("/members/me")?{ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response:{ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response);
-  window.history.replaceState({},"","/member/account");render(<App/>);
+  window.history.replaceState({},"","/member/settings");render(<App/>);
+  expect(await screen.findByRole("heading",{name:"Sign-in methods"})).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button",{name:"Link Google"}));
   await waitFor(()=>expect(authMocks.linkIdentity).toHaveBeenCalledWith({provider:"google",options:{redirectTo:`${window.location.origin}/member/account`}}));
   expect(authMocks.signInWithOAuth).not.toHaveBeenCalled();
@@ -137,7 +142,7 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.click(await screen.findByRole("button",{name:"Start chat"}));
   const input=await screen.findByRole("textbox",{name:"Message FayFort"});
   fireEvent.change(input,{target:{value:"I need a hand tool"}});
-  fireEvent.click(screen.getByRole("button",{name:"Send"}));
+  fireEvent.click(screen.getByRole("button",{name:"Send message"}));
   expect(await screen.findByText("Here is an active catalog suggestion.")).toBeInTheDocument();
   expect(screen.getByRole("region",{name:"Catalog suggestions"})).toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([url,init])=>String(url).includes("/members/conversations/chat-1/messages")&&init?.method==="POST")).toBe(true);
@@ -202,6 +207,7 @@ describe("authenticated dashboard workspace",()=>{
   });
   window.history.replaceState({},"","/member/chat");render(<App/>);
   const file=new File([new Uint8Array([137,80,78,71,13,10,26,10])],"item.png",{type:"image/png"});
+  fireEvent.click(await screen.findByRole("button",{name:"Ask a person to review a photo"}));
   fireEvent.change(await screen.findByLabelText("Choose a photo"),{target:{files:[file]}});
   const submit=screen.getByRole("button",{name:"Send for human review"});
   expect(submit).toBeDisabled();
@@ -226,10 +232,13 @@ describe("authenticated dashboard workspace",()=>{
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
   window.history.replaceState({},"","/member/chat");render(<App/>);
-  fireEvent.change(await screen.findByLabelText("Link an existing sourcing request to retain this chat"),{target:{value:"request-2"}});
+  fireEvent.click(await screen.findByRole("button",{name:"Link an existing request"}));
+  expect(screen.getByRole("dialog",{name:"Link a sourcing request"})).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Choose one of your sourcing requests"),{target:{value:"request-2"}});
   fireEvent.click(screen.getByRole("button",{name:"Link request"}));
   expect(await screen.findByText("This chat is retained with your sourcing request. It is now read-only.")).toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([url,init])=>String(url).endsWith("/retention-hold")&&init?.method==="POST")).toBe(true);
+  const hold=fetchMock.mock.calls.find(([url,init])=>String(url).endsWith("/members/conversations/chat-2/retention-hold")&&init?.method==="POST");
+  expect(JSON.parse(String(hold?.[1]?.body))).toEqual({request_id:"request-2"});
  });
 
  it("browses active member products and saves/removes them through the member API",async()=>{
@@ -295,14 +304,17 @@ describe("authenticated dashboard workspace",()=>{
   expect(submittedBody).toMatchObject({request_title:"Source a widget",request_description:"Two units",source_type:"catalog_product",product_id:"site-product",source_url:null});
  });
 
- it("keeps recurring purchase schedules preview-only until backend support exists",async()=>{
+ it("creates a recurring request schedule only after the member approves the no-automatic-order terms",async()=>{
   const requestPosts:unknown[]=[];
   fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
    const url=String(input);
    if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
    if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[],saved_product_ids:[],categories:[]}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/requests/recurring-intent")&&init?.method==="POST")return {ok:true,status:201,json:async()=>({schedule_intent_id:"intent-1"}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/requests/recurring-intents/intent-1/activate")&&init?.method==="POST")return {ok:true,status:201,json:async()=>({schedule:{id:"schedule-1"}}),headers:new Headers()} as Response;
    if(url.endsWith("/members/requests")&&init?.method==="POST"){requestPosts.push(init.body);return {ok:true,status:201,json:async()=>({request_id:"request-1"}),headers:new Headers()} as Response;}
    if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[]}),headers:new Headers()} as Response;
+   if(url.includes("/members/recurring-schedules"))return {ok:true,status:200,json:async()=>({schedules:[]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
   window.history.replaceState({},"","/member/products");render(<App/>);
@@ -312,10 +324,23 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.change(screen.getByRole("spinbutton",{name:"Custom interval count"}),{target:{value:"2"}});
   fireEvent.change(screen.getByRole("combobox",{name:"Custom interval unit"}),{target:{value:"weeks"}});
   fireEvent.change(screen.getByRole("spinbutton",{name:"Units per order"}),{target:{value:"4"}});
-  fireEvent.change(screen.getByRole("spinbutton",{name:"Number of orders"}),{target:{value:"6"}});
-  expect(screen.getByText("Preview: Every 2 weeks · 4 units per order · 6 orders")).toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("Recurring purchases are not submitted yet");
-  expect(screen.getByRole("button",{name:"Submit request"})).toBeDisabled();
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Total cycles"}),{target:{value:"6"}});
+  expect(screen.getByText("Preview: Every 2 weeks · 4 units per order · 6 total cycles")).toBeInTheDocument();
+  expect(screen.getByText(/No automatic order or charge\./)).toBeInTheDocument();
+  const submit=screen.getByRole("button",{name:"Create recurring request schedule"});
+  fireEvent.change(screen.getByRole("combobox",{name:"Schedule time zone"}),{target:{value:"America/Los_Angeles"}});
+  fireEvent.change(screen.getByLabelText("First repeat date and time"),{target:{value:"2026-11-15T10:30"}});
+  expect(submit).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox",{name:"Acknowledge recurring request terms"}));
+  expect(submit).toBeEnabled();
+  fireEvent.click(submit);
+  expect(await screen.findByText(/Recurring sourcing schedule created/)).toBeInTheDocument();
+  const intent=fetchMock.mock.calls.find(([url,init])=>String(url).endsWith("/members/requests/recurring-intent")&&init?.method==="POST");
+  const intentBody=JSON.parse(String(intent?.[1]?.body));
+  expect(intentBody).toMatchObject({request_title:"Monthly tea supply",source_type:"description",recurrence:{cadence:"custom",interval_count:2,interval_unit:"weeks",units_per_order:4,occurrence_count:6}});
+  expect(typeof intentBody.idempotency_key).toBe("string");
+  const activate=fetchMock.mock.calls.find(([url,init])=>String(url).endsWith("/recurring-intents/intent-1/activate")&&init?.method==="POST");
+  expect(JSON.parse(String(activate?.[1]?.body))).toEqual({time_zone:"America/Los_Angeles",first_repeat_local:"2026-11-15T10:30",acknowledge_mvp_policy:true});
   expect(requestPosts).toHaveLength(0);
  });
 
@@ -519,7 +544,7 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.getByRole("button",{name:"Retry"})).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:"Sign out and sign in again"})).not.toBeInTheDocument();
  });
- it("shows permanent module navigation and an explicit disabled-stream status",async()=>{renderWorkspace();expect(await screen.findByRole("heading",{name:"Overview"})).toBeInTheDocument();expect(screen.getByRole("combobox",{name:"Business workspace"})).toHaveValue("business-1");const nav=screen.getByRole("navigation",{name:"Main navigation"});expect(within(nav).getByRole("button",{name:/Conversations/})).toBeInTheDocument();expect(within(nav).getByRole("button",{name:/Verification/})).toBeInTheDocument();await waitFor(()=>expect(screen.getByText(/Events Disabled/)).toBeInTheDocument());});
+ it("shows permanent module navigation and an explicit disabled-stream status",async()=>{renderWorkspace();expect(await screen.findByRole("heading",{name:"Overview"})).toBeInTheDocument();expect(screen.getByRole("combobox",{name:"Client account"})).toHaveValue("business-1");const nav=screen.getByRole("navigation",{name:"Main navigation"});expect(within(nav).getByRole("button",{name:/Conversations/})).toBeInTheDocument();expect(within(nav).getByRole("button",{name:/Verification/})).toBeInTheDocument();await waitFor(()=>expect(screen.getByText(/Events Disabled/)).toBeInTheDocument());});
  it("loads the Knowledge page and saves new FAQ content only as a draft",async()=>{
   renderWorkspace();
   fireEvent.click(await screen.findByRole("button",{name:/Knowledge/}));
@@ -552,10 +577,10 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.getAllByText("handoff.requested")).toHaveLength(1);
   expect(screen.queryByText("old.event")).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem("fayfort.eventCursor.business-1")).toBe("12");
-  fireEvent.change(screen.getByRole("combobox",{name:"Business workspace"}),{target:{value:"business-2"}});
+  fireEvent.change(screen.getByRole("combobox",{name:"Client account"}),{target:{value:"business-2"}});
   await waitFor(()=>expect(sockets).toHaveLength(2));sockets[1].onopen?.();
   expect(JSON.parse(sockets[1].sent[0])).toMatchObject({after_id:0});
-  fireEvent.change(screen.getByRole("combobox",{name:"Business workspace"}),{target:{value:"business-1"}});
+  fireEvent.change(screen.getByRole("combobox",{name:"Client account"}),{target:{value:"business-1"}});
   await waitFor(()=>expect(sockets).toHaveLength(3));sockets[2].onopen?.();
   expect(JSON.parse(sockets[2].sent[0])).toMatchObject({after_id:12});
  });

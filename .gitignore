@@ -43,3 +43,19 @@ dist/
 *.db
 *.sqlite
 *.sqlite3
+# Node / dashboard build output
+node_modules/
+dashboard/dist/
+dashboard/test-results/
+dashboard/playwright-report/
+*.tsbuildinfo
+.logs/
+supabase/.temp/
+
+# Public site build output and secrets
+web/.next/
+web/next-env.d.ts
+.vercel/
+# Shopify email templates carry the live LANDED directory passwords; never commit them.
+docs/email/
+web/docs/email/

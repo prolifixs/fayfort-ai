@@ -31,13 +31,13 @@ describe("member notifications", () => {
       return response;
     });
     render(<MemberNotificationsBar accessToken="member-token"/>);
-    expect(await screen.findByRole("link", { name: "Notifications, 1 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeInTheDocument();
     expect(await screen.findByText("Item shipped")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss activity banner" }));
     await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith(
       "/members/notifications/notice-1/dismiss-banner", "member-token", { method: "POST" },
     ));
-    expect(screen.getByRole("link", { name: "Notifications, 1 unread" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications, 1 unread" })).toBeInTheDocument();
   });
 
   it("loads the inbox and supports mark-all-read", async () => {

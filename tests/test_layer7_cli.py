@@ -107,5 +107,78 @@ class Layer7CliTests(unittest.TestCase):
         self.assertIn("FAYFORT_ACCESS_TOKEN", result.stderr)
         self.assertNotIn("Bearer", result.stderr)
 
+class MessengerPreflightTests(unittest.TestCase):
+    def test_preflight_passes_when_public_webhook_answers_challenge_and_rejects_unsigned_posts(self):
+        def fake_get(url, params=None, timeout=None):
+            if url.endswith("/health"):
+                return Mock(status_code=200, json=Mock(return_value={"api_contract": "contract-v1"}))
+            self.assertEqual(params["hub.verify_token"], "verify-secret")
+            return Mock(status_code=200, text=params["hub.challenge"])
+        with patch.dict(os.environ, {"META_VERIFY_TOKEN": "verify-secret"}), \
+                patch("app.infrastructure.preflight.httpx.get", side_effect=fake_get), \
+                patch("app.infrastructure.preflight.httpx.post", return_value=Mock(status_code=401)) as post, \
+                patch("builtins.print") as printed:
+            result = main(["messenger-preflight", "--channel", "messenger", "--public-url", "https://example-tunnel.test/"])
+        self.assertEqual(result, 0)
+        self.assertEqual(post.call_args.args[0], "https://example-tunnel.test/webhooks/messenger")
+        output = " ".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertNotIn("verify-secret", output)
+        self.assertEqual(output.count("[PASS]"), 4)
+
+    def test_preflight_fails_for_http_url_and_wrong_token(self):
+        def fake_get(url, params=None, timeout=None):
+            if url.endswith("/health"):
+                return Mock(status_code=200, json=Mock(return_value={}))
+            return Mock(status_code=403, text="")
+        with patch.dict(os.environ, {"META_VERIFY_TOKEN": "verify-secret"}), \
+                patch("app.infrastructure.preflight.httpx.get", side_effect=fake_get), \
+                patch("app.infrastructure.preflight.httpx.post", return_value=Mock(status_code=401)), \
+                patch("builtins.print") as printed:
+            result = main(["messenger-preflight", "--public-url", "http://example-tunnel.test"])
+        self.assertEqual(result, 1)
+        output = " ".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("[FAIL] public URL uses HTTPS", output)
+        self.assertIn("META_VERIFY_TOKEN does not match", output)
+
+    def test_preflight_defaults_to_the_instagram_webhook(self):
+        def fake_get(url, params=None, timeout=None):
+            if url.endswith("/health"):
+                return Mock(status_code=200, json=Mock(return_value={"api_contract": "contract-v1"}))
+            self.assertEqual(url, "https://example-tunnel.test/webhooks/instagram")
+            return Mock(status_code=200, text=params["hub.challenge"])
+        with patch.dict(os.environ, {"META_VERIFY_TOKEN": "verify-secret"}), \
+                patch("app.infrastructure.preflight.httpx.get", side_effect=fake_get), \
+                patch("app.infrastructure.preflight.httpx.post", return_value=Mock(status_code=401)) as post, \
+                patch("builtins.print") as printed:
+            result = main(["messenger-preflight", "--public-url", "https://example-tunnel.test"])
+        self.assertEqual(result, 0)
+        self.assertEqual(post.call_args.args[0], "https://example-tunnel.test/webhooks/instagram")
+        self.assertIn("Webhook URL to use in Meta: https://example-tunnel.test/webhooks/instagram", str(printed.call_args_list[0]))
+
+    def test_default_base_url_follows_env_port(self):
+        from scripts.layer7_cli import default_base_url
+        with patch.dict(os.environ, {"LAYER7_API_BASE_URL": ""}), \
+                patch("scripts.layer7_cli._configured_settings", return_value=Mock(API_HOST="127.0.0.1", API_PORT=8123)):
+            self.assertEqual(default_base_url(), "http://127.0.0.1:8123")
+
+    def test_preflight_uses_public_api_url_from_settings(self):
+        def fake_get(url, params=None, timeout=None):
+            if url.endswith("/health"):
+                return Mock(status_code=200, json=Mock(return_value={"api_contract": "c"}))
+            return Mock(status_code=200, text=params["hub.challenge"])
+        configured = Mock(META_VERIFY_TOKEN="verify-secret", PUBLIC_API_URL="https://api-dev.fayfort.com")
+        with patch.dict(os.environ, {"META_VERIFY_TOKEN": ""}), patch("scripts.layer7_cli._configured_settings", return_value=configured), \
+                patch("app.infrastructure.preflight.httpx.get", side_effect=fake_get), \
+                patch("app.infrastructure.preflight.httpx.post", return_value=Mock(status_code=401)) as post, patch("builtins.print"):
+            self.assertEqual(main(["messenger-preflight"]), 0)
+        self.assertEqual(post.call_args.args[0], "https://api-dev.fayfort.com/webhooks/instagram")
+
+    def test_preflight_requires_verify_token_without_network(self):
+        with patch.dict(os.environ, {"META_VERIFY_TOKEN": ""}), patch("scripts.layer7_cli._configured_settings", return_value=None), \
+                patch("app.infrastructure.preflight.httpx.get") as get:
+            self.assertEqual(main(["messenger-preflight", "--public-url", "https://example-tunnel.test"]), 2)
+        get.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

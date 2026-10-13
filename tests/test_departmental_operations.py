@@ -901,9 +901,45 @@ class DepartmentalOperationsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["message"]["content"], "I can help with that.")
         self.assertEqual(response.json()["delivery_status"], "recorded_not_delivered")
+        self.assertIsNone(response.json()["delivery_error_code"])
         rpc.assert_called_once_with("send_operations_business_handoff_reply", {
             "p_work_item_id": WORK_ITEM, "p_actor_id": WORKER, "p_content": "I can help with that.",
         })
+
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
+    @patch("app.accounts.operations.deliver_messenger_text")
+    @patch("app.accounts.operations.get_connection_credentials", return_value={"page_access_token": "token", "page_id": "page-1"})
+    @patch("app.accounts.operations.get_connection")
+    @patch("app.accounts.operations.get_conversation")
+    @patch("app.accounts.operations.supabase.rpc")
+    @patch("app.accounts.operations.supabase.table")
+    def test_business_handoff_reply_reports_messenger_delivery_outcome(self, table, rpc, get_conversation,
+                                                                       get_connection, credentials, deliver, identity):
+        business_id = "00000000-0000-0000-0000-000000000060"
+        conversation_id = "00000000-0000-0000-0000-000000000050"
+        work_query = MagicMock()
+        work_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+            "id": WORK_ITEM, "department": "conversation_intake", "assigned_worker_id": WORKER,
+            "business_id": business_id, "handoff_id": REQUEST, "member_request_id": None,
+        }
+        table.return_value = work_query
+        message = {"id": "business-message-2", "conversation_id": conversation_id, "sender_type": "agent",
+                   "content": "Thanks for waiting.", "created_at": "2026-10-13T10:00:00+00:00"}
+        rpc.return_value.execute.return_value.data = message
+        conversation = {"id": conversation_id, "business_id": business_id, "business_connection_id": "connection-1",
+                        "customer_external_id": "psid-1"}
+        get_conversation.return_value = conversation
+        connection = {"id": "connection-1", "business_id": business_id, "provider": "messenger", "status": "connected"}
+        get_connection.return_value = connection
+        deliver.return_value = {"status": "rejected", "safe_error_code": "response_window_expired"}
+
+        response = self.client.post(f"/operations/work-items/{WORK_ITEM}/business-reply", json={"content": "Thanks for waiting."})
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["delivery_status"], "rejected")
+        self.assertEqual(response.json()["delivery_error_code"], "response_window_expired")
+        deliver.assert_called_once_with(connection=connection, credentials={"page_access_token": "token", "page_id": "page-1"},
+                                        conversation=conversation, message=message)
 
     @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
     @patch("app.accounts.operations.supabase.rpc")

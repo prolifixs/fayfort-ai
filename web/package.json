@@ -1,0 +1,30 @@
+{
+  "name": "fayfort-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public FAYFORT site (fayfort.com): home, services, about, terms and the LANDED directory checkout.",
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vercel/analytics": "2.0.1",
+    "framer-motion": "11.18.2",
+    "lucide-react": "0.470.0",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.13",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.5.28",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.7.3",
+    "vitest": "3.2.7"
+  }
+}

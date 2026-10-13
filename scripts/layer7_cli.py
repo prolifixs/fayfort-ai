@@ -7,11 +7,31 @@ from typing import Sequence
 import httpx
 
 
+def _configured_settings():
+    """Load API settings from .env; returns None when required values are missing."""
+    try:
+        from app.config.settings import settings
+        return settings
+    except Exception:
+        return None
+
+
+def default_base_url() -> str:
+    """LAYER7_API_BASE_URL wins; otherwise use API_HOST/API_PORT from .env (the single source of truth)."""
+    override = os.getenv("LAYER7_API_BASE_URL")
+    if override:
+        return override
+    configured = _configured_settings()
+    if configured is None:
+        return "http://127.0.0.1:8001"
+    return f"http://{configured.API_HOST}:{configured.API_PORT}"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="layer7", description="FayFort Layer 7 local channel and control-plane utilities.")
     commands = parser.add_subparsers(dest="command", required=True)
     simulate = commands.add_parser("simulate-manual", help="send one normalized manual-channel message")
-    simulate.add_argument("--base-url", default=os.getenv("LAYER7_API_BASE_URL", "http://127.0.0.1:8001"))
+    simulate.add_argument("--base-url", default=default_base_url())
     simulate.add_argument("--business-id", required=True)
     simulate.add_argument("--customer-external-id", required=True)
     simulate.add_argument("--provider-event-id", required=True)
@@ -19,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in ("connections-list", "connections-create", "connections-pause", "connections-resume", "connections-disconnect"):
         command = commands.add_parser(name, help=f"{name.replace('-', ' ')} for an authorized business")
-        command.add_argument("--base-url", default=os.getenv("LAYER7_API_BASE_URL", "http://127.0.0.1:8001"))
+        command.add_argument("--base-url", default=default_base_url())
         command.add_argument("--business-id", required=True)
         if name == "connections-create":
             command.add_argument("--provider", required=True)
@@ -30,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in ("automations-list", "automations-create", "automations-enable", "automations-disable", "automations-dry-run", "automations-execute"):
         command = commands.add_parser(name, help=f"{name.replace('-', ' ')} for an authorized business")
-        command.add_argument("--base-url", default=os.getenv("LAYER7_API_BASE_URL", "http://127.0.0.1:8001"))
+        command.add_argument("--base-url", default=default_base_url())
         command.add_argument("--business-id", required=True)
         if name == "automations-create":
             command.add_argument("--name", required=True)
@@ -44,13 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
                 command.add_argument("--conversation-id")
 
     events = commands.add_parser("events-list", help="read sanitized business activity events")
-    events.add_argument("--base-url", default=os.getenv("LAYER7_API_BASE_URL", "http://127.0.0.1:8001"))
+    events.add_argument("--base-url", default=default_base_url())
     events.add_argument("--business-id", required=True)
     events.add_argument("--after-id", type=int, default=0)
     events.add_argument("--limit", type=int, default=100)
     for name in ("handoffs-list", "handoffs-request", "handoffs-assign", "handoffs-take-over", "handoffs-return", "handoffs-reply"):
         command = commands.add_parser(name, help=f"{name.replace('-', ' ')} for an authorized business")
-        command.add_argument("--base-url", default=os.getenv("LAYER7_API_BASE_URL", "http://127.0.0.1:8001"))
+        command.add_argument("--base-url", default=default_base_url())
         command.add_argument("--business-id", required=True)
         if name == "handoffs-list":
             command.add_argument("--status", choices=("requested", "assigned", "active", "returned", "resolved", "cancelled"))
@@ -61,11 +81,42 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--handoff-id", required=True)
             if name == "handoffs-assign": command.add_argument("--agent-id", required=True)
             if name == "handoffs-reply": command.add_argument("--content", required=True)
+    preflight = commands.add_parser(
+        "messenger-preflight",
+        help="read-only check that a public HTTPS URL reaches this API's Messenger webhook (no Meta call, no message)",
+    )
+    preflight.add_argument("--public-url", default="", help="public HTTPS base URL that forwards to the API (default: PUBLIC_API_URL from .env)")
+    preflight.add_argument("--channel", choices=("instagram", "messenger"), default="instagram", help="webhook to check (default: instagram)")
     return parser
 
 
+def messenger_preflight(public_url: str, verify_token: str, channel: str = "messenger") -> list[tuple[str, bool, str]]:
+    """Kept for compatibility; the checks live in app.infrastructure.preflight (shared with the admin API)."""
+    from app.infrastructure.preflight import webhook_preflight
+    return webhook_preflight(public_url, verify_token, channel)
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "messenger-preflight":
+        verify_token = os.getenv("META_VERIFY_TOKEN", "")
+        if not verify_token:
+            configured = _configured_settings()
+            verify_token = configured.META_VERIFY_TOKEN if configured is not None else ""
+        if not verify_token:
+            print("META_VERIFY_TOKEN is not set in .env or the environment.", file=sys.stderr)
+            return 2
+        public_url = args.public_url
+        if not public_url:
+            configured = _configured_settings()
+            public_url = configured.PUBLIC_API_URL if configured is not None else ""
+        if not public_url:
+            print("Pass --public-url or set PUBLIC_API_URL in .env.", file=sys.stderr)
+            return 2
+        print(f"Webhook URL to use in Meta: {public_url.rstrip('/')}/webhooks/{args.channel}")
+        results = messenger_preflight(public_url, verify_token, args.channel)
+        for name, ok, detail in results:
+            print(f"[{'PASS' if ok else 'FAIL'}] {name} - {detail}")
+        return 0 if all(ok for _, ok, _ in results) else 1
     access_token = os.getenv("FAYFORT_ACCESS_TOKEN")
     if not access_token:
         print("Set FAYFORT_ACCESS_TOKEN to a valid Supabase access token for an active business member.", file=sys.stderr)

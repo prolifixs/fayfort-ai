@@ -52,8 +52,10 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         response = self.client.get("/members/me", headers={"Authorization": "Bearer member-token"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["profile"]["user_id"], USER)
+        self.assertNotIn("member_photo_path", response.json()["profile"])
+        self.assertIsNone(response.json()["profile"]["profile_photo_url"])
         table.assert_called_once_with("member_profiles")
-        table.return_value.select.assert_called_once_with("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
+        table.return_value.select.assert_called_once_with("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
         table.return_value.select.return_value.eq.assert_called_once_with("user_id", USER)
 
     @patch("app.accounts.router.supabase.table")
@@ -154,7 +156,7 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         })
         invite.assert_called_once_with(
             "worker@example.com",
-            options={"redirect_to": settings.WORKER_INVITE_REDIRECT_URL},
+            options={"redirect_to": "http://127.0.0.1:5173/worker/accept"},
         )
         table.assert_called_once_with("fayfort_workers")
         table.return_value.insert.assert_called_once_with({

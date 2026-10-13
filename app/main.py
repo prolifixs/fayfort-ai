@@ -42,7 +42,7 @@ from app.database.intents import (
 from app.database.actions import create_action
 from app.directory.service import lookup_for_message
 from app.directory.response import format_directory_response
-from app.config.settings import settings
+from app.config.settings import API_CONTRACT, cors_allowed_origins, settings
 from app.directory.identity import trusted_business_member, trusted_fayfort_staff
 
 from app.services.rag import build_business_context
@@ -88,11 +88,17 @@ _inbound_reconciliation_task: asyncio.Task | None = None
 _request_media_retention_task: asyncio.Task | None = None
 _member_chat_retention_task: asyncio.Task | None = None
 _member_review_retention_task: asyncio.Task | None = None
+_infrastructure_monitor_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task
+    if settings.INFRASTRUCTURE_MONITOR_ENABLED:
+        from app.infrastructure.monitor import infrastructure_monitor_loop
+        if _infrastructure_monitor_task is None or _infrastructure_monitor_task.done():
+            _infrastructure_monitor_task = asyncio.create_task(infrastructure_monitor_loop(), name="fayfort-infrastructure-monitor")
+            logger.info("Infrastructure health monitor started")
     if not settings.AUTOMATION_SCHEDULER_ENABLED:
         logger.info("Automation scheduler is disabled by configuration")
     else:
@@ -133,8 +139,8 @@ async def start_automation_scheduler() -> None:
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -144,13 +150,11 @@ async def stop_automation_scheduler() -> None:
     _request_media_retention_task = None
     _member_chat_retention_task = None
     _member_review_retention_task = None
+    _infrastructure_monitor_task = None
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-    ],
+    allow_origins=cors_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -240,7 +244,7 @@ def root():
 def health_check():
     return {
         "status": "healthy",
-        "api_contract": "departmental-flow-worker-request-bridge-v1",
+        "api_contract": API_CONTRACT,
     }
 
 @app.get("/health/database")
@@ -723,6 +727,8 @@ from app.accounts.router import create_accounts_router
 app.include_router(create_accounts_router())
 app.include_router(create_workspace_modules_router())
 app.include_router(create_business_faq_router())
+from app.infrastructure.router import create_infrastructure_router
+app.include_router(create_infrastructure_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

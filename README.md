@@ -79,14 +79,33 @@ Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ```
 
-### Start the local API
+### Ports: one source of truth
 
-The dashboard API port is **8001**. Start the backend from the repository root with:
+`API_HOST` and `API_PORT` in the repository `.env` decide where the API listens (default `127.0.0.1:8001`). Everything reads them from there:
+
+- `python -m app` / `scripts\start-local-api.ps1` start the API on that port (`python -m app --print-config` shows what is configured);
+- the dashboard dev server and build derive the API URL from them (set `VITE_FAYFORT_API_URL` in `dashboard/.env.local` only to point at a different, e.g. hosted, API);
+- `scripts\layer7_cli.py` and `scripts\start-tunnel.ps1` use the same address.
+
+Do not start the API with a bare `uvicorn app.main:app`; uvicorn's own default is port 8000 and ignores `.env`. Both launchers warn if an old FayFort API is still answering on 8000 or 8001 and print the `Stop-Process` command for it.
+
+### Start the local API
 
 ```powershell
 .\scripts\start-local-api.ps1
 ```
 
-The launcher starts the project's virtualenv Uvicorn on `127.0.0.1:8001`. It watches backend files under `app/` only and bounds graceful shutdown to five seconds so open browser connections cannot stall reloads indefinitely. If a healthy FayFort API with Operations routes already owns that port, it reports that and exits. If another or stale process owns the port, it reports the PID and stops without killing anything. Do not restart this dashboard's API on port 8000.
+It starts the project's virtualenv API with reload on the configured port, watching backend files under `app/` only and bounding graceful shutdown to five seconds. If the current FayFort API already owns the port it reports that and exits; if another or stale process owns it, it reports the PID and stops without killing anything.
 
 Run the dashboard separately from `dashboard` with `npm run dev`; Vite uses `127.0.0.1:5173` and fails clearly if that port is already occupied instead of silently switching ports.
+
+### Public webhook tunnel (Instagram / Messenger)
+
+With the API running, open a Cloudflare quick tunnel in a second terminal:
+
+```powershell
+.\scripts\start-tunnel.ps1                 # Instagram webhook URL
+.\scripts\start-tunnel.ps1 -Channel messenger
+```
+
+It refuses to start unless the current API answers on the configured port, finds `cloudflared` on PATH or in Downloads (or use `-CloudflaredPath`), prints the exact webhook URL to paste into Meta, saves it to `.logs\tunnel-url.txt`, and runs the read-only webhook preflight. Quick-tunnel URLs change on every run, so update the Meta callback URL each time.
