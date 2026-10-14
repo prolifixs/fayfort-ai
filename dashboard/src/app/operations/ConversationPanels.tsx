@@ -90,7 +90,7 @@ export function BusinessConversationPanel({
   selected: NonNullable<OperationsState["selected"]>;
   businessConversationContext: NonNullable<OperationsState["businessConversationContext"]>;
 }) {
-  const { userId, handoffContext, businessReply, setBusinessReply, busy, sendBusinessReply, returnToAutomation } = ops;
+  const { userId, canManage, handoffContext, businessReply, setBusinessReply, busy, sendBusinessReply, returnToAutomation } = ops;
   return (
     <section className="operations-detail-section operations-request-context">
       <h3>Business conversation · {statusLabel(businessConversationContext.channel)}</h3>
@@ -130,7 +130,11 @@ export function BusinessConversationPanel({
           </button>
         </>
       ) : (
-        <small>Claim this handoff to reply or return it to automation.</small>
+        <small>
+          {canManage
+            ? "Replies and Return to automation belong to the FayFort worker who claims this handoff. Sign in with a worker account to claim it from Available."
+            : "Claim this handoff to reply or return it to automation."}
+        </small>
       )}
     </section>
   );

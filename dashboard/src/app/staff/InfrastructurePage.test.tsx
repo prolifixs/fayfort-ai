@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InfrastructurePage } from "./InfrastructurePage";
+import { InfrastructurePage, otherTunnelUsing, suggestedRouteLabel } from "./InfrastructurePage";
 
 const mocks = vi.hoisted(() => ({ apiRequest: vi.fn() }));
 vi.mock("../../lib/api", () => ({ apiRequest: mocks.apiRequest }));
@@ -57,5 +57,22 @@ describe("Infrastructure page", () => {
     const webhooks = screen.getByRole("region", { name: "Webhook endpoints" });
     expect(within(webhooks).getByText("https://api-dev.fayfort.com/webhooks/instagram")).toBeInTheDocument();
     expect(within(webhooks).getByText("reachable")).toBeInTheDocument();
+  });
+});
+
+describe("hostname suggestions", () => {
+  const dev = { id: "t-dev", name: "fayfort-api-dev", status: "healthy", connections: [], hostnames: [{ hostname: "api-dev.fayfort.com", service: "http://127.0.0.1:8001" }] };
+  const prod = { id: "t-prod", name: "fayfort-api-prod", status: "down", connections: [], hostnames: [] };
+  const spare = { id: "t-x", name: "office", status: "down", connections: [], hostnames: [] };
+
+  it("follows the tunnel name, then picks a hostname no tunnel uses", () => {
+    expect(suggestedRouteLabel(prod, [dev, prod])).toBe("api");
+    expect(suggestedRouteLabel(dev, [dev, prod])).toBe("api-dev");
+    expect(suggestedRouteLabel(spare, [dev, spare])).toBe("api");
+  });
+
+  it("names the other tunnel that already routes a hostname", () => {
+    expect(otherTunnelUsing("api-dev", prod, [dev, prod])?.name).toBe("fayfort-api-dev");
+    expect(otherTunnelUsing("api", prod, [dev, prod])).toBeUndefined();
   });
 });

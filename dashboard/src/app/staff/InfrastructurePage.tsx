@@ -46,6 +46,23 @@ function statusTone(status: string) {
   return status === "healthy" || status === "verified" || status === "active" ? "ok" : status === "degraded" || status === "pending" ? "warn" : "bad";
 }
 
+const ROUTE_LABELS = ["api-dev", "api"] as const;
+const labelOf = (hostname: string) => hostname.split(".")[0];
+
+/** The hostname a tunnel most likely wants: its name's hint (prod → api, dev → api-dev), else one no tunnel uses yet. */
+export function suggestedRouteLabel(tunnel: Tunnel, tunnels: Tunnel[]): string {
+  const own = (tunnel.hostnames || []).map((route) => labelOf(route.hostname));
+  if (/prod/i.test(tunnel.name || "")) return "api";
+  if (/dev/i.test(tunnel.name || "")) return "api-dev";
+  const used = new Set(tunnels.flatMap((other) => (other.hostnames || []).map((route) => labelOf(route.hostname))));
+  return ROUTE_LABELS.find((label) => !used.has(label)) || own[0] || "api-dev";
+}
+
+/** Another tunnel that already lists this label, so routing here would move the hostname's DNS away from it. */
+export function otherTunnelUsing(label: string, tunnel: Tunnel, tunnels: Tunnel[]): Tunnel | undefined {
+  return tunnels.find((other) => other.id !== tunnel.id && (other.hostnames || []).some((route) => labelOf(route.hostname) === label));
+}
+
 export function InfrastructurePage({ accessToken }: { accessToken: string }) {
   const [data, setData] = useState<InfrastructureStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,7 +140,7 @@ export function InfrastructurePage({ accessToken }: { accessToken: string }) {
   }
 
   function routeHostname(tunnel: Tunnel) {
-    const label = routeLabel[tunnel.id] || "api-dev";
+    const label = routeLabel[tunnel.id] || suggestedRouteLabel(tunnel, data?.tunnels || []);
     void run(async () => {
       const result = await apiRequest<{ public_url: string; dns: string }>(`${BASE}/cloudflare/hostnames`, accessToken, {
         method: "POST",
@@ -293,11 +310,20 @@ export function InfrastructurePage({ accessToken }: { accessToken: string }) {
                   <div className="record-actions">
                     <label>
                       Hostname
-                      <select value={routeLabel[tunnel.id] || "api-dev"} onChange={(e) => setRouteLabel((c) => ({ ...c, [tunnel.id]: e.target.value }))}>
+                      <select value={routeLabel[tunnel.id] || suggestedRouteLabel(tunnel, data?.tunnels || [])} onChange={(e) => setRouteLabel((c) => ({ ...c, [tunnel.id]: e.target.value }))}>
                         <option value="api-dev">api-dev.{cloudflare?.safe_settings.zone_name}</option>
                         <option value="api">api.{cloudflare?.safe_settings.zone_name}</option>
                       </select>
                     </label>
+                    {(() => {
+                      const label = routeLabel[tunnel.id] || suggestedRouteLabel(tunnel, data?.tunnels || []);
+                      const other = otherTunnelUsing(label, tunnel, data?.tunnels || []);
+                      return other ? (
+                        <small className="form-error" role="alert">
+                          {label}.{cloudflare?.safe_settings.zone_name} is also routed on {other.name}. Routing it here moves its DNS to this tunnel.
+                        </small>
+                      ) : null;
+                    })()}
                     <label className="infra-confirm">
                       <input type="checkbox" checked={routeConfirm[tunnel.id] === true} onChange={(e) => setRouteConfirm((c) => ({ ...c, [tunnel.id]: e.target.checked }))} />
                       I confirm this DNS change

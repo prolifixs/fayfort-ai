@@ -297,7 +297,7 @@ def create_infrastructure_router(
         finally:
             client.close()
         store.audit(admin["user_id"], "cloudflare.install_command_viewed", {"tunnel_id": tunnel_id, "platform": payload.platform})
-        command = (f"cloudflared.exe service install {token}" if payload.platform == "windows"
+        command = (f".\\cloudflared.exe service install {token}" if payload.platform == "windows"
                    else f"sudo cloudflared service install {token}")
         return {"command": command, "note": "Run once on the machine that hosts the API. Treat this command like a password."}
 

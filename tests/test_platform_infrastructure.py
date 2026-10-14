@@ -204,7 +204,7 @@ class InfrastructureRouterTests(unittest.TestCase):
         with self.assertNoLogs("app.infrastructure", level=logging.DEBUG):
             response = client.post(f"/platform/infrastructure/cloudflare/tunnels/{TUNNEL}/install-command", json={"platform": "windows"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["command"], f"cloudflared.exe service install {CONNECTOR_TOKEN}")
+        self.assertEqual(response.json()["command"], f".\\cloudflared.exe service install {CONNECTOR_TOKEN}")
         self.assertEqual(store.audits[-1], ("cloudflare.install_command_viewed", {"tunnel_id": TUNNEL, "platform": "windows"}))
         self.assertNotIn(CONNECTOR_TOKEN, json.dumps(store.audits))
 
