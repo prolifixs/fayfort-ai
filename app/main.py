@@ -29,6 +29,7 @@ from app.database.conversations import (
     update_conversation_summary,
 )
 from app.database.handoffs import active_handoff_for_conversation
+from app.handoffs.automatic import HANDOFF_REQUESTED_REPLY, customer_asked_for_human, request_customer_handoff
 from app.database.messages import (
     list_messages,
     create_message,
@@ -564,6 +565,12 @@ def _send_message_core(
     if not directory_result or not directory_result.requires_human:
         action_decision = prepare_action(response_intent)
 
+    # An explicit request for a person opens a handoff (and its Operations queue item) right away.
+    customer_handoff = (
+        request_customer_handoff(business_id, conversation_id)
+        if customer_asked_for_human(response_intent) else None
+    )
+
     response_generation_enabled = not (
         inbound_context is not None
         and inbound_context.get("channel") in {"instagram", "messenger"}
@@ -610,6 +617,8 @@ def _send_message_core(
         logger.info(
             "Skipping AI response generation because provider auto-reply is disabled"
         )
+    elif customer_handoff:
+        ai_response = HANDOFF_REQUESTED_REPLY
     elif approved_reply:
         ai_response = approved_reply["response_text"]
     elif directory_result:
@@ -705,6 +714,7 @@ def _send_message_core(
         "ai_message": ai_message,
         "response": ai_response,
         "approved_reply_automation_id": approved_reply.get("automation_id") if approved_reply else None,
+        "handoff": {"id": customer_handoff["id"], "status": customer_handoff["status"]} if customer_handoff else None,
     }
 
 from app.channels.router import create_manual_channel_router
