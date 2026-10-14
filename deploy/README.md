@@ -71,7 +71,7 @@ Vercel project `fayfort-app`, repository `prolifixs/fayfort-ai`, root directory 
 | --- | --- |
 | `VITE_FAYFORT_API_URL` | `https://api.fayfort.com` |
 | `VITE_SUPABASE_URL` | `https://lirauxdhnknfiqjnulxb.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | the project's anon (public) key |
+| `VITE_SUPABASE_ANON_KEY` or `V_SUPABASE_ANON_KEY` | the project's anon (public) key. Production uses `V_SUPABASE_ANON_KEY` because Vercel flags `VITE_*_KEY` names; the build maps it in `vite.config.ts`. |
 
 Then add the domain `app.fayfort.com` to the project and, in Cloudflare DNS, a `CNAME app →
 cname.vercel-dns.com` record set to **DNS only**. In Supabase → Authentication → URL Configuration,
