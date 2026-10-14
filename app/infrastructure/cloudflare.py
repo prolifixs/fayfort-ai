@@ -76,13 +76,19 @@ class CloudflareClient:
         return {"status": "active", "expires_on": result.get("expires_on")}
 
     def find_zone(self, zone_name: str) -> dict[str, Any]:
-        params: dict[str, str] = {"name": zone_name}
-        if self.account_id:
-            params["account.id"] = self.account_id
-        zones = self._call("GET", "/zones", params=params) or []
-        if not zones:
+        """Finds the zone for a domain; a hostname such as www.fayfort.com resolves to its fayfort.com zone."""
+        labels = zone_name.strip().strip(".").lower().split(".")
+        zone: dict[str, Any] | None = None
+        for start in range(0, max(len(labels) - 1, 0)):
+            params: dict[str, str] = {"name": ".".join(labels[start:])}
+            if self.account_id:
+                params["account.id"] = self.account_id
+            zones = self._call("GET", "/zones", params=params) or []
+            if zones:
+                zone = zones[0]
+                break
+        if zone is None:
             raise CloudflareError("zone_not_found")
-        zone = zones[0]
         return {
             "id": str(zone.get("id")), "name": zone.get("name"), "status": zone.get("status"),
             "name_servers": list(zone.get("name_servers") or []),

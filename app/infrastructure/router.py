@@ -115,7 +115,7 @@ def create_infrastructure_router(
         messages = {
             "token_rejected": "Cloudflare rejected the API token. Check its permissions and expiry.",
             "token_inactive": "The Cloudflare API token is not active.",
-            "zone_not_found": "That domain was not found in the Cloudflare account.",
+            "zone_not_found": "That domain was not found in the Cloudflare account. Enter the root domain (for example fayfort.com) and check that the token has Zone · Zone · Read for it.",
             "cloudflare_unreachable": "Cloudflare could not be reached. Try again.",
             "not_found": "Cloudflare could not find that resource.",
         }

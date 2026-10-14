@@ -304,3 +304,29 @@ class InfrastructureMonitorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FindZoneTests(unittest.TestCase):
+    def _client(self, zones_by_name):
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            name = request.url.params.get("name")
+            seen.append(name)
+            return httpx.Response(200, json={"success": True, "result": zones_by_name.get(name, [])})
+
+        return CloudflareClient("token", "acct", transport=httpx.MockTransport(handler)), seen
+
+    def test_hostname_resolves_to_its_zone(self):
+        zone = {"id": "z1", "name": "fayfort.com", "status": "active", "name_servers": [], "account": {"id": "acct"}}
+        client, seen = self._client({"fayfort.com": [zone]})
+        found = client.find_zone("www.fayfort.com")
+        self.assertEqual(found["name"], "fayfort.com")
+        self.assertEqual(seen, ["www.fayfort.com", "fayfort.com"])
+
+    def test_unknown_domain_is_zone_not_found_without_querying_the_tld(self):
+        client, seen = self._client({})
+        with self.assertRaises(CloudflareError) as ctx:
+            client.find_zone("www.example.org")
+        self.assertEqual(ctx.exception.code, "zone_not_found")
+        self.assertEqual(seen, ["www.example.org", "example.org"])
