@@ -216,11 +216,18 @@ class WorkforceApiTests(unittest.TestCase):
         self.assertEqual(self.audit_actions(), ["invitation_revoked"])
 
     def test_password_reset_goes_to_the_staff_callback(self):
-        response = self.client.post(f"/platform/workers/{WORKER}/password-reset", headers=AUTH)
+        self.db.client.auth.admin.generate_link.return_value = SimpleNamespace(
+            properties=SimpleNamespace(action_link="https://x.supabase.co/auth/v1/verify?token=secret"))
+        with patch("app.workforce.router.send_immediately") as send:
+            response = self.client.post(f"/platform/workers/{WORKER}/password-reset", headers=AUTH)
         self.assertEqual(response.status_code, 200)
-        email, options = self.db.client.auth.reset_password_for_email.call_args.args
-        self.assertEqual(email, "worker@example.com")
-        self.assertTrue(options["redirect_to"].endswith("/auth/callback?audience=staff&type=recovery"))
+        params = self.db.client.auth.admin.generate_link.call_args.args[0]
+        self.assertEqual(params["type"], "recovery")
+        self.assertEqual(params["email"], "worker@example.com")
+        self.assertTrue(params["options"]["redirect_to"].endswith("/auth/callback?audience=staff&type=recovery"))
+        self.assertEqual(send.call_args.kwargs["to"], "worker@example.com")
+        self.assertIn("verify?token=secret", send.call_args.kwargs["rendered"].html)
+        self.db.client.auth.reset_password_for_email.assert_not_called()
         self.assertEqual(self.audit_actions(), ["password_reset_sent"])
 
     def test_mfa_reset_removes_every_factor(self):

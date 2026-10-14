@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # Must match Supabase Auth -> Email -> "Email OTP expiration" (seconds); used to show
     # whether a worker invitation link is still valid.
     AUTH_EMAIL_LINK_TTL_SECONDS: int = 3600
+    # Email system plan (ED1). FayFort's own emails go through the Resend API from the API host.
+    # Nothing is sent until EMAIL_DELIVERY_ENABLED is true and RESEND_API_KEY is set.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "FayFort <updates@fayfort.com>"
+    EMAIL_REPLY_TO: str = "support@fayfort.com"
+    EMAIL_DELIVERY_ENABLED: bool = False
+    EMAIL_SENDER_INTERVAL_SECONDS: int = 15
 
     SUPABASE_URL: str 
     SUPABASE_ANON_KEY: str

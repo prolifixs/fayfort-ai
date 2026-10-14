@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Cloudflare Turnstile site key. It is public by design (it is sent to every visitor's browser).
 // The secret key lives only in Supabase Auth → Attack Protection.
 // Leave empty to disable the check (local development, or before Supabase captcha is switched on).
-const TURNSTILE_SITE_KEY = ((import.meta.env.VITE_TURNSTILE_SITEKEY as string | undefined) || "").trim();
+const TURNSTILE_SITE_KEY = ((import.meta.env.VITE_TURNSTILE_SITEKEY as string | undefined) ?? (import.meta.env.MODE === "test" ? "" : "0x4AAAAAAFXDNL6ChJqA7UCK")).trim();
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
 interface TurnstileApi {
@@ -35,8 +35,9 @@ function loadTurnstile(): Promise<void> {
   return scriptPromise;
 }
 
-export function turnstileEnabled(): boolean {
-  return TURNSTILE_SITE_KEY.length > 0;
+/** The widget only works on the hostnames registered in Cloudflare (app.fayfort.com), so it stays off elsewhere. */
+export function turnstileEnabled(hostname = window.location.hostname): boolean {
+  return TURNSTILE_SITE_KEY.length > 0 && (hostname === "fayfort.com" || hostname.endsWith(".fayfort.com"));
 }
 
 /**

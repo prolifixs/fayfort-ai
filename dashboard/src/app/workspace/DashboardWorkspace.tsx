@@ -6,6 +6,7 @@ import type { Business, ConversationRow, EventRecord, WorkspaceProps } from "./t
 import { PlatformRequestAssignmentPage, WorkerRequestsPage } from "../staff/WorkerPages";
 import { WorkforcePage } from "../staff/WorkforcePage";
 import { StaffAccountPage } from "../staff/StaffAccountPage";
+import { EmailCenterPage } from "../staff/EmailCenterPage";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { AgentAvailabilityPanel, HandoffsPage } from "./HandoffsPage";
@@ -55,6 +56,7 @@ export const descriptions: Record<string, string> = {
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
   "FayFort Workers": "Invite workers, see who is online, and manage each worker's account.",
   "My account": "Your password, sign-in email, sessions and two-step verification.",
+  Emails: "What FayFort emails customers, what was sent, and the newsletter.",
 };
 
 /** Workers report presence from anywhere in the Control Center, not only Operations Center. */
@@ -367,6 +369,13 @@ export function DashboardWorkspace({
                     <span>W</span>FayFort Workers
                   </button>
                   <button
+                    className={active === "Emails" ? "nav-item active" : "nav-item"}
+                    aria-current={active === "Emails" ? "page" : undefined}
+                    onClick={() => setActive("Emails")}
+                  >
+                    <span>E</span>Emails
+                  </button>
+                  <button
                     className={active === "Theme Studio" ? "nav-item active" : "nav-item"}
                     aria-current={active === "Theme Studio" ? "page" : undefined}
                     onClick={() => setActive("Theme Studio")}
@@ -444,6 +453,8 @@ export function DashboardWorkspace({
             <InfrastructurePage accessToken={accessToken} />
           ) : active === "FayFort Workers" && platformAdmin ? (
             <WorkforcePage accessToken={accessToken} />
+          ) : active === "Emails" && platformAdmin ? (
+            <EmailCenterPage accessToken={accessToken} />
           ) : active === "My account" ? (
             <StaffAccountPage accessToken={accessToken} email={signedInEmail || ""} isWorker={activeWorker && !platformAdmin} />
           ) : active === "Giveaways" && (platformAdmin || activeWorker) ? (

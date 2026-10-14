@@ -90,11 +90,17 @@ _request_media_retention_task: asyncio.Task | None = None
 _member_chat_retention_task: asyncio.Task | None = None
 _member_review_retention_task: asyncio.Task | None = None
 _infrastructure_monitor_task: asyncio.Task | None = None
+_email_sender_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task
+    if settings.EMAIL_DELIVERY_ENABLED:
+        from app.mailer.sender import email_sender_loop
+        if _email_sender_task is None or _email_sender_task.done():
+            _email_sender_task = asyncio.create_task(email_sender_loop(), name="fayfort-email-sender")
+            logger.info("Email sender started")
     if settings.INFRASTRUCTURE_MONITOR_ENABLED:
         from app.infrastructure.monitor import infrastructure_monitor_loop
         if _infrastructure_monitor_task is None or _infrastructure_monitor_task.done():
@@ -140,8 +146,8 @@ async def start_automation_scheduler() -> None:
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -152,6 +158,7 @@ async def stop_automation_scheduler() -> None:
     _member_chat_retention_task = None
     _member_review_retention_task = None
     _infrastructure_monitor_task = None
+    _email_sender_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -741,6 +748,8 @@ from app.infrastructure.router import create_infrastructure_router
 app.include_router(create_infrastructure_router())
 from app.workforce.router import create_workforce_router
 app.include_router(create_workforce_router())
+from app.mailer.router import create_email_router
+app.include_router(create_email_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

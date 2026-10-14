@@ -87,3 +87,12 @@ add `https://app.fayfort.com/**` to the redirect URLs.
   - If the only platform admin loses their phone, remove the factor in Supabase → Authentication → Users → the user → "Remove MFA factors".
 - **Turnstile.** Put the public site key in the dashboard build as `VITE_TURNSTILE_SITEKEY` (Vercel → fayfort-app → Environment Variables), redeploy, confirm sign-in shows the check, and only then turn on captcha in Supabase → Authentication → Attack Protection with the secret key.
 - **Email OTP expiration.** Keep `AUTH_EMAIL_LINK_TTL_SECONDS` equal to Supabase Auth → Email → "Email OTP expiration", so invitation expiry shows correctly.
+
+## Email system (email plan E0–E6)
+
+- **Database.** Apply `supabase/migrations/20261014200000_email_system.sql` before deploying an API that includes `app/mailer/`.
+- **Resend.** The domain `fayfort.com` must be **Verified** in Resend. Its DNS records are TXT `resend._domainkey` and CNAMEs `send` and `rsend`, all DNS only in Cloudflare.
+- **Turning sending on.** In `/opt/fayfort/api.env` set `RESEND_API_KEY` (paste it in nano; never put it in chat or git) and `EMAIL_DELIVERY_ENABLED=true`, then rerun the update command. Control Center → Emails shows "Sending is on" once both are in place.
+- **Turning a type off.** Control Center → Emails → Email types. Members choose their own in Settings → Email notifications. Every customer email has an unsubscribe link, and newsletters also carry one-click `List-Unsubscribe` headers.
+- **Troubleshooting.** Control Center → Emails → Sent emails shows each email's status and the reason it was skipped or failed. Failed customer emails can be retried from there.
+- **Turnstile.** The public site key ships in the dashboard and runs only on `*.fayfort.com`. Once that build is live, enter the secret in Supabase → Authentication → Attack Protection → Captcha (Cloudflare Turnstile). Supabase then requires the check on sign-up, sign-in and password reset. Local dashboards on 127.0.0.1 can't pass it, so sign in on app.fayfort.com while captcha is on.

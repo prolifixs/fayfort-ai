@@ -20,6 +20,9 @@ from app.config.settings import settings, staff_recovery_redirect_url, worker_in
 from app.database.client import supabase
 from app.directory.identity import trusted_fayfort_staff, trusted_platform_admin
 from app.workforce.audit import record_workforce_audit
+from app.mailer.render import staff_password_reset_email
+from app.mailer.resend_client import EmailSendError
+from app.mailer.sender import send_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +364,18 @@ def create_workforce_router() -> APIRouter:
         if worker.get("status") != "active" or not auth["email"]:
             raise HTTPException(status_code=409, detail="A password reset can only be sent to an active worker.")
         try:
-            supabase.auth.reset_password_for_email(auth["email"], {"redirect_to": staff_recovery_redirect_url()})
+            # generate_link + FayFort's own sender: unaffected by the captcha on the public reset form.
+            link = supabase.auth.admin.generate_link({
+                "type": "recovery", "email": auth["email"],
+                "options": {"redirect_to": staff_recovery_redirect_url()},
+            })
+            action_link = getattr(getattr(link, "properties", None), "action_link", None)
+            if not action_link:
+                raise RuntimeError("No recovery link was generated.")
+            send_immediately(to=auth["email"], rendered=staff_password_reset_email(action_link=action_link))
+        except EmailSendError as exc:
+            logger.warning("Worker password reset email failed: %s", exc)
+            raise HTTPException(status_code=503, detail="The password reset email could not be sent. Check Control Center → Emails.") from exc
         except Exception as exc:
             logger.exception("Could not send a worker password reset")
             raise HTTPException(status_code=503, detail="The password reset email could not be sent.") from exc

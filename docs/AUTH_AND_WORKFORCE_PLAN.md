@@ -40,17 +40,66 @@ Decided 2026-10-14. The owner chose AD1–AD3 in chat. AD4 and AD5 follow the re
 
 ## Gates (weighted to 100)
 
-| Gate | Weight | Accepted | Summary |
-| --- | ---: | ---: | --- |
-| A0. Auth email transport and Supabase Auth settings | 10 | 0 | Custom SMTP (Resend), branded auth templates, redirect URLs, password policy, rate limits, Turnstile keys |
-| A1. Shared auth foundation | 10 | 0 | One callback route for every auth link type, consistent states for expired or used links, shared password form with policy feedback |
-| A2. Member account pipeline | 15 | 0 | Sign-up hardening, resend verification, forgot/reset password, change password and email in Settings, sign out everywhere |
-| A3. Staff account pipeline (workers and admins) | 20 | 0 | Control Center forgot/reset password, change password, invitation expiry/resend/revoke, mandatory MFA enrolment and challenge |
-| A4. Worker directory | 15 | 0 | All workers with status, online indicator, last seen, last sign-in, invited/activated dates, availability, search and filters, live refresh |
-| A5. Worker profile and admin actions | 15 | 0 | Detail page per worker with activity and admin actions (deactivate/reactivate, resend invite, force reset, reset MFA), all audited |
-| A6. Security hardening and audit trail | 10 | 0 | Workforce/auth audit log, server-side enforcement checks, session revocation, rate limits, tests |
-| A7. Live acceptance | 5 | 0 | End-to-end run on `app.fayfort.com` with real inboxes, combined with the platform's outstanding Gate 4/6 live checks |
-| **Total** | **100** | **0** | |
+| Gate | Weight | Accepted | Built (2026-10-14) | Summary |
+| --- | ---: | ---: | --- | --- |
+| A0. Auth email transport and Supabase Auth settings | 10 | 0 | **Configured 2026-10-14**: Resend verified, Turnstile site key in the dashboard; captcha secret goes into Supabase after the next deploy | Custom SMTP (Resend), branded auth templates, redirect URLs, password policy, rate limits, Turnstile keys |
+| A1. Shared auth foundation | 10 | 0 | **Built** | One callback route for every auth link type, consistent states for expired or used links, shared password form with policy feedback |
+| A2. Member account pipeline | 15 | 0 | **Built** | Sign-up hardening, resend verification, forgot/reset password, change password and email in Settings, sign out everywhere |
+| A3. Staff account pipeline (workers and admins) | 20 | 0 | **Built** (API MFA enforcement ships switched off) | Control Center forgot/reset password, change password, invitation expiry/resend/revoke, mandatory MFA enrolment and challenge |
+| A4. Worker directory | 15 | 0 | **Built** | All workers with status, online indicator, last seen, last sign-in, invited/activated dates, availability, search and filters, live refresh |
+| A5. Worker profile and admin actions | 15 | 0 | **Built** | Detail page per worker with activity and admin actions (deactivate/reactivate, resend invite, force reset, reset MFA), all audited |
+| A6. Security hardening and audit trail | 10 | 0 | **Built** | Workforce/auth audit log, server-side enforcement checks, session revocation, rate limits, tests |
+| A7. Live acceptance | 5 | 0 | — | End-to-end run on `app.fayfort.com` with real inboxes, combined with the platform's outstanding Gate 4/6 live checks |
+| **Total** | **100** | **0** | | Each gate's points are awarded only with live evidence on `app.fayfort.com` |
+
+### A0 record (2026-10-14, 14:50–15:30 PT)
+
+- **Resend.**
+  - The domain `fayfort.com` was added in us-east-1. The old `mail.fayfort.com` domain had failed long ago and was left untouched.
+  - Three records were added in Cloudflare, all DNS only: TXT `resend._domainkey` (DKIM), CNAME `send` → `send.forge.rmta.net` and CNAME `rsend` → `rsend.forge.rmta.net`.
+  - The domain verified later the same afternoon, so Supabase auth emails now go out through Resend.
+- **Supabase SMTP.** The owner set it up: `smtp.resend.com:465`, user `resend`, sender `auth@fayfort.com`, name "Fayfort". The owner entered the API key; the key first pasted in chat must be revoked.
+- **Supabase Auth settings:**
+  - minimum password length 10, letters and digits required;
+  - secure password change on (reauthentication code);
+  - secure email change on;
+  - email OTP/link expiry 86400 s;
+  - writing auth audit logs to the database turned on, so worker sign-in history appears;
+  - redirect allow-list includes `https://app.fayfort.com/**` and `http://127.0.0.1:5173/**`.
+- **Templates.** FayFort-branded templates for confirm sign-up, invite, reset password, change email, reauthentication and magic link.
+- **Security notifications.** Turned on, with branded copy, for password changed, email changed, MFA added, MFA removed, sign-in method linked and sign-in method removed.
+- **Database.** Migration `20261014100000_workforce_accounts` was applied to production through the SQL editor and recorded in `supabase_migrations.schema_migrations`.
+  - The existing worker was backfilled: `invitation_sent_at` and `activated_at` are set.
+  - `anon` and `authenticated` have no access to the ledger or the release function.
+  - `workforce_auth_events` runs; the hosted database lets it read `auth.audit_log_entries`, which closes I5.
+
+### Build record (2026-10-14)
+
+- **Dashboard:**
+  - `src/app/auth/`:
+    - `authLinks` (link parsing, password policy, wording that doesn't reveal accounts);
+    - `PasswordFields`, `SetPasswordForm` (handles Supabase's reauthentication code);
+    - `RequestLinkForm` (reset and resend, 60 s cooldown);
+    - `AuthPages` (`/auth/callback`, `/auth/forgot`);
+    - `MemberSecuritySection` (change password, change email, sign out everywhere);
+    - `StaffMfaGate` (TOTP enrolment and challenge on every staff page, 12-hour idle sign-out);
+    - `Turnstile` (switches on once `VITE_TURNSTILE_SITEKEY` is set).
+  - `staff/WorkforcePage` (directory and profile).
+  - `staff/StaffAccountPage` ("My account").
+  - Workers send a presence heartbeat from anywhere in the Control Center.
+  - Tests: 91 dashboard tests pass, including 26 new ones.
+  - Screenshots of the directory, the profile, the password step and mobile were checked.
+- **API:**
+  - `app/workforce/`: directory, profile, resend/revoke invitation, deactivate (status, release of work, ban), reactivate, password reset, MFA reset, own profile. Admin actions are limited to 30 a minute and recorded in `workforce_audit`.
+  - `STAFF_MFA_REQUIRED` makes every staff check (`trusted_fayfort_staff`, `trusted_platform_admin`, worker tools) require `aal2`.
+  - Invitations now point at `/auth/callback?audience=staff&type=invite`.
+  - Tests: 410 backend tests pass, including 15 new ones.
+- **Database.** Migration `20261014100000_workforce_accounts` was applied, together with all 74 earlier migrations, to a fresh PostgreSQL 16 database with Supabase-equivalent roles. Checks run there:
+  - activation sets `activated_at`;
+  - a claimed business handoff goes back to `requested` with its work item reopened;
+  - an assigned member request is released, and presence is cleared;
+  - `workforce_audit` rejects updates, deletes and unknown actions;
+  - `anon` and `authenticated` are denied the ledger and both functions, while `service_role` is allowed.
 
 ### A0 — Auth email transport and Supabase Auth settings (10)
 
@@ -181,7 +230,11 @@ New or unresolved issues found during the phase are logged here and handled at t
 | I1 | 2026-10-14 | Prod tunnel still carries an unused `api-dev` ingress rule; the Infrastructure page warns about it | Open |
 | I2 | 2026-10-14 | Leaked-password protection needs a paid Supabase plan (AD4) | Open, owner decision |
 | I3 | 2026-10-14 | Platform plan Gate 6 items: unattended VPS reboot test, rotation of credentials that were on the PC, Cloudflare tunnel health notifications | Open, tracked in the platform plan |
-| I4 | 2026-10-14 | Presence heartbeat exists only in Operations Center today (fixed by A4) | Planned |
+| I4 | 2026-10-14 | Presence heartbeat existed only in Operations Center | Fixed in A4 build |
+| I5 | 2026-10-14 | `workforce_auth_events` reads `auth.audit_log_entries` | Closed: the hosted database allows the read, and database audit logging was turned on |
+| I6 | 2026-10-14 | Server-side session inactivity timeouts are a paid Supabase feature; AD5 is enforced in the browser (12 idle hours), and deactivation bans the account | Open, owner decision |
+| I8 | 2026-10-14 | A Resend API key was pasted in chat; the owner should revoke it in Resend and keep the replacement out of chat | Open, owner |
+| I7 | 2026-10-14 | If the only platform admin loses their authenticator, recovery is in the Supabase dashboard (documented in `deploy/README.md`) | Accepted |
 
 ## Scope guard
 

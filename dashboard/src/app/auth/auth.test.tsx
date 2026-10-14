@@ -281,3 +281,12 @@ describe("staff two-step verification", () => {
     expect(mfa.getAuthenticatorAssuranceLevel).not.toHaveBeenCalled();
   });
 });
+
+describe("turnstile hosts", () => {
+  it("only runs the check on fayfort.com hosts registered in Cloudflare", async () => {
+    const { turnstileEnabled } = await import("./Turnstile");
+    // Tests build without a site key, so it is off everywhere here.
+    expect(turnstileEnabled("app.fayfort.com")).toBe(false);
+    expect(turnstileEnabled("127.0.0.1")).toBe(false);
+  });
+});

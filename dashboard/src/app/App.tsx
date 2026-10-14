@@ -5,6 +5,7 @@ import { dashboardAuthConfigured, supabaseClient } from "../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useState } from "react";
 import { AuthCallbackPage, ForgotPasswordPage } from "./auth/AuthPages";
+import { EmailUnsubscribePage } from "./EmailUnsubscribePage";
 import { forgotPasswordPath, friendlyAuthError } from "./auth/authLinks";
 import { useCaptcha } from "./auth/Turnstile";
 import { StaffMfaGate } from "./auth/StaffMfaGate";
@@ -32,6 +33,7 @@ export function App() {
   if (window.location.pathname === "/auth/callback" || window.location.pathname === "/worker/accept")
     return <AuthCallbackPage />;
   if (window.location.pathname === "/auth/forgot") return <ForgotPasswordPage />;
+  if (window.location.pathname === "/email/unsubscribe") return <EmailUnsubscribePage />;
   if (window.location.pathname === "/worker/member-reviews")
     return (
       <StaffRoute>

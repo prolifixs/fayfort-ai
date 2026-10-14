@@ -11,6 +11,7 @@ import { authCallbackUrl, forgotPasswordPath, friendlyAuthError } from "../auth/
 import { PasswordFields, passwordPairError, type PasswordPair } from "../auth/PasswordFields";
 import { RequestLinkForm } from "../auth/RequestLinkForm";
 import { MemberSecuritySection } from "../auth/MemberSecuritySection";
+import { MemberEmailPreferences } from "./MemberEmailPreferences";
 import { useCaptcha } from "../auth/Turnstile";
 import {
   type MemberShippingForm,
@@ -491,6 +492,7 @@ export function MemberSettingsPage() {
               </div>
             </section>
             <MemberSecuritySection email={accountEmail} hasPassword={providers.includes("email")} />
+            <MemberEmailPreferences accessToken={token} />
             <section className="member-settings-section" aria-labelledby="member-settings-photo">
               <h2 id="member-settings-photo">Profile photo</h2>
               <p>

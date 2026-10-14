@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_FAYFORT_API_URL as string | undefined)?.replace(/\/$/, "") || "http://127.0.0.1:8001";
+export const API_BASE = (import.meta.env.VITE_FAYFORT_API_URL as string | undefined)?.replace(/\/$/, "") || "http://127.0.0.1:8001";
 
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number, readonly retryAt?: string) {
