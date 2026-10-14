@@ -1,0 +1,37 @@
+# FayFort AI production API on the Hostinger VPS (plan Gate 6).
+#
+#   cd /opt/fayfort/fayfort-ai && docker compose -f deploy/api/compose.yml up -d --build
+#
+# Both services use the host network and the API listens on 127.0.0.1 only, so nothing is exposed
+# on the VPS's public IP. Cloudflare Tunnel (fayfort-api-prod) carries https://api.fayfort.com
+# to http://127.0.0.1:8001. Secrets live in /opt/fayfort/api.env and /opt/fayfort/tunnel.env
+# (chmod 600, never in git).
+name: fayfort
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/api/Dockerfile
+    image: fayfort-api:latest
+    network_mode: host
+    env_file: /opt/fayfort/api.env
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.9.1
+    network_mode: host
+    command: tunnel --no-autoupdate run
+    env_file: /opt/fayfort/tunnel.env   # TUNNEL_TOKEN=... from the Infrastructure page
+    restart: unless-stopped
+    depends_on: [api]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }

@@ -1,0 +1,16 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+.git
+.env
+.env.*
+!.env.example
+dashboard
+web
+tests
+docs
+reports
+knowledge
+supabase
+.logs

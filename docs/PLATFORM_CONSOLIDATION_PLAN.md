@@ -60,6 +60,7 @@ DNS records move to Cloudflare. **The domain stays registered at Hostinger**; on
 | D10 | Video consultations (`/book`) | **Not migrated (owner, 2026-10-13).** Production fayfort.com is deployed from the old repository's `DEV` branch, which adds a `/book` consultation flow. The owner classes it as a concept that doesn't work properly. Consultations and booking will be designed inside FayFort AI later. When the domain switches (Gate 5), `/book` and its subpaths return 404 like every other retired path. |
 | D11 | Migration scope | **Owner rule, 2026-10-13.** Only two parts of the old site are working systems: **LANDED with its Shopify checkout**, and the **normal public pages** (`/`, `/services`, `/about-us`, `/terms`, `/terms-ebooks`). Anything else that is incomplete or doesn't work is not migrated. That covers the enterprise app, Stripe, the old Supabase projects, FaySource, `/book`, and the `ENABLE_ENTERPRISE` enquiry path. So `web/` carries no Supabase, Stripe or video-host entries in its CSP or image settings. |
 | D12 | WondaOps | **Owner rule, 2026-10-13.** WondaOps is a separate AI-employee agency product. It will be integrated into FayFort AI in the future and is not implemented yet. Any trace of it is a mock or a comment, never a dependency. "Fayfort Ops", mentioned in the old `DEV` branch, is not WondaOps; it belongs to the `/book` concept and is out of scope with it. |
+| D13 | Hosting targets | **Decided 2026-10-14 (owner delegated).** The Control Center is hosted on **Vercel** (project `fayfort-app`, root `dashboard/`) instead of Cloudflare Pages: the Vercel account is already linked to this repository and hosts `web/`, so no second Git integration is needed. Cloudflare stays the DNS, tunnel and edge layer. The production API runs on the owner's existing **Hostinger VPS** (Debian 12, 2 vCPU, 8 GB) in Docker, behind Cloudflare Tunnel `fayfort-api-prod`. It has no public ports. See `deploy/README.md`. |
 
 ## LANDED protection (non-negotiable)
 
@@ -151,14 +152,14 @@ These steps need the owner's accounts. Everything else continues without waiting
 | Gate | Weight | Accepted | Summary |
 | --- | ---: | ---: | --- |
 | 0. Inventory, backups and decisions | 5 | 5 | Everything needed to change DNS/hosting safely, plus decisions D1–D9 |
-| 1. Cloudflare zone onboarding | 10 | 0 | `fayfort.com` served by Cloudflare DNS with no website or email interruption |
-| 2. Permanent API tunnel (development) | 10 | 0 | `api-dev.fayfort.com` → PC API as a Windows service; Meta webhook URL permanent |
-| 3. Cloudflare inside FayFort AI | 20 | 10 | Platform admin Infrastructure view: Cloudflare connection, tunnel health, hostnames, webhook endpoints, preflight |
+| 1. Cloudflare zone onboarding | 10 | 10 | `fayfort.com` served by Cloudflare DNS with no website or email interruption |
+| 2. Permanent API tunnel (development) | 10 | 8 | `api-dev.fayfort.com` → PC API as a Windows service; Meta webhook URL permanent |
+| 3. Cloudflare inside FayFort AI | 20 | 20 | Platform admin Infrastructure view: Cloudflare connection, tunnel health, hostnames, webhook endpoints, preflight |
 | 4. App hosting at `app.fayfort.com` | 10 | 0 | Dashboard on Cloudflare Pages against the public API; auth/CORS/redirects updated |
-| 5. Public site moved into the monorepo | 20 | 18 | `web/` serves the same public pages from this repo; enterprise code left behind |
+| 5. Public site moved into the monorepo | 20 | 20 | `web/` serves the same public pages from this repo; enterprise code left behind |
 | 6. Production API host | 15 | 0 | `api.fayfort.com` served from an always-on host; PC stays on `api-dev` |
 | 7. Cutover and decommission | 10 | 0 | Old repo/Vercel/Supabase retired, redirects in place, docs and trackers closed |
-| **Total** | **100** | **33** | Updated 2026-10-13. Gate 3 has 10 left, for connecting Cloudflare and a live tunnel/hostname check once the account is approved. Gate 5 has 2 left, for the owner's checkout click-through on the live domain. |
+| **Total** | **100** | **63** | Updated 2026-10-14. Gate 2 has 2 left, for confirming that Meta's callback points at `api-dev.fayfort.com`. Gate 5 is complete: on 2026-10-14 the owner confirmed that live checkout opens LANDED at $99. |
 
 ### Gate 0 — Inventory, backups and decisions (5)
 
@@ -186,7 +187,7 @@ These steps need the owner's accounts. Everything else continues without waiting
 | CNAME | `www` | `fayfort.com` | 300 | Website on Vercel | Same, **DNS only** |
 | MX | `@` | `SMTP.GOOGLE.COM`, priority 1 | 14400 | Google Workspace mail for support@ | Same, DNS only (MX is never proxied) |
 | TXT | `_dmarc` | `v=DMARC1; p=none;` | 14400 | DMARC, monitoring only | Same |
-| CNAME | `o3gslxc2alb2` | `gv-7evcukqvtjrxsx.dv.googlehosted.com` | 14400 | Google domain verification | Same, **DNS only** |
+| CNAME | `o3gslxc2alb2` | `gv-7evcukqvtjrsxs.dv.googlehosted.com` | 14400 | Google domain verification | Same, **DNS only** |
 | CNAME | `mail` | `custom.resend.com` | 3600 | Resend (old site's email sending) | Same, **DNS only** |
 | TXT | `send.mail` | `v=spf1 include:amazonses.com ~all` | 14400 | Resend SPF for `mail.fayfort.com` | Same |
 
@@ -208,6 +209,23 @@ These steps need the owner's accounts. Everything else continues without waiting
    - SPF/DKIM/DMARC checks pass.
 - **Rollback:** restore the Hostinger nameservers. The Hostinger zone is left intact until Gate 7.
 - **Acceptance:** Cloudflare shows the zone **Active**, and every check above passes and is recorded.
+
+#### Gate 1 record: Cloudflare zone active (2026-10-13, about 17:50 PT)
+
+- **Zone.** `fayfort.com` was added to the owner's Cloudflare account (Free plan) with Bot Preference Sync off, so `robots.txt` is untouched.
+- **Records.** Cloudflare's scan was reconciled against live DNS, as resolved through Google public DNS:
+  - the scanned apex `A` records were replaced by a flattened `CNAME @ → cname.vercel-dns.com`;
+  - the two records the scan missed were added: the Google verification CNAME and the `send.mail` TXT;
+  - all 7 records are **DNS only**.
+- **Nameserver switch.** DNSSEC was off at Hostinger, so nothing needed disabling. The owner changed the nameservers at Hostinger from `ns1/ns2.dns-parking.com` to `connie.ns.cloudflare.com` and `jihoon.ns.cloudflare.com`.
+- **Checks right after the switch:**
+  - Google public DNS returns the Cloudflare nameservers.
+  - The apex resolves to Vercel, and `www` resolves to `cname.vercel-dns.com`.
+  - MX `1 SMTP.GOOGLE.com`, `_dmarc`, `mail → custom.resend.com`, the Google verification CNAME and the `send.mail` SPF all resolve unchanged.
+  - All six public pages return 200 from Vercel; `/book` returns 404.
+  - The LANDED Shopify iframe renders and the storefront API call succeeds.
+  - The Cloudflare dashboard shows the zone as active.
+- **Rollback.** Set the Hostinger nameservers back to `ns1.dns-parking.com` and `ns2.dns-parking.com`. The Hostinger zone was left intact.
 
 ### Gate 2 — Permanent API tunnel for development (10)
 
@@ -254,6 +272,16 @@ Platform-admin only. No member or business user sees any of this.
   - a signed-in admin sees live tunnel status and runs a passing preflight;
   - a deliberate tunnel stop raises the admin alert and recovery clears it;
   - no secret appears in any response or log.
+
+#### Gate 2 and Gate 3 record (2026-10-14, 00:10–01:20 PT)
+
+- **Cloudflare connected.** The connection was made from Control Center → Infrastructure.
+  - The account API token has two policies: Cloudflare Tunnel Edit on the account, and DNS Edit plus Zone Read on `fayfort.com` only.
+  - The token is stored in the Supabase vault and is never shown again.
+  - An earlier `zone_not_found` came from a token with account-level DNS products only, and from entering `www.fayfort.com`. The page now also accepts a hostname.
+- **Tunnel.** `fayfort-api-dev` was created from the page. Hostname `api-dev` was routed to `http://127.0.0.1:8001`, with a proxied CNAME added by FayFort.
+- **Connector.** The Windows service was installed from the page's install command and reports healthy (4 connections).
+- **Webhook.** The Instagram endpoint was saved as `https://api-dev.fayfort.com`, and the server-side preflight passed all 4 checks. `PUBLIC_API_URL` was set in `.env`.
 
 ### Gate 4 — App hosting at `app.fayfort.com` (10)
 
@@ -305,7 +333,7 @@ Platform-admin only. No member or business user sees any of this.
   - The Shopify Buy Button iframe renders.
   - The storefront API call succeeds and there are no CSP errors.
   - The analytics script loads.
-- **Pending (owner):** click "Get the directory $99" in a normal browser and confirm the Shopify checkout opens for LANDED at $99. The built-in browser pane used for these checks doesn't open the checkout popup.
+- **Owner check, done 2026-10-14.** "Get the directory $99" on fayfort.com opens the FayFort International Shopify checkout at 99.00 $.
 - **Rollback.** In Vercel → `fayfort-web` → Settings → Domains, move both domains back to `fayfort-international`. That project is unchanged and still has its last production deployment. It stays as it is until Gate 7.
 
 ### Gate 6 — Production API host (15)
