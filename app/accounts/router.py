@@ -14,7 +14,8 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.database.client import supabase
-from app.directory.identity import trusted_fayfort_staff, trusted_platform_admin, trusted_user_id
+from app.workforce.audit import record_workforce_audit
+from app.directory.identity import staff_mfa_satisfied, trusted_fayfort_staff, trusted_platform_admin, trusted_user_id
 from app.config.settings import settings, worker_invite_redirect_url
 from app.accounts.member_chat import create_member_chat_router
 from app.accounts.member_chat_review import create_member_chat_review_router
@@ -287,6 +288,8 @@ def create_accounts_router() -> APIRouter:
             user = getattr(auth_response, "user", None)
             if not user or getattr(user, "email_confirmed_at", None) is None:
                 raise HTTPException(status_code=403, detail="Verify your email before using worker tools.")
+            if not staff_mfa_satisfied(token):
+                raise HTTPException(status_code=403, detail="Complete two-step verification to use worker tools.")
             response = (supabase.table("fayfort_workers").select("status")
                 .eq("user_id", user_id).maybe_single().execute())
             worker = response.data if response is not None else None
@@ -1359,6 +1362,7 @@ def create_accounts_router() -> APIRouter:
                 "status": "invited",
                 "provisioned_by": admin["user_id"],
             }).execute()
+            record_workforce_audit(admin["user_id"], str(user_id), "invited", payload.email)
             return {"worker": {"user_id": str(user_id), "email": payload.email, "status": "invited", "invitation_sent": True}}
         except HTTPException:
             raise

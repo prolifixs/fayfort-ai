@@ -1,8 +1,28 @@
 from __future__ import annotations
+import base64
+import json
 import logging
+from app.config.settings import settings
 from app.database.client import supabase
 
 logger = logging.getLogger(__name__)
+
+def access_token_aal(token: str) -> str:
+    """Authenticator assurance level ("aal1"/"aal2") from an access token Supabase has already verified."""
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode()))
+        value = claims.get("aal") if isinstance(claims, dict) else None
+        return value if isinstance(value, str) else "aal1"
+    except Exception:
+        return "aal1"
+
+
+def staff_mfa_satisfied(token: str) -> bool:
+    """Staff endpoints need an MFA-verified session once STAFF_MFA_REQUIRED is on."""
+    return not settings.STAFF_MFA_REQUIRED or access_token_aal(token) == "aal2"
+
 
 def trusted_user_id(authorization: str | None) -> str | None:
     if not authorization:
@@ -39,6 +59,8 @@ def trusted_fayfort_staff(authorization: str | None) -> dict | None:
         user_id = getattr(user, "id", None)
         if not user_id:
             return None
+        if not staff_mfa_satisfied(token.strip()):
+            return None
         app_metadata = getattr(user, "app_metadata", None) or {}
         roles = app_metadata.get("roles", []) if isinstance(app_metadata, dict) else []
         if isinstance(app_metadata, dict) and (app_metadata.get("platform_admin") is True or "platform_admin" in roles):
@@ -73,6 +95,8 @@ def trusted_platform_admin(authorization: str | None) -> dict | None:
         app_metadata = getattr(user, "app_metadata", None) or {}
         roles = app_metadata.get("roles", []) if isinstance(app_metadata, dict) else []
         if user_id and (app_metadata.get("platform_admin") is True or "platform_admin" in roles):
+            if not staff_mfa_satisfied(token.strip()):
+                return None
             return {"user_id": str(user_id)}
     except Exception:
         logger.info("Supabase platform-admin claim could not be verified", exc_info=True)

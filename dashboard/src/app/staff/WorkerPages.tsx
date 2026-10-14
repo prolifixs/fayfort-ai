@@ -1,6 +1,7 @@
 import { supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { SetPasswordForm } from "../auth/SetPasswordForm";
 import { RequestSourceSummary, type WorkerRequestRow, requestNextStages } from "../requests/requestShared";
 
 export function PlatformRequestAssignmentPage({ accessToken }: { accessToken: string }) {
@@ -325,102 +326,9 @@ export function WorkerRequestsPage({ accessToken }: { accessToken: string }) {
   );
 }
 
-export function WorkerInvitationCallback() {
-  const [accessToken, setAccessToken] = useState<string | null | undefined>(undefined);
-  const [error, setError] = useState("");
-  const [passwordRecovery, setPasswordRecovery] = useState(() => {
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    return (
-      hashParams.get("type") === "recovery" || new URLSearchParams(window.location.search).get("type") === "recovery"
-    );
-  });
-  useEffect(() => {
-    if (!supabaseClient) {
-      setAccessToken(null);
-      setError("FayFort sign-in is not configured on this site.");
-      return;
-    }
-    let mounted = true;
-    supabaseClient.auth.getSession().then(({ data, error: sessionError }) => {
-      if (!mounted) return;
-      if (sessionError) setError(sessionError.message);
-      setAccessToken(data.session?.access_token || null);
-    });
-    const {
-      data: { subscription },
-    } = supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
-      if (mounted) setAccessToken(session?.access_token || null);
-    });
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-  if (accessToken === undefined)
-    return (
-      <div className="auth-page">
-        <section className="auth-card">
-          <b className="brand-mark">F</b>
-          <h1>Completing your invitation</h1>
-          <p>Checking your FayFort worker sign-in.</p>
-        </section>
-      </div>
-    );
-  if (!accessToken)
-    return (
-      <div className="auth-page">
-        <section className="auth-card">
-          <b className="brand-mark">F</b>
-          <label>FAYFORT WORKER ACCOUNT</label>
-          <h1>Invitation link unavailable</h1>
-          <p role="alert">
-            {error ||
-              "This invitation link may be expired or already used. If you have completed the invitation, sign in with your worker account; otherwise ask a platform administrator for a new link."}
-          </p>
-          <a href="/">Return to FayFort Control Center</a>
-        </section>
-      </div>
-    );
-  if (passwordRecovery) return <WorkerPasswordResetPage />;
-  return <WorkerInvitationAcceptancePage accessToken={accessToken} />;
-}
-
+/** Sets a new password for the signed-in worker (kept for the recovery flow and its tests). */
 export function WorkerPasswordResetPage() {
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setMessage("");
-    setError("");
-    if (password !== confirmPassword) {
-      setError("The passwords do not match.");
-      return;
-    }
-    if (!supabaseClient) {
-      setError("FayFort sign-in is not configured on this site.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const { error: authError } = await supabaseClient.auth.updateUser({ password });
-      if (authError) throw authError;
-      setMessage("Your password has been updated. You can now sign in to your FayFort worker account.");
-      setPassword("");
-      setConfirmPassword("");
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Password could not be updated. Request a new recovery link and try again.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <div className="auth-page">
       <section className="auth-card">
@@ -428,37 +336,10 @@ export function WorkerPasswordResetPage() {
         <label>FAYFORT WORKER ACCOUNT</label>
         <h1>Set your password</h1>
         <p>Choose a password for your FayFort worker account.</p>
-        <form onSubmit={submit}>
-          <label htmlFor="worker-new-password">New password</label>
-          <input
-            id="worker-new-password"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <label htmlFor="worker-confirm-password">Confirm password</label>
-          <input
-            id="worker-confirm-password"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            required
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
-          {message && <p role="status">{message}</p>}
-          <button className="primary-button" disabled={busy}>
-            {busy ? "Updating password…" : "Update password"}
-          </button>
-        </form>
+        <SetPasswordForm
+          onDone={() => setMessage("Your password has been updated. You can now sign in to your FayFort worker account.")}
+        />
+        {message && <p role="status">{message}</p>}
         <a href="/">Return to FayFort Control Center</a>
       </section>
     </div>
@@ -561,16 +442,18 @@ export function WorkerProvisioningPage({ accessToken }: { accessToken: string })
           </p>
         </div>
       </div>
-      <form onSubmit={invite}>
-        <label htmlFor="worker-email">Worker email</label>
-        <input
-          id="worker-email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
+      <form className="inline-form" onSubmit={invite}>
+        <label htmlFor="worker-email">
+          Worker email
+          <input
+            id="worker-email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
         <button className="primary-button" disabled={busy}>
           {busy ? "Sending invitation…" : "Invite worker"}
         </button>

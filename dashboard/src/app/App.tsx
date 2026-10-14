@@ -4,7 +4,11 @@ import { ThemePreviewPage } from "./ThemePreviewPage";
 import { dashboardAuthConfigured, supabaseClient } from "../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useState } from "react";
-import { WorkerInvitationCallback } from "./staff/WorkerPages";
+import { AuthCallbackPage, ForgotPasswordPage } from "./auth/AuthPages";
+import { forgotPasswordPath, friendlyAuthError } from "./auth/authLinks";
+import { useCaptcha } from "./auth/Turnstile";
+import { StaffMfaGate } from "./auth/StaffMfaGate";
+import type { ReactNode } from "react";
 import { MemberPhotoReviewApp } from "./staff/MemberPhotoReview";
 import { MemberRoutePage } from "./member/MemberAccountPages";
 import { SetupScreen } from "./SetupScreen";
@@ -13,11 +17,33 @@ import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
 import "./member-chat.css";
 
 export function App() {
-  if (window.location.pathname === "/operations") return <OperationsCenterPage />;
-  if (window.location.pathname === "/platform/themes/preview") return <ThemePreviewPage />;
-  if (window.location.pathname === "/worker/accept") return <WorkerInvitationCallback />;
-  if (window.location.pathname === "/worker/member-reviews") return <MemberPhotoReviewApp platformAdmin={false} />;
-  if (window.location.pathname === "/platform/member-reviews") return <MemberPhotoReviewApp platformAdmin={true} />;
+  if (window.location.pathname === "/operations")
+    return (
+      <StaffRoute>
+        <OperationsCenterPage />
+      </StaffRoute>
+    );
+  if (window.location.pathname === "/platform/themes/preview")
+    return (
+      <StaffRoute>
+        <ThemePreviewPage />
+      </StaffRoute>
+    );
+  if (window.location.pathname === "/auth/callback" || window.location.pathname === "/worker/accept")
+    return <AuthCallbackPage />;
+  if (window.location.pathname === "/auth/forgot") return <ForgotPasswordPage />;
+  if (window.location.pathname === "/worker/member-reviews")
+    return (
+      <StaffRoute>
+        <MemberPhotoReviewApp platformAdmin={false} />
+      </StaffRoute>
+    );
+  if (window.location.pathname === "/platform/member-reviews")
+    return (
+      <StaffRoute>
+        <MemberPhotoReviewApp platformAdmin={true} />
+      </StaffRoute>
+    );
   if (window.location.pathname.startsWith("/member/"))
     return (
       <MemberThemeRuntime>
@@ -27,6 +53,32 @@ export function App() {
   return <ControlCenterApp />;
 }
 
+/** Staff pages opened directly by URL still require two-step verification when signed in. */
+function StaffRoute({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  useEffect(() => {
+    if (!supabaseClient) {
+      setSession(null);
+      return;
+    }
+    let mounted = true;
+    supabaseClient.auth.getSession().then(({ data }) => mounted && setSession(data.session));
+    const {
+      data: { subscription },
+    } = supabaseClient.auth.onAuthStateChange((_event, next) => mounted && setSession(next));
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+  if (session === undefined) return null;
+  return (
+    <StaffMfaGate key={session ? "in" : "out"} signedIn={Boolean(session)} email={session?.user.email}>
+      {children}
+    </StaffMfaGate>
+  );
+}
+
 export function ControlCenterApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -34,6 +86,7 @@ export function ControlCenterApp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [signingIn, setSigningIn] = useState(false);
+  const captcha = useCaptcha();
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -64,8 +117,13 @@ export function ControlCenterApp() {
     if (!supabaseClient) return;
     setSigningIn(true);
     setAuthError("");
-    const { error } = await supabaseClient.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) setAuthError(error.message);
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+      options: { captchaToken: captcha.captchaToken },
+    });
+    if (error) setAuthError(friendlyAuthError(error, "Sign-in failed. Try again."));
+    captcha.reset();
     setSigningIn(false);
   }
   async function signOut() {
@@ -110,15 +168,19 @@ export function ControlCenterApp() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {captcha.widget}
             {authError && (
               <p className="form-error" role="alert">
                 {authError}
               </p>
             )}
-            <button className="primary-button" disabled={signingIn}>
+            <button className="primary-button" disabled={signingIn || !captcha.ready}>
               {signingIn ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <p className="quiet-note">
+            <a href={forgotPasswordPath("staff")}>Forgot your password?</a>
+          </p>
           <p className="quiet-note">
             <a href="/member/signup">Create a FayFort member account</a>
           </p>
@@ -126,7 +188,8 @@ export function ControlCenterApp() {
       </div>
     );
   return (
-    <DashboardWorkspace
+    <StaffMfaGate signedIn email={session.user.email}>
+      <DashboardWorkspace
       accessToken={session.access_token}
       signedInEmail={session.user.email || ""}
       platformAdmin={
@@ -135,7 +198,8 @@ export function ControlCenterApp() {
       }
       onSignOut={signOut}
       eventStreaming={import.meta.env.VITE_DASHBOARD_EVENTS_ENABLED !== "false"}
-    />
+      />
+    </StaffMfaGate>
   );
 }
 

@@ -156,11 +156,15 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         })
         invite.assert_called_once_with(
             "worker@example.com",
-            options={"redirect_to": "http://127.0.0.1:5173/worker/accept"},
+            options={"redirect_to": "http://127.0.0.1:5173/auth/callback?audience=staff&type=invite"},
         )
-        table.assert_called_once_with("fayfort_workers")
-        table.return_value.insert.assert_called_once_with({
+        self.assertEqual([call.args[0] for call in table.call_args_list], ["fayfort_workers", "workforce_audit"])
+        self.assertEqual(table.return_value.insert.call_args_list[0].args[0], {
             "user_id": USER, "status": "invited", "provisioned_by": ADMIN,
+        })
+        self.assertEqual(table.return_value.insert.call_args_list[1].args[0], {
+            "actor_id": ADMIN, "target_id": USER, "target_email": "worker@example.com",
+            "action": "invited", "detail": {},
         })
 
     @patch("app.accounts.router.supabase.auth.admin.delete_user")

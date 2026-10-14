@@ -52,8 +52,8 @@ class PublicAddressSettingsTests(unittest.TestCase):
 
     def test_worker_invite_redirect_follows_app_url_unless_overridden(self):
         from app.config.settings import worker_invite_redirect_url
-        self.assertEqual(worker_invite_redirect_url(self.config(APP_PUBLIC_URL="https://app.fayfort.com")), "https://app.fayfort.com/worker/accept")
-        self.assertEqual(worker_invite_redirect_url(self.config()), "http://127.0.0.1:5173/worker/accept")
+        self.assertEqual(worker_invite_redirect_url(self.config(APP_PUBLIC_URL="https://app.fayfort.com")), "https://app.fayfort.com/auth/callback?audience=staff&type=invite")
+        self.assertEqual(worker_invite_redirect_url(self.config()), "http://127.0.0.1:5173/auth/callback?audience=staff&type=invite")
         self.assertEqual(worker_invite_redirect_url(self.config(WORKER_INVITE_REDIRECT_URL="https://x.test/cb")), "https://x.test/cb")
 
 

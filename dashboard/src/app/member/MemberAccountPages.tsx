@@ -7,6 +7,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { MemberProductsPage } from "./MemberProductsPage";
 import { MemberChatPage } from "./MemberChatPage";
 import { SetupScreen } from "../SetupScreen";
+import { authCallbackUrl, forgotPasswordPath, friendlyAuthError } from "../auth/authLinks";
+import { PasswordFields, passwordPairError, type PasswordPair } from "../auth/PasswordFields";
+import { RequestLinkForm } from "../auth/RequestLinkForm";
+import { MemberSecuritySection } from "../auth/MemberSecuritySection";
+import { useCaptcha } from "../auth/Turnstile";
 import {
   type MemberShippingForm,
   emptyMemberShipping,
@@ -34,7 +39,10 @@ export function MemberAccountPage() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState<PasswordPair>({ password: "", confirm: "" });
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
   const [busy, setBusy] = useState(false);
+  const captcha = useCaptcha();
   const [socialBusy, setSocialBusy] = useState<"google" | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -89,17 +97,26 @@ export function MemberAccountPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!supabaseClient) return;
-    setBusy(true);
     setMessage("");
     setError("");
+    if (mode === "signup") {
+      const problem = passwordPairError(newPassword);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+    setBusy(true);
     try {
       if (mode === "signup") {
         const { error: authError } = await supabaseClient.auth.signUp({
           email: email.trim(),
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/member/account` },
+          password: newPassword.password,
+          options: { emailRedirectTo: authCallbackUrl("member", "signup"), captchaToken: captcha.captchaToken },
         });
         if (authError) throw authError;
+        setNewPassword({ password: "", confirm: "" });
+        setAwaitingVerification(true);
         setMessage(
           "Check your email for a verification link. Your member profile is created automatically; verification is required before your account can be used.",
         );
@@ -107,14 +124,18 @@ export function MemberAccountPage() {
         const { data, error: authError } = await supabaseClient.auth.signInWithPassword({
           email: email.trim(),
           password,
+          options: { captchaToken: captcha.captchaToken },
         });
         if (authError) throw authError;
         if (data.session && (await loadMemberProfile(data.session.access_token, data.user.email)))
           window.location.assign("/member/chat");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not complete member sign-in.");
+      const text = `${e instanceof Error ? e.message : ""} ${(e as { code?: string })?.code || ""}`.toLowerCase();
+      if (text.includes("not confirmed")) setAwaitingVerification(true);
+      setError(friendlyAuthError(e, "Could not complete member sign-in."));
     } finally {
+      captcha.reset();
       setBusy(false);
     }
   }
@@ -176,26 +197,46 @@ export function MemberAccountPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <label htmlFor="member-password">Password</label>
-              <input
-                id="member-password"
-                type="password"
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                minLength={8}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              {mode === "signup" ? (
+                <PasswordFields
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  newLabel="Password"
+                  confirmLabel="Confirm password"
+                />
+              ) : (
+                <>
+                  <label htmlFor="member-password">Password</label>
+                  <input
+                    id="member-password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <a className="auth-inline-link" href={forgotPasswordPath("member")}>
+                    Forgot your password?
+                  </a>
+                </>
+              )}
+              {captcha.widget}
               {error && (
                 <p className="form-error" role="alert">
                   {error}
                 </p>
               )}
               {message && <p role="status">{message}</p>}
-              <button className="primary-button" disabled={busy || socialBusy !== null}>
+              <button className="primary-button" disabled={busy || socialBusy !== null || !captcha.ready}>
                 {busy ? "Please wait…" : mode === "signup" ? "Create member account" : "Sign in"}
               </button>
             </form>
+            {awaitingVerification && (
+              <details className="auth-resend">
+                <summary>Didn't get the verification email?</summary>
+                <RequestLinkForm kind="signup" audience="member" initialEmail={email.trim()} />
+              </details>
+            )}
           </>
         )}
         {profile && (
@@ -229,6 +270,7 @@ export function MemberAccountPage() {
                 setMode(mode === "signup" ? "signin" : "signup");
                 setMessage("");
                 setError("");
+                setAwaitingVerification(false);
               }}
             >
               {mode === "signup" ? "Sign in" : "Create an account"}
@@ -245,6 +287,7 @@ export function MemberSettingsPage() {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<string[]>([]);
+  const [accountEmail, setAccountEmail] = useState("");
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [shipping, setShipping] = useState<MemberShippingForm>(emptyMemberShipping);
   const [phoneCountry, setPhoneCountry] = useState("US");
@@ -273,6 +316,7 @@ export function MemberSettingsPage() {
       if (!mounted) return;
       const accessToken = data.session?.access_token || null;
       setToken(accessToken);
+      setAccountEmail(data.session?.user.email || "");
       if (accessToken) {
         try {
           const member = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", accessToken);
@@ -443,9 +487,10 @@ export function MemberSettingsPage() {
               </div>
               <div className="member-identity-row">
                 <strong>Email and password</strong>
-                <span>Available</span>
+                <span>{providers.includes("email") ? "Connected" : "Not set up"}</span>
               </div>
             </section>
+            <MemberSecuritySection email={accountEmail} hasPassword={providers.includes("email")} />
             <section className="member-settings-section" aria-labelledby="member-settings-photo">
               <h2 id="member-settings-photo">Profile photo</h2>
               <p>

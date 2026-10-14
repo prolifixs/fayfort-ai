@@ -739,6 +739,8 @@ app.include_router(create_workspace_modules_router())
 app.include_router(create_business_faq_router())
 from app.infrastructure.router import create_infrastructure_router
 app.include_router(create_infrastructure_router())
+from app.workforce.router import create_workforce_router
+app.include_router(create_workforce_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

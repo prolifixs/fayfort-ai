@@ -116,7 +116,7 @@ LANDED (`/ebook/landed`) is a live product: the $99 LANDED directory sold throug
   - the other five pages are identical except production's `/book` links, which D10 drops;
   - the Shopify Buy Button iframe renders "Get the directory $99" with no CSP violations;
   - retired paths (`/login`, `/dashboard`, `/admin`, `/api/*`, `/book`) return 404, `/products/fay` redirects home, and `/terms-ebooks#refunds` resolves. | Owner sign-off on the preview; enable Web Analytics on `fayfort-web` before the switch; production switch (move the domains) |
-| 6–7 | — | Hostinger VPS; production tunnel; cutover and decommission |
+| 6–7 | **Gate 6 live 2026-10-14** (see the Gate 6 record). Gate 4 is live on Vercel too (see the Gate 4 record). | Gate 6: DM with the PC off, staff reply, unattended reboot, rotation, notifications. Gate 7: two-week watch, then cutover and decommission |
 
 ## Owner action queue
 
@@ -153,13 +153,13 @@ These steps need the owner's accounts. Everything else continues without waiting
 | --- | ---: | ---: | --- |
 | 0. Inventory, backups and decisions | 5 | 5 | Everything needed to change DNS/hosting safely, plus decisions D1–D9 |
 | 1. Cloudflare zone onboarding | 10 | 10 | `fayfort.com` served by Cloudflare DNS with no website or email interruption |
-| 2. Permanent API tunnel (development) | 10 | 8 | `api-dev.fayfort.com` → PC API as a Windows service; Meta webhook URL permanent |
+| 2. Permanent API tunnel (development) | 10 | 10 | `api-dev.fayfort.com` → PC API as a Windows service; Meta webhook URL permanent |
 | 3. Cloudflare inside FayFort AI | 20 | 20 | Platform admin Infrastructure view: Cloudflare connection, tunnel health, hostnames, webhook endpoints, preflight |
-| 4. App hosting at `app.fayfort.com` | 10 | 0 | Dashboard on Cloudflare Pages against the public API; auth/CORS/redirects updated |
+| 4. App hosting at `app.fayfort.com` | 10 | 8 | Dashboard on Vercel (`fayfort-app`, D13) against the public API; auth/CORS/redirects updated |
 | 5. Public site moved into the monorepo | 20 | 20 | `web/` serves the same public pages from this repo; enterprise code left behind |
-| 6. Production API host | 15 | 0 | `api.fayfort.com` served from an always-on host; PC stays on `api-dev` |
+| 6. Production API host | 15 | 10 | `api.fayfort.com` served from an always-on host; PC stays on `api-dev` |
 | 7. Cutover and decommission | 10 | 0 | Old repo/Vercel/Supabase retired, redirects in place, docs and trackers closed |
-| **Total** | **100** | **63** | Updated 2026-10-14. Gate 2 has 2 left, for confirming that Meta's callback points at `api-dev.fayfort.com`. Gate 5 is complete: on 2026-10-14 the owner confirmed that live checkout opens LANDED at $99. |
+| **Total** | **100** | **83** | Updated 2026-10-14, 03:50 PT. Gate 2 is complete: Instagram DMs were processed through `api-dev` (01:10–01:37), and Meta now points at production per D13. Gate 4 has 2 points left (Google sign-in and a worker invitation link on `app.fayfort.com`). Gate 6 has 5 left (a DM with the PC off plus a staff reply, an unattended reboot, credential rotation, health notifications). Gate 7 starts after the two-week watch. |
 
 ### Gate 0 — Inventory, backups and decisions (5)
 
@@ -299,6 +299,20 @@ Platform-admin only. No member or business user sees any of this.
   - a worker invitation link lands on `app.fayfort.com/worker/accept`;
   - local development still works unchanged.
 
+#### Gate 4 record (2026-10-14, 03:00–03:50 PT)
+
+- **Hosting (D13).** The Vercel project `fayfort-app` builds `dashboard/` from `main` (Vite preset, `dashboard/vercel.json` SPA rewrite and security headers). The custom domain `app.fayfort.com` has a Cloudflare CNAME to Vercel's project target, DNS only, and the certificate was issued.
+- **Build settings.**
+  - `VITE_FAYFORT_API_URL=https://api.fayfort.com`.
+  - `VITE_SUPABASE_URL` is set to the project URL.
+  - The anon key is stored as `V_SUPABASE_ANON_KEY`, because Vercel flags `VITE_*_KEY` names. `vite.config.ts` maps it into the build (`f046024`).
+- **Supabase Auth.** The Site URL changed from `http://localhost:3000` to `https://app.fayfort.com`. `https://app.fayfort.com/**` was added to the redirect list, and the local `127.0.0.1:5173` entries were kept.
+- **Live checks.**
+  - The root, `/member/account` (email and Google buttons), `/operations`, `/worker/accept` and `/member/chat` all load the app.
+  - From the `app.fayfort.com` origin, the production API's `/health` returns 200. An authorised request with a fake token returns 403, which shows CORS accepts the origin with an `Authorization` header.
+  - The owner signed in as platform admin. The client-account list, the live event stream for FayFort Test Business and the Infrastructure page all loaded from `api.fayfort.com`.
+- **Still to confirm (2 points).** Google sign-in and a worker invitation link landing on `app.fayfort.com/worker/accept`, both during the post-migration mock test.
+
 ### Gate 5 — Public site moved into the monorepo (20)
 
 1. Copy the public part of the old repository into `web/`. Done 2026-10-13 without importing the git history; the old repository keeps the full history and is archived in Gate 7.
@@ -351,6 +365,28 @@ Platform-admin only. No member or business user sees any of this.
   - restarting the host restores service unattended;
   - a staff reply is delivered;
   - the runbook for restart, deploy and rollback is written.
+
+#### Gate 6 record (2026-10-14, 02:00–03:50 PT)
+
+- **Host.** Hostinger KVM 2 (Debian 12). Docker Compose project `fayfort` from `deploy/api/`:
+  - the API container (non-root, read-only filesystem, health check) listens on `127.0.0.1:8001` only;
+  - the `cloudflared` container runs tunnel `fayfort-api-prod`;
+  - no inbound ports besides SSH.
+- **Secrets.** Kept in `/opt/fayfort/api.env` and `/opt/fayfort/tunnel.env` (mode 600). The owner entered them; they were never shown in chat.
+- **Scheduled jobs.** Background jobs run on the VPS only; the PC's `.env` flags were turned off.
+- **Hostnames.** `api.fayfort.com` is routed to the prod tunnel and `api-dev.fayfort.com` to the PC tunnel. Both tunnels report healthy on the Infrastructure page.
+- **Meta.** The owner moved the Instagram callback to `https://api.fayfort.com/webhooks/instagram`. The FayFort endpoint registry was updated to match, and the server-side preflight passed all 4 checks against `api.fayfort.com`:
+  - HTTPS;
+  - health contract;
+  - verification challenge 200;
+  - unsigned POST 401.
+- **Runbook.** `deploy/README.md` covers update, restart, logs and rollback.
+- **Still to confirm (5 points).**
+  - An Instagram DM processed with the PC switched off, and a staff reply delivered (the post-migration mock test).
+  - A host reboot that restores service unattended.
+  - Rotation of credentials that were on the PC.
+  - Cloudflare tunnel health notifications.
+- **Housekeeping.** The prod tunnel still carries an unused `api-dev` ingress rule. DNS sends `api-dev` to the PC tunnel, so it has no effect, but the Infrastructure page shows a warning until it is removed.
 
 ### Gate 7 — Cutover and decommission (10)
 

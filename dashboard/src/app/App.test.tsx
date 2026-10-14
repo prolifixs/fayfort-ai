@@ -3,7 +3,7 @@ import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 import { App,DashboardWorkspace,WorkerInvitationAcceptancePage,WorkerPasswordResetPage,WorkerProvisioningPage } from "./App";
 
 const authMocks=vi.hoisted(()=>({updateUser:vi.fn(),getSession:vi.fn(),onAuthStateChange:vi.fn(),signInWithOAuth:vi.fn(),getUserIdentities:vi.fn(),linkIdentity:vi.fn()}));
-vi.mock("../lib/supabase",()=>({dashboardAuthConfigured:true,supabaseClient:{auth:{updateUser:authMocks.updateUser,getSession:authMocks.getSession,onAuthStateChange:authMocks.onAuthStateChange,signInWithOAuth:authMocks.signInWithOAuth,getUserIdentities:authMocks.getUserIdentities,linkIdentity:authMocks.linkIdentity}}}));
+vi.mock("../lib/supabase",()=>({dashboardAuthConfigured:true,supabaseClient:{auth:{updateUser:authMocks.updateUser,getSession:authMocks.getSession,onAuthStateChange:authMocks.onAuthStateChange,signInWithOAuth:authMocks.signInWithOAuth,getUserIdentities:authMocks.getUserIdentities,linkIdentity:authMocks.linkIdentity,mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:"aal2",nextLevel:"aal2"},error:null})}}}}));
 
 afterEach(()=>{cleanup();window.history.replaceState({},"","/");});
 const business = { business_id:"business-1", name:"FayFort Test Workspace" };
@@ -88,7 +88,7 @@ describe("authenticated dashboard workspace",()=>{
  it("routes a Supabase recovery callback to the password form",async()=>{
   window.history.replaceState({},"","/worker/accept?type=recovery");
   render(<App/>);
-  expect(await screen.findByRole("heading",{name:"Set your password"})).toBeInTheDocument();
+  expect(await screen.findByRole("heading",{name:"Set a new password"})).toBeInTheDocument();
  });
 
  it("shows verified member account details and server-managed points and tier without client-side tier controls",async()=>{
@@ -479,7 +479,7 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.change(screen.getByLabelText("New password"),{target:{value:"new-worker-password-123"}});
   fireEvent.change(screen.getByLabelText("Confirm password"),{target:{value:"new-worker-password-123"}});
   fireEvent.click(screen.getByRole("button",{name:"Update password"}));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Recovery link expired.");
+  expect(await screen.findByRole("alert")).toHaveTextContent("This link has expired or was already used");
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
  });
 

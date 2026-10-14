@@ -3,7 +3,9 @@ import { KnowledgePage } from "../KnowledgePage";
 import { ApiRequestError, apiRequest, websocketUrl } from "../../lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Business, ConversationRow, EventRecord, WorkspaceProps } from "./types";
-import { PlatformRequestAssignmentPage, WorkerProvisioningPage, WorkerRequestsPage } from "../staff/WorkerPages";
+import { PlatformRequestAssignmentPage, WorkerRequestsPage } from "../staff/WorkerPages";
+import { WorkforcePage } from "../staff/WorkforcePage";
+import { StaffAccountPage } from "../staff/StaffAccountPage";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { AgentAvailabilityPanel, HandoffsPage } from "./HandoffsPage";
@@ -51,7 +53,12 @@ export const descriptions: Record<string, string> = {
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
+  "FayFort Workers": "Invite workers, see who is online, and manage each worker's account.",
+  "My account": "Your password, sign-in email, sessions and two-step verification.",
 };
+
+/** Workers report presence from anywhere in the Control Center, not only Operations Center. */
+export const PRESENCE_HEARTBEAT_MS = 45_000;
 
 export const groups = ["Workspace", "Operations", "Manage"];
 
@@ -77,6 +84,20 @@ export function DashboardWorkspace({
   const [acknowledgedWaiting, setAcknowledgedWaiting] = useState<Record<string, number>>({});
   const eventCursors = useRef<Record<string, number>>({});
   const currentBusiness = businesses.find((item) => item.business_id === businessId);
+  useEffect(() => {
+    if (!activeWorker || platformAdmin) return;
+    const beat = () => {
+      if (document.visibilityState === "hidden") return;
+      apiRequest("/operations/presence", accessToken, { method: "POST" }).catch(() => undefined);
+    };
+    beat();
+    const timer = window.setInterval(beat, PRESENCE_HEARTBEAT_MS);
+    document.addEventListener("visibilitychange", beat);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", beat);
+    };
+  }, [activeWorker, platformAdmin, accessToken]);
 
   const loadBusinesses = useCallback(async () => {
     setBusinessLoading(true);
@@ -373,6 +394,13 @@ export function DashboardWorkspace({
         </nav>
         <footer>
           <i className={eventStatus === "Live" ? "event-dot live" : "event-dot"} /> Events {eventStatus}
+          <button
+            className="signout-button"
+            aria-current={active === "My account" ? "page" : undefined}
+            onClick={() => setActive("My account")}
+          >
+            My account
+          </button>
           <button className="signout-button" onClick={() => void onSignOut?.()}>
             Sign out
           </button>
@@ -398,7 +426,7 @@ export function DashboardWorkspace({
                 </button>
               </>
             )}
-            <small>DEVELOPMENT</small>
+            {import.meta.env.DEV ? <small>DEVELOPMENT</small> : null}
           </div>
         </header>
         <article aria-live="polite">
@@ -415,7 +443,9 @@ export function DashboardWorkspace({
           ) : active === "Infrastructure" && platformAdmin ? (
             <InfrastructurePage accessToken={accessToken} />
           ) : active === "FayFort Workers" && platformAdmin ? (
-            <WorkerProvisioningPage accessToken={accessToken} />
+            <WorkforcePage accessToken={accessToken} />
+          ) : active === "My account" ? (
+            <StaffAccountPage accessToken={accessToken} email={signedInEmail || ""} isWorker={activeWorker && !platformAdmin} />
           ) : active === "Giveaways" && (platformAdmin || activeWorker) ? (
             <section className="empty" aria-label="Giveaways workspace">
               <b>G</b>

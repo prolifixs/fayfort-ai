@@ -76,3 +76,14 @@ Vercel project `fayfort-app`, repository `prolifixs/fayfort-ai`, root directory 
 Then add the domain `app.fayfort.com` to the project and, in Cloudflare DNS, a `CNAME app →
 cname.vercel-dns.com` record set to **DNS only**. In Supabase → Authentication → URL Configuration,
 add `https://app.fayfort.com/**` to the redirect URLs.
+
+## Authentication and workforce (Auth plan A0–A7)
+
+- **Database.** Apply `supabase/migrations/20261014100000_workforce_accounts.sql` before deploying an API that includes `app/workforce/`. It adds the invitation and deactivation columns, the append-only `workforce_audit` ledger, `workforce_auth_events` and `release_workforce_assignments`.
+- **Auth links.** Every Supabase Auth email lands on `https://app.fayfort.com/auth/callback`. The redirect allow-list entry `https://app.fayfort.com/**` covers it. Invitations sent before this change still work through `/worker/accept`.
+- **Two-step verification.** The Control Center always asks staff to set up or enter an authenticator code. The API starts enforcing it only when `STAFF_MFA_REQUIRED=true` is set in `/opt/fayfort/api.env` and the API container restarts. Do that after every admin and worker has enrolled.
+- **Lost authenticator.**
+  - A platform admin resets a worker from Control Center → FayFort Workers → the worker → "Reset two-step verification".
+  - If the only platform admin loses their phone, remove the factor in Supabase → Authentication → Users → the user → "Remove MFA factors".
+- **Turnstile.** Put the public site key in the dashboard build as `VITE_TURNSTILE_SITEKEY` (Vercel → fayfort-app → Environment Variables), redeploy, confirm sign-in shows the check, and only then turn on captcha in Supabase → Authentication → Attack Protection with the secret key.
+- **Email OTP expiration.** Keep `AUTH_EMAIL_LINK_TTL_SECONDS` equal to Supabase Auth → Email → "Email OTP expiration", so invitation expiry shows correctly.

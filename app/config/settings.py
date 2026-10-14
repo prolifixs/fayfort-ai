@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = ""
     # Leave empty to derive it from APP_PUBLIC_URL.
     WORKER_INVITE_REDIRECT_URL: str = ""
+    # Auth and workforce plan (A3). When true, platform admins and workers must present an
+    # MFA-verified session (aal2) on every staff endpoint. Turn on after staff have enrolled.
+    STAFF_MFA_REQUIRED: bool = False
+    # Must match Supabase Auth -> Email -> "Email OTP expiration" (seconds); used to show
+    # whether a worker invitation link is still valid.
+    AUTH_EMAIL_LINK_TTL_SECONDS: int = 3600
 
     SUPABASE_URL: str 
     SUPABASE_ANON_KEY: str
@@ -70,8 +76,13 @@ def cors_allowed_origins(config: "Settings | None" = None) -> list[str]:
     return list(dict.fromkeys(origin for origin in candidates if origin))
 
 
+def staff_recovery_redirect_url(config: "Settings | None" = None) -> str:
+    config = config or settings
+    return config.APP_PUBLIC_URL.rstrip("/") + "/auth/callback?audience=staff&type=recovery"
+
+
 def worker_invite_redirect_url(config: "Settings | None" = None) -> str:
     config = config or settings
     if config.WORKER_INVITE_REDIRECT_URL.strip():
         return config.WORKER_INVITE_REDIRECT_URL.strip()
-    return config.APP_PUBLIC_URL.rstrip("/") + "/worker/accept"
+    return config.APP_PUBLIC_URL.rstrip("/") + "/auth/callback?audience=staff&type=invite"
