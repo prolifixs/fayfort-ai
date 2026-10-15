@@ -335,6 +335,15 @@ class ShopifyClientTests(unittest.TestCase):
                 shopify.admin_graphql("{ bad }", client=client)
             shopify._token_cache.token = None
 
+    def test_app_not_installed_gets_a_clear_message(self):
+        client = httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(400, text="<title>400 - Oauth error app_not_installed</title>")))
+        with patch.multiple(shopify.settings, SHOPIFY_STORE_DOMAIN="fayfort.myshopify.com", SHOPIFY_CLIENT_ID="id",
+                            SHOPIFY_CLIENT_SECRET="secret", SHOPIFY_ADMIN_ACCESS_TOKEN=""):
+            shopify._token_cache.token = None
+            with self.assertRaisesRegex(shopify.ShopifyError, "isn't installed on this store"):
+                shopify.admin_token(client)
+
     def test_checkout_falls_back_to_cart_permalink(self):
         with patch.multiple(shopify.settings, SHOPIFY_STORE_DOMAIN="fayfort.myshopify.com",
                             SHOPIFY_STOREFRONT_ACCESS_TOKEN=""):
@@ -415,6 +424,14 @@ class CatalogTests(DbCase):
         catalog.upsert_product(SHOPIFY_NODE)
         self.assertIsNotNone(row.get("restocked_at"))
         self.assertTrue(row["in_stock"])
+
+    def test_fayfort_hide_tag_keeps_a_product_out_of_the_shop(self):
+        db = self.use(seeded_db())
+        product_id = catalog.upsert_product({**SHOPIFY_NODE, "productType": "Ebook", "tags": ["Fayfort-Hide"]})
+        row = next(p for p in db.rows["directory_products"] if p["id"] == product_id)
+        self.assertFalse(row["active"])
+        self.assertFalse(row["category_needs_mapping"])
+        self.assertNotIn(product_id, [p["id"] for p in service.load_products()])
 
     def test_reconcile_retires_products_missing_from_shopify(self):
         db = self.use(seeded_db())

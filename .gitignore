@@ -59,3 +59,6 @@ web/next-env.d.ts
 # Shopify email templates carry the live LANDED directory passwords; never commit them.
 docs/email/
 web/docs/email/
+
+# Server settings files must never be committed (live copy is /opt/fayfort/api.env)
+deploy/api/api.env

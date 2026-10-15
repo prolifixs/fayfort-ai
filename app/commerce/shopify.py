@@ -100,6 +100,9 @@ def admin_token(client: httpx.Client | None = None) -> str:
             if owned:
                 http.close()
         if response.status_code != 200:
+            if "app_not_installed" in response.text:
+                raise ShopifyError("The FayFort app isn't installed on this store yet. In the Shopify Dev Dashboard, open the "
+                                   "app, release a version, then choose Install app and pick this store.")
             raise ShopifyError(f"Shopify refused the app credentials (HTTP {response.status_code}). "
                                "Check the client id and secret, and that the app is installed on the store.")
         body = response.json()

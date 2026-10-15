@@ -109,11 +109,12 @@ Shopify (Basic plan, one store) is the engine; FayFort is the experience. See `d
 3. **Headless channel** (owner): install Shopify's free *Headless* sales channel, create a storefront and copy its
    **private** Storefront access token. Enable the Storefront scopes `unauthenticated_read_product_listings`,
    `unauthenticated_write_checkouts` and `unauthenticated_read_checkouts`.
-4. **Server settings** (owner): `nano /opt/fayfort/fayfort-ai/deploy/api/api.env`, fill the Shopify block from
+4. **Server settings** (owner): `nano /opt/fayfort/api.env` (the live settings file; never the copy inside the repo), fill the Shopify block from
    `api.env.example`, then redeploy the API.
 5. **Connect** (Control Center → Shop → Overview): *Set up Shopify* creates the FayFort category field and registers the
    webhooks at `https://api.fayfort.com/commerce/shopify/webhooks`; then *Sync now* copies the catalog.
 6. **Categories**: Shopify products match the 968 FayFort categories by the `fayfort.category_ref` field, product type or
-   tags. Anything unmatched appears under Shop → Category mapping.
+   tags. Anything unmatched appears under Shop → Category mapping. Tag a Shopify product `fayfort-hide` (for example
+   services or the LANDED ebook) to keep it out of the FayFort shop entirely.
 7. **Social channels (last)**: install the free *TikTok* and *Facebook & Instagram* channel apps and publish products to
    them. They read the same Shopify catalog; FayFort needs no changes.

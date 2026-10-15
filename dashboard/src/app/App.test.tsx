@@ -63,26 +63,22 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.queryByRole("button",{name:/subscribe|upgrade|checkout/i})).not.toBeInTheDocument();
  });
 
- it("opens the giveaway campaign tools for platform admins",async()=>{
+ it("runs giveaways from the Shop page, with no separate Giveaways page",async()=>{
   render(<DashboardWorkspace accessToken="test-access-token" platformAdmin eventStreaming={false}/>);
   const nav=screen.getByRole("navigation",{name:"Main navigation"});
-  fireEvent.click(within(nav).getByRole("button",{name:/Giveaways/}));
+  expect(within(nav).queryByRole("button",{name:/Giveaways/})).not.toBeInTheDocument();
+  fireEvent.click(within(nav).getByRole("button",{name:/Shop/}));
+  fireEvent.click(await screen.findByRole("tab",{name:"Giveaways"}));
   expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
   expect(screen.getByRole("button",{name:"Create giveaway"})).toBeInTheDocument();
-  expect(screen.getByRole("tab",{name:"Giveaways",selected:true})).toBeInTheDocument();
  });
 
- it("lets an active FayFort worker open Giveaways without a business workspace",async()=>{
-  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
-   const url=String(input);
-   if(url.endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
-   if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
-   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-  });
-  renderWorkspace();
-  const nav=screen.getByRole("navigation",{name:"Main navigation"});
-  fireEvent.click(await within(nav).findByRole("button",{name:/Giveaways/}));
-  expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
+ it("explains when the API server hasn't been updated for the Shop",async()=>{
+  const base=fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>String(input).includes("/platform/commerce/")?{ok:false,status:404,json:async()=>({detail:"Not Found"}),headers:new Headers()} as Response:base(input,init));
+  render(<DashboardWorkspace accessToken="test-access-token" platformAdmin eventStreaming={false}/>);
+  fireEvent.click(within(screen.getByRole("navigation",{name:"Main navigation"})).getByRole("button",{name:/Shop/}));
+  expect(await screen.findByText(/API server is still running the previous version/)).toBeInTheDocument();
  });
 
  it("routes a Supabase recovery callback to the password form",async()=>{

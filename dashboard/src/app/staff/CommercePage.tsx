@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { apiRequest } from "../../lib/api";
+import { ApiRequestError, apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
 
 type Tab = "overview" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders";
@@ -31,7 +31,13 @@ function useLoad<T>(path: string, accessToken: string) {
       setData(await apiRequest<T>(path, accessToken));
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "This section could not be loaded.");
+      setError(
+        reason instanceof ApiRequestError && reason.status === 404
+          ? "The API server is still running the previous version, so the Shop isn't available yet. Update the API on the VPS, then refresh this page."
+          : reason instanceof Error
+            ? reason.message
+            : "This section could not be loaded.",
+      );
     }
   }, [path, accessToken]);
   useEffect(() => {
@@ -724,7 +730,7 @@ function MappingPanel({ accessToken }: { accessToken: string }) {
     <section className="control-panel" aria-label="Category mapping">
       <div className="panel-heading">
         <h2>Products that need a FayFort category</h2>
-        <p>Shopify products are matched to the 968 FayFort categories by their FayFort category field, product type or tags. The ones below didn't match; pick a category and it's saved to Shopify too.</p>
+        <p>Shopify products are matched to the 968 FayFort categories by their FayFort category field, product type or tags. The ones below didn't match; pick a category and it's saved to Shopify too. Products that don't belong in the FayFort shop (a service, an ebook) can be tagged fayfort-hide in Shopify instead.</p>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!data ? (

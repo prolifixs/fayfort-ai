@@ -51,7 +51,6 @@ export const descriptions: Record<string, string> = {
   Knowledge: "Business-approved FAQ answers with exact question matching and version history.",
   Analytics: "Saved business-event history with bounded counts and time-window filters.",
   Settings: "Safe business configuration managed through the FayFort control plane.",
-  Giveaways: "Run giveaways: members enter from the chat's front page, you draw winners after the end time.",
   Shop: "Shopify connection, the trend queue and pools, invoices, flash sales, giveaways and orders.",
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
@@ -358,9 +357,9 @@ export function DashboardWorkspace({
               </a>
             </section>
           )}
-          {(platformAdmin || activeWorker) && (
+          {platformAdmin && (
             <section aria-label="Platform administration">
-              <h2>{platformAdmin ? "Platform admin" : "Platform"}</h2>
+              <h2>Platform admin</h2>
               {platformAdmin && (
                 <>
                   <button
@@ -400,13 +399,6 @@ export function DashboardWorkspace({
                   </button>
                 </>
               )}
-              <button
-                className={active === "Giveaways" ? "nav-item active" : "nav-item"}
-                aria-current={active === "Giveaways" ? "page" : undefined}
-                onClick={() => setActive("Giveaways")}
-              >
-                <span>G</span>Giveaways
-              </button>
             </section>
           )}
         </nav>
@@ -468,14 +460,7 @@ export function DashboardWorkspace({
             <StaffAccountPage accessToken={accessToken} email={signedInEmail || ""} isWorker={activeWorker && !platformAdmin} />
           ) : active === "Shop" && platformAdmin ? (
             <CommercePage accessToken={accessToken} />
-          ) : active === "Giveaways" && platformAdmin ? (
-            <CommercePage accessToken={accessToken} initialTab="giveaways" />
-          ) : active === "Giveaways" && activeWorker ? (
-            <section className="empty" aria-label="Giveaways workspace">
-              <b>G</b>
-              <h2>Giveaways are run by platform admins</h2>
-              <p>Members enter giveaways from the chat's front page. A platform admin creates them and draws the winners.</p>
-            </section>
+
           ) : active === "Member Requests" && (platformAdmin || activeWorker) ? (
             platformAdmin ? (
               <PlatformRequestAssignmentPage accessToken={accessToken} />

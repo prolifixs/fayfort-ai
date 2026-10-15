@@ -237,7 +237,7 @@ Orders from those channels appear in Shopify (they are not tied to a FayFort mem
 | --- | --- | --- |
 | Link field in the sourcing-request dialog | Duplicated Find It | **Removed.** Pasting in the composer replaces it. |
 | Separate Requests panel | Duplicated the orders timeline | **Merged** into Orders & requests. |
-| Giveaways placeholder page | Dead page | **Replaced** by the real giveaway tools (admins); workers see a short note. |
+| Giveaways page in the Control Center menu | Duplicated the Giveaways tab in Shop | **Removed.** Giveaways are run from Control Center → Shop → Giveaways. |
 | Order and invoice emails from FayFort | Shopify already sends them | **Not built.** FayFort only emails what Shopify can't (giveaway win, Found it). |
 | Manual product editor (Directory & Tools) | Overlaps Shopify for store items | **Kept** for sourcing-only listings; editing Shopify items is blocked there. |
 | Checkout records | Stored but unused | **Connected:** Shop overview shows checkouts started vs orders. |

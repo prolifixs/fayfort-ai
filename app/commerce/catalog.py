@@ -15,6 +15,8 @@ from app.commerce.db import db, one, rows
 
 logger = logging.getLogger(__name__)
 _TAGS = re.compile(r"<[^>]+>")
+# Shopify products with this tag stay out of the FayFort shop (services, ebooks such as LANDED).
+HIDE_TAG = "fayfort-hide"
 
 
 def now_iso() -> str:
@@ -120,6 +122,7 @@ def map_product(node: dict, refs: set[str], by_type: dict[str, str]) -> dict:
     compare = [v["compare_at_price"] for v in variants if v["compare_at_price"] and v["compare_at_price"] > v["price"]]
     in_stock = any(v["available"] for v in variants)
     status = str(node.get("status") or "").upper()
+    hidden = any(str(tag).strip().casefold() == HIDE_TAG for tag in node.get("tags") or [])
     first = media[0] if media else None
     description = _TAGS.sub(" ", str(node.get("description") or "")).strip()
     return {
@@ -131,7 +134,7 @@ def map_product(node: dict, refs: set[str], by_type: dict[str, str]) -> dict:
             "name": (str(node.get("title") or "Untitled product").strip() or "Untitled product")[:160],
             "description": description[:2000],
             "category_ref": category,
-            "category_needs_mapping": category is None,
+            "category_needs_mapping": category is None and not hidden,
             "vendor": (str(node.get("vendor"))[:200] if node.get("vendor") else None),
             "product_type": (str(node.get("productType"))[:200] if node.get("productType") else None),
             "tags": [str(tag)[:100] for tag in (node.get("tags") or [])][:50],
@@ -142,7 +145,7 @@ def map_product(node: dict, refs: set[str], by_type: dict[str, str]) -> dict:
             "in_stock": in_stock,
             "total_inventory": node.get("totalInventory"),
             "availability_status": "available" if in_stock else "unavailable",
-            "active": status == "ACTIVE",
+            "active": status == "ACTIVE" and not hidden,
             "online_store_url": _https(node.get("onlineStoreUrl")),
             "media_url": first["url"] if first else None,
             "media_type": first["media_type"] if first else None,
@@ -164,7 +167,7 @@ def upsert_product(node: dict, refs: set[str] | None = None, by_type: dict[str, 
     product = mapped["product"]
     existing = one(db().table("directory_products").select("id,in_stock,category_ref,category_needs_mapping")
                    .eq("shopify_product_id", product["shopify_product_id"]).maybe_single().execute())
-    if existing and existing.get("category_ref") and product["category_ref"] is None:
+    if existing and existing.get("category_ref") and product["category_ref"] is None and product["category_needs_mapping"]:
         # A category staff mapped in FayFort survives until Shopify's metafield catches up.
         product["category_ref"] = existing["category_ref"]
         product["category_needs_mapping"] = False
