@@ -59,6 +59,15 @@ class WorkerInvite(BaseModel):
         return normalized
 
 
+def _save_expected_budget(request_id: str, total: float, currency: str | None) -> None:
+    """The member's expected budget pre-fills the sourcing deposit (docs/MEMBERSHIP_PLAN.md)."""
+    try:
+        supabase.table("member_purchase_requests").update({
+            "expected_total": round(total, 2), "expected_currency": currency or "USD"}).eq("id", request_id).execute()
+    except Exception:
+        logger.exception("Could not save the expected budget for request %s", request_id)
+
+
 class MemberPurchaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_title: str = Field(min_length=1, max_length=160)
@@ -67,6 +76,8 @@ class MemberPurchaseRequest(BaseModel):
     conversation_id: UUID | None = None
     source_type: Literal["saved_product", "catalog_product", "url", "image", "description"] | None = None
     source_url: str | None = Field(default=None, max_length=2000)
+    expected_total: float | None = Field(default=None, gt=0, le=1_000_000)
+    expected_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
 
     @field_validator("request_title")
     @classmethod
@@ -391,6 +402,8 @@ def create_accounts_router() -> APIRouter:
         request_description: str | None = Query(default=None, max_length=2000),
         filename: str = Query(default="product-screenshot", max_length=255),
         conversation_id: UUID | None = Query(default=None),
+        expected_total: float | None = Query(default=None, gt=0, le=1_000_000),
+        expected_currency: str | None = Query(default=None, pattern=r"^[A-Z]{3}$"),
         authorization: str | None = Header(default=None),
     ):
         user_id = require_verified_member(authorization)
@@ -443,6 +456,8 @@ def create_accounts_router() -> APIRouter:
                 request_id = request_id[0] if request_id else None
             if not request_id:
                 raise RuntimeError("Request transaction did not return an ID")
+            if expected_total:
+                _save_expected_budget(str(request_id), expected_total, expected_currency)
             return {"request_id": str(request_id), "stage": "submitted", "source_type": "image"}
         except Exception as exc:
             try:
@@ -847,6 +862,8 @@ def create_accounts_router() -> APIRouter:
                 request_id = request_id[0] if request_id else None
             if not request_id:
                 raise RuntimeError("Request transaction did not return an ID")
+            if payload.expected_total:
+                _save_expected_budget(str(request_id), payload.expected_total, payload.expected_currency)
             return {"request_id": str(request_id), "stage": "submitted"}
         except HTTPException:
             raise

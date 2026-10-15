@@ -492,18 +492,24 @@ def queue_email(member_id: str, *, category: str, template: str, title: str, bod
 # Invoices
 # ---------------------------------------------------------------------------------------------
 def send_invoice(*, member_id: str, title: str, amount: float, currency: str, quantity: int = 1,
-                 request_id: str | None = None, trend_item_id: str | None = None, actor_id: str | None = None) -> dict:
+                 request_id: str | None = None, trend_item_id: str | None = None, actor_id: str | None = None,
+                 kind: str = "order", deposit_credit: float = 0.0, details: dict | None = None,
+                 requires_shipping: bool = True) -> dict:
+    """Record a FayFort invoice and send it as a Shopify draft-order invoice. A paid sourcing deposit is
+    passed as `deposit_credit` and taken off the order total."""
     email = member_email(member_id)
     if not email:
         raise ValueError("This member has no confirmed email for the invoice.")
     record = one(db().table("commerce_invoices").insert({
         "member_id": member_id, "request_id": request_id, "trend_item_id": trend_item_id, "title": title[:255],
-        "amount": round(amount, 2), "currency": currency, "quantity": quantity, "created_by": actor_id}).execute())
+        "amount": round(amount, 2), "currency": currency, "quantity": quantity, "created_by": actor_id,
+        "kind": kind, "deposit_credit": round(deposit_credit, 2), "details": details or {}}).execute())
     if not record:
         raise RuntimeError("Invoice insert returned no row")
     try:
         draft_id, url = shopify.create_invoice(invoice_id=str(record["id"]), email=email, title=title, unit_price=amount,
-                                               currency=currency, quantity=quantity,
+                                               currency=currency, quantity=quantity, kind=kind,
+                                               requires_shipping=requires_shipping, credit=deposit_credit,
                                                note=f"FayFort invoice {record['id']}")
     except Exception as exc:
         db().table("commerce_invoices").update({"status": "failed", "error": str(exc)[:500]}).eq("id", record["id"]).execute()
@@ -524,7 +530,7 @@ def record_order(order: dict) -> dict:
     attributes = _attributes(order)
     invoice = None
     if attributes.get("fayfort_invoice_id"):
-        invoice = one(db().table("commerce_invoices").select("id,member_id,status")
+        invoice = one(db().table("commerce_invoices").select("id,member_id,status,kind,details")
                       .eq("id", attributes["fayfort_invoice_id"]).maybe_single().execute())
     member_id = attributes.get("fayfort_member_id") or (invoice or {}).get("member_id")
     shopify_order_id = shopify.gid("Order", order.get("admin_graphql_api_id") or order.get("id"))
@@ -564,6 +570,10 @@ def record_order(order: dict) -> dict:
     if invoice and order.get("financial_status") in ("paid", "partially_refunded", "refunded") and invoice.get("status") != "paid":
         db().rpc("record_commerce_invoice_paid", {"p_invoice_id": str(invoice["id"]),
                                                   "p_shopify_order_id": shopify_order_id}).execute()
+    if invoice and order.get("financial_status") == "paid" and invoice.get("kind") in ("consultation", "contact_credits"):
+        # Idempotent, so a retried webhook finishes the job if an earlier attempt stopped half way.
+        from app.membership import service as membership
+        membership.invoice_paid(invoice)
     newly_paid = order.get("financial_status") == "paid" and (previous or {}).get("financial_status") != "paid"
     if member_id and attributes.get("fayfort_member_id") and newly_paid:
         product_gids = [li["product_id"] for li in values["line_items"] if li.get("product_id")]

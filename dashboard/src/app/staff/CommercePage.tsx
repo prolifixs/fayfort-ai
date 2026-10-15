@@ -369,6 +369,8 @@ interface InvoiceRow {
   invoice_url: string | null;
   request_id: string | null;
   trend_item_id: string | null;
+  kind?: "order" | "deposit" | "consultation" | "contact_credits";
+  deposit_credit?: number;
 }
 interface ReadyRow {
   request_id: string;
@@ -377,10 +379,100 @@ interface ReadyRow {
   price_amount: number | null;
   currency: string | null;
   can_invoice: boolean;
+  deposit?: { amount: number; currency: string; status: string } | null;
+}
+interface DepositRow {
+  id: string;
+  request_title: string;
+  stage: string;
+  tier: "free" | "standard" | "pro";
+  rate: number;
+  reason: string;
+  expected_total: number | null;
+  expected_currency: string | null;
+  suggested_deposit: number | null;
+  created_at: string;
+}
+const INVOICE_KIND: Record<string, string> = {
+  order: "Order",
+  deposit: "Sourcing deposit",
+  consultation: "Consultation",
+  contact_credits: "Contact credits",
+};
+
+function DepositsDue({ rows, accessToken, onSent, onError }: {
+  rows: DepositRow[];
+  accessToken: string;
+  onSent: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [totals, setTotals] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState("");
+  async function send(row: DepositRow) {
+    const total = Number(totals[row.id] ?? row.expected_total ?? "");
+    if (!Number.isFinite(total) || total <= 0) {
+      onError("Enter the expected total for this request first.");
+      return;
+    }
+    setBusy(row.id);
+    try {
+      await apiRequest("/platform/commerce/invoices/deposit", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ request_id: row.id, expected_total: total, currency: row.expected_currency || "USD" }),
+      });
+      onSent("Deposit invoice sent. It counts toward the member's order when they buy.");
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "The deposit invoice could not be sent.");
+    } finally {
+      setBusy("");
+    }
+  }
+  if (!rows.length) return <p className="empty-copy">No open requests waiting for a deposit.</p>;
+  return (
+    <div className="record-list">
+      {rows.map((row) => {
+        const value = totals[row.id] ?? (row.expected_total != null ? String(row.expected_total) : "");
+        const total = Number(value);
+        const deposit = Number.isFinite(total) && total > 0 ? total * row.rate : null;
+        return (
+          <div className="record" key={row.id}>
+            <div>
+              <strong>{row.request_title}</strong>
+              <small>
+                {row.tier.charAt(0).toUpperCase() + row.tier.slice(1)} plan · {row.stage.replaceAll("_", " ")} ·{" "}
+                {row.rate === 0 ? "no deposit (Pro in good standing)" : `${Math.round(row.rate * 100)}% deposit`}
+                {row.reason === "pro_below_good_standing" ? " · Pro below good standing" : ""}
+              </small>
+            </div>
+            {row.rate > 0 && (
+              <div className="record-actions">
+                <label className="deposit-total">
+                  <span>Expected total ({row.expected_currency || "USD"})</span>
+                  <input
+                    inputMode="decimal"
+                    value={value}
+                    placeholder="0.00"
+                    onChange={(event) => setTotals((current) => ({ ...current, [row.id]: event.target.value }))}
+                  />
+                </label>
+                <button type="button" disabled={busy === row.id || deposit === null} onClick={() => void send(row)}>
+                  {deposit === null ? "Send deposit invoice" : `Send ${money(deposit, row.expected_currency || "USD")} deposit`}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function InvoicesPanel({ accessToken }: { accessToken: string }) {
-  const { data, error, load, setError } = useLoad<{ invoices: InvoiceRow[]; ready_to_invoice: ReadyRow[] }>(
+  const { data, error, load, setError } = useLoad<{
+    invoices: InvoiceRow[];
+    ready_to_invoice: ReadyRow[];
+    deposits_due?: DepositRow[];
+  }>(
     "/platform/commerce/invoices",
     accessToken,
   );
@@ -419,10 +511,29 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
     <section className="control-panel" aria-label="Invoices">
       <div className="panel-heading">
         <h2>Sourcing invoices</h2>
-        <p>When a member picks a sourcing option, invoice it here. Payment moves the request to "Purchase confirmed" automatically.</p>
+        <p>
+          Take the sourcing deposit when a request comes in (Free 50%, Standard 25%, Pro none while buying regularly),
+          then invoice the chosen option. A paid deposit is taken off the order invoice. Payment moves the request to
+          "Purchase confirmed" automatically.
+        </p>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="email-delivery ok" role="status">{notice}</p>}
+      <h3 className="newsletter-history-title">Deposits due</h3>
+      {!data ? (
+        <p role="status">Loading…</p>
+      ) : (
+        <DepositsDue
+          rows={data.deposits_due || []}
+          accessToken={accessToken}
+          onError={(message) => setError(message)}
+          onSent={(message) => {
+            setError("");
+            setNotice(message);
+            void load();
+          }}
+        />
+      )}
       <h3 className="newsletter-history-title">Ready to invoice</h3>
       {!data ? (
         <p role="status">Loading…</p>
@@ -436,6 +547,11 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
                 <strong>{row.request_title}</strong>
                 <small>
                   {row.product_name} · {row.can_invoice ? money(row.price_amount, row.currency || "USD") : "needs a price and currency"}
+                  {row.deposit
+                    ? row.deposit.status === "paid"
+                      ? ` · deposit ${money(row.deposit.amount, row.deposit.currency)} paid, taken off the invoice`
+                      : ` · deposit ${money(row.deposit.amount, row.deposit.currency)} not paid yet`
+                    : ""}
                 </small>
               </div>
               <div className="record-actions">
@@ -457,8 +573,14 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
           <tbody>
             {(data?.invoices || []).map((row) => (
               <tr key={row.id}>
-                <td>{row.title}<small>{row.trend_item_id ? "Pool" : "Request"}</small></td>
-                <td>{money(row.amount, row.currency)}</td>
+                <td>
+                  {row.title}
+                  <small>{row.trend_item_id ? "Pool" : INVOICE_KIND[row.kind || "order"] || "Request"}</small>
+                </td>
+                <td>
+                  {money(row.amount, row.currency)}
+                  {row.deposit_credit ? <small>less {money(row.deposit_credit, row.currency)} deposit</small> : null}
+                </td>
                 <td>{row.status}{row.error ? <small>{row.error}</small> : null}</td>
                 <td>{relativeTime(row.created_at)}</td>
               </tr>

@@ -225,6 +225,26 @@ flowchart LR
   DRAW --> PRZ[100% one-time Shopify code] --> EM[Winner email]
 ```
 
+## 12a. Member plans: deposits, consultations, supplier contacts
+
+**Job:** charge for FayFort's expertise by plan (docs/MEMBERSHIP_PLAN.md). **Rules live in one file:**
+`app/membership/plans.py`. **Fed by:** `member_profiles.member_tier` (Stripe will set it later), sourcing requests,
+paid orders. **Feeds:** Shopify invoices, Operations (consultation chats), the Supplier directory.
+
+```mermaid
+flowchart LR
+  REQ[Sourcing request + expected budget] --> DUE[Staff: Deposits due<br/>Free 50% · Standard 25% · Pro 0 in good standing]
+  DUE --> DEP[Deposit invoice] -->|paid| CR[Final invoice: option price − deposit]
+  BK[Member: Book a consultation] -->|Free $100 · Standard $50| CI[Consultation invoice]
+  BK -->|Pro: 1 included/month| CHAT
+  CI -->|paid webhook| CHAT[Consultation chat + Operations item]
+  DIR[Supplier directory: public half] -->|Unlock| UL{Pro allowance 10/mo?<br/>else credit}
+  PK[Buy 1 for $15 / 5 for $50] -->|paid webhook| CRD[(Contact credits)] --> UL
+  UL --> PRV[Private half: address, stall, contact, WeChat<br/>kept for good in My contacts]
+```
+
+Hotels and restaurants are free. Unlocks run in one database function so a credit can't be spent twice.
+
 ## 12. Social channels (P9)
 
 TikTok Shop and Instagram/Facebook Shop are installed as Shopify sales channels. They read the same Shopify catalog, so
@@ -246,5 +266,6 @@ Orders from those channels appear in Shopify (they are not tied to a FayFort mem
 
 Every new table is read by at least one screen: variants/media (product panel), sync runs and webhook events (Shop
 overview), cart lines (drawer), intent events (rails, Heat), trend items/shares/pools (Find It, rails, trend queue),
-invoices (Ready to pay, Invoices tab), sales (cards, rails), giveaways/entries/winners (rails, Giveaways tab), orders
+invoices (Ready to pay, Invoices tab, Deposits due), consultations (Member tier pop-up), contact unlocks and credits
+(Supplier directory, Member tier pop-up), sales (cards, rails), giveaways/entries/winners (rails, Giveaways tab), orders
 (timeline, Orders tab), audit (append-only record of staff actions).

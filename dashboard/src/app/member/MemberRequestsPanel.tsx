@@ -11,6 +11,7 @@ import {
   requestStageLabels,
 } from "../requests/requestShared";
 import type { MemberCatalog, MemberCatalogProduct } from "./memberShared";
+import { depositNote, useMemberPlan } from "./membershipApi";
 
 export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
   const [requests, setRequests] = useState<MemberRequestRow[]>([]);
@@ -40,6 +41,10 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
   const [pendingRecurringIntentId, setPendingRecurringIntentId] = useState("");
   const [recurringIdempotencyKey, setRecurringIdempotencyKey] = useState(() => crypto.randomUUID());
   const [notice, setNotice] = useState("");
+  const [budget, setBudget] = useState("");
+  const { plan } = useMemberPlan(accessToken);
+  const budgetValue = Number(budget);
+  const expectedTotal = budget.trim() && Number.isFinite(budgetValue) && budgetValue > 0 ? budgetValue : null;
   const load = useCallback(async () => {
     try {
       const result = await apiRequest<{ requests: MemberRequestRow[] }>("/members/requests", accessToken);
@@ -151,6 +156,7 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
         if (file.size > 10 * 1024 * 1024) throw new Error("Screenshots must be 10 MiB or smaller.");
         const params = new URLSearchParams({ request_title: title.trim(), filename: file.name });
         if (description.trim()) params.set("request_description", description.trim());
+        if (expectedTotal) params.set("expected_total", String(expectedTotal));
         await apiRequest(`/members/requests/image?${params}`, accessToken, {
           method: "POST",
           body: file,
@@ -165,11 +171,13 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
             source_type: sourceType,
             source_url: sourceType === "url" ? sourceUrl.trim() : null,
             product_id: sourceType === "saved_product" || sourceType === "catalog_product" ? productId : null,
+            expected_total: expectedTotal,
           }),
         });
       }
       setTitle("");
       setDescription("");
+      setBudget("");
       setSourceUrl("");
       setProductId("");
       setFile(null);
@@ -455,6 +463,19 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
             placeholder="Quantity, specifications, color, size, or destination"
           />
         </label>
+        {!recurring && (
+          <label>
+            Expected budget in USD (optional)
+            <input
+              aria-label="Expected budget"
+              inputMode="decimal"
+              value={budget}
+              onChange={(event) => setBudget(event.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="e.g. 300"
+            />
+            <small className="member-deposit-note">{depositNote(plan, expectedTotal)}</small>
+          </label>
+        )}
         <button
           className="primary-button"
           disabled={

@@ -375,3 +375,47 @@ article.shop-tile,.member-chat-suggestions article.shop-tile{max-width:none;marg
 .visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .member-theme-dialog-backdrop{z-index:1600}
 @media(max-width:560px){.member-plan-compare table{min-width:0;font-size:11px}.member-plan-compare th,.member-plan-compare td{padding:8px 4px}.member-plan-compare thead th{font-size:12px}.member-plan-compare tbody th{width:24%}}
+/* Member plan perks (consultations, contact credits) and the supplier directory. */
+.member-perks{display:grid;gap:10px;margin-top:18px}
+.member-perks-title{margin:4px 0 0;color:#263342;font-size:14px}
+.member-perk{display:grid;gap:10px;padding:14px;border:1px solid #e3ebe8;border-radius:12px;background:#fbfdfc}
+.member-perk.compact{padding:10px 12px}
+.member-perk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.member-perk h3{margin:0;color:#1c2434;font-size:14px}
+.member-perk-head p{margin:3px 0 0;color:#687687;font-size:12px;line-height:1.45}
+.member-perk-price{flex-shrink:0;color:#147964;font-size:14px}
+.member-perk-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #edf0f3}
+.member-perk-row>span{display:grid;gap:2px;min-width:0}
+.member-perk-row strong{overflow:hidden;color:#263342;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.member-perk-row small{color:#687687;font-size:11px}
+.member-perk-form{display:grid;gap:7px}
+.member-perk-form label{color:#354456;font-size:12px;font-weight:600}
+.member-perk-form textarea{width:100%;padding:9px;border:1px solid #dfe3ea;border-radius:8px;font:inherit;font-size:13px;resize:vertical}
+.member-perk-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.member-perk>.secondary-button{justify-self:start}
+.member-perk a.primary-button,.member-perk a.secondary-button{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
+.member-deposit-note{display:block;margin-top:2px;color:#687687;font-size:11px;font-weight:400;line-height:1.45}
+.member-directory{display:grid;gap:12px;align-content:start;padding:18px;overflow:auto}
+.member-directory-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.member-directory-header h2{margin:0;font-size:19px}
+.member-directory-header p{margin:4px 0 0;color:#687687;font-size:12px;line-height:1.5}
+.member-directory-tabs{display:flex;flex-wrap:wrap;gap:6px}
+.member-directory-tabs button{padding:7px 12px;border:1px solid #dfe5ea;border-radius:999px;background:#fff;color:#4c5b6b;font:inherit;font-size:12px;cursor:pointer}
+.member-directory-tabs button[aria-selected="true"]{border-color:#147964;background:#eef7f3;color:#147964;font-weight:650}
+.member-directory-search{display:flex;gap:8px}
+.member-directory-search input{flex:1;min-width:0;min-height:40px;padding:8px 12px;border:1px solid #dfe3ea;border-radius:10px;font:inherit;font-size:13px}
+.member-directory-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.member-directory-list>li{display:grid;gap:8px;padding:14px;border:1px solid #e6eaee;border-radius:12px;background:#fff}
+.member-directory-list>li.unlocked{border-color:#bfe0d3}
+.member-directory-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.member-directory-title strong{color:#1c2434;font-size:14px}
+.member-directory-badge{padding:2px 7px;border-radius:999px;background:#eef7f3;color:#147964;font-size:10px;font-weight:700}
+.member-directory-badge.free{background:#eef3fb;color:#2f5f9e}
+.member-directory-tags{margin:0;color:#526274;font-size:12px}
+.member-directory-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px 14px;margin:0}
+.member-directory-fields dt{color:#7a8794;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.member-directory-fields dd{margin:2px 0 0;color:#263342;font-size:12px;overflow-wrap:anywhere}
+.member-directory-private{display:grid;gap:10px;padding:10px;border-radius:9px;background:#f4faf7}
+.member-directory-locked{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-radius:9px;background:#f6f7f9;color:#687687;font-size:12px}
+.member-directory-notice{margin:0;padding:10px 12px;border-radius:9px;background:#fff7e8;color:#7a5410;font-size:12px}
+@media(max-width:650px){.member-directory{padding:12px 4px}.member-directory-header{flex-direction:column}.member-perk-row{align-items:flex-start;flex-direction:column}}

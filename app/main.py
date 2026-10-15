@@ -795,6 +795,8 @@ from app.commerce.webhooks import create_shopify_webhook_router
 app.include_router(create_member_commerce_router())
 app.include_router(create_admin_commerce_router())
 app.include_router(create_shopify_webhook_router())
+from app.membership.router import create_membership_router
+app.include_router(create_membership_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

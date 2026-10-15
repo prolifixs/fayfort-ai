@@ -56,8 +56,9 @@ describe("authenticated dashboard workspace",()=>{
   expect(await screen.findByText("Your current plan:")).toHaveTextContent("Free");
   for(const plan of ["Free","Standard","Pro"])expect(screen.getByRole("columnheader",{name:new RegExp(plan)})).toBeInTheDocument();
   expect(screen.getByRole("columnheader",{name:/Free\s*Your plan/})).toBeInTheDocument();
-  expect(screen.getByRole("row",{name:/Consultation\s*Full price\s*50% off\s*1 free each month/})).toBeInTheDocument();
-  expect(screen.getByRole("row",{name:/Supplier contacts\s*Pay per contact\s*Pay per contact\s*10 included each month/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Consultation\s*\$100\s*\$50 \(50% off\)\s*1 free each month, then \$50/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Sourcing deposit\s*50% of the product price\s*25% of the product price\s*None while you keep buying/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Supplier contacts\s*\$15 each or 5 for \$50\s*\$15 each or 5 for \$50\s*10 included each month/})).toBeInTheDocument();
   expect(screen.getByText(/counts toward your order/)).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:/subscribe|upgrade|checkout/i})).not.toBeInTheDocument();
  });
@@ -181,7 +182,7 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.change(screen.getByRole("textbox",{name:"Details for your request (optional)"}),{target:{value:"Please confirm available sizes."}});
   fireEvent.click(screen.getByRole("button",{name:"Submit request"}));
   expect(await screen.findByText("Your sourcing request was submitted. Follow progress in Orders & requests.")).toBeInTheDocument();
-  expect(submittedBody).toEqual({request_title:"Sample wrench",request_description:"Please confirm available sizes.",source_type:"catalog_product",source_url:null,product_id:"product-human",conversation_id:"chat-human"});
+  expect(submittedBody).toEqual({request_title:"Sample wrench",request_description:"Please confirm available sizes.",source_type:"catalog_product",source_url:null,product_id:"product-human",conversation_id:"chat-human",expected_total:null});
  });
 
  it("lets the assigned worker reply with active catalog suggestions after review",async()=>{

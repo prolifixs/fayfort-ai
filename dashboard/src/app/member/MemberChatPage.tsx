@@ -21,9 +21,11 @@ import { FindItBlock, HotRails, ProductTile } from "./ShopComponents";
 import { BrowsePanel, CartButton, OrdersPanel, ProductPanel } from "./ShopPanels";
 import { MemberAccountDialogs, type MemberAccountDialogKind } from "./MemberAccountDialogs";
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
+import { depositNote, useMemberPlan } from "./membershipApi";
+import { DirectoryPanel } from "./MemberPerks";
 
-type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product";
-const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product"];
+type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
+const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
 function panelFromUrl(): MemberPanel {
   const panel = new URLSearchParams(window.location.search).get("panel") as MemberPanel | null;
   return panel && memberPanels.includes(panel) ? panel : "chat";
@@ -45,6 +47,11 @@ export function MemberChatPage() {
   const [verified, setVerified] = useState(false);
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [accountDialog, setAccountDialog] = useState<MemberAccountDialogKind | null>(null);
+  const [requestBudget, setRequestBudget] = useState("");
+  const { plan: memberPlan, reload: reloadPlan } = useMemberPlan(verified ? token : null);
+  const requestBudgetValue = Number(requestBudget);
+  const requestExpectedTotal =
+    requestBudget.trim() && Number.isFinite(requestBudgetValue) && requestBudgetValue > 0 ? requestBudgetValue : null;
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const [chats, setChats] = useState<MemberChat[]>([]);
   const [activeChat, setActiveChat] = useState<MemberChat | null>(null);
@@ -482,6 +489,7 @@ export function MemberChatPage() {
           conversation_id: activeChat.id,
         });
         if (requestDetails.trim()) params.set("request_description", requestDetails.trim());
+        if (requestExpectedTotal) params.set("expected_total", String(requestExpectedTotal));
         result = await apiRequest<{ request_id: string; stage: string }>(`/members/requests/image?${params}`, token, {
           method: "POST",
           body: requestSourceFile,
@@ -500,9 +508,11 @@ export function MemberChatPage() {
                 ? requestProduct?.id || null
                 : null,
             conversation_id: activeChat.id,
+            expected_total: requestExpectedTotal,
           }),
         });
       }
+      setRequestBudget("");
       const updated = { ...activeChat, linked_request_id: result.request_id, retention_hold: true };
       setActiveChat(updated);
       setChats((current) => [updated, ...current.filter((chat) => chat.id !== updated.id)]);
@@ -651,6 +661,9 @@ export function MemberChatPage() {
           profile={profile}
           onClose={closeAccountDialog}
           onOpen={setAccountDialog}
+          accessToken={verified ? token : null}
+          plan={memberPlan}
+          onPlanChange={reloadPlan}
           settings={
             <MemberSettingsPanel
               onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
@@ -757,6 +770,14 @@ export function MemberChatPage() {
                 >
                   Orders & requests
                 </button>
+                <button
+                  type="button"
+                  className={activePanel === "directory" ? "active" : ""}
+                  aria-current={activePanel === "directory" ? "page" : undefined}
+                  onClick={() => selectMemberPanel("directory")}
+                >
+                  Supplier directory
+                </button>
               </nav>
             </aside>
             <div
@@ -777,6 +798,7 @@ export function MemberChatPage() {
                 />
               )}
               {activePanel === "requests" && <OrdersPanel accessToken={token} />}
+              {activePanel === "directory" && <DirectoryPanel accessToken={token} onClose={() => selectMemberPanel("chat")} />}
               {activePanel === "saved" && <MemberWorkspacePanel accessToken={token} mode="saved" />}
               {activePanel === "product" && productId && (
                 <ProductPanel
@@ -1010,6 +1032,15 @@ export function MemberChatPage() {
                                 value={requestDetails}
                                 onChange={(event) => setRequestDetails(event.target.value)}
                               />
+                              <label htmlFor="member-request-budget">Expected budget in USD (optional)</label>
+                              <input
+                                id="member-request-budget"
+                                inputMode="decimal"
+                                value={requestBudget}
+                                placeholder="e.g. 300"
+                                onChange={(event) => setRequestBudget(event.target.value.replace(/[^0-9.]/g, ""))}
+                              />
+                              <small className="member-deposit-note">{depositNote(memberPlan, requestExpectedTotal)}</small>
                               <div className="member-chat-request-actions">
                                 <button
                                   type="button"

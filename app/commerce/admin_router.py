@@ -17,6 +17,7 @@ from app.commerce import catalog, service, shopify
 from app.commerce.db import audit, db, one, rows
 from app.config.settings import settings
 from app.directory.identity import trusted_platform_admin
+from app.membership import plans
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,13 @@ class TrendUpdate(BaseModel):
 class InvoiceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
+
+
+class DepositInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    expected_total: float = Field(gt=0, le=1_000_000)
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
 
 
 class PublishInput(BaseModel):
@@ -348,6 +356,76 @@ def create_admin_commerce_router() -> APIRouter:
         audit(admin_id, "pool_invoiced", {"trend_id": str(trend_id), "sent": sent, "failed": len(failed)})
         return {"sent": sent, "failed": failed, "skipped": len(existing)}
 
+    # ---- sourcing deposits (docs/MEMBERSHIP_PLAN.md) ------------------------------------------
+    def _deposit_view(invoice: dict | None) -> dict | None:
+        if not invoice:
+            return None
+        return {"id": invoice["id"], "amount": invoice["amount"], "currency": invoice["currency"],
+                "status": invoice["status"]}
+
+    def _deposits_due(*, exclude: set[str]) -> list[dict]:
+        """Open sourcing requests (not cancelled, not yet paid for) that have no deposit invoice."""
+        since = (service.now_utc() - timedelta(days=120)).isoformat()
+        found = rows(db().table("member_purchase_requests").select(
+            "id,member_id,request_title,expected_total,expected_currency,created_at")
+            .gte("created_at", since).order("created_at", desc=True).limit(200).execute())
+        found = [r for r in found if str(r["id"]) not in exclude]
+        if not found:
+            return []
+        events = rows(db().table("member_request_events").select("request_id,stage,sequence_no")
+                      .in_("request_id", [str(r["id"]) for r in found]).limit(5000).execute())
+        latest: dict[str, tuple[int, str]] = {}
+        for event in events:
+            key = str(event["request_id"])
+            if key not in latest or int(event["sequence_no"]) > latest[key][0]:
+                latest[key] = (int(event["sequence_no"]), str(event["stage"]))
+        due = []
+        terms_cache: dict[str, dict] = {}
+        for request in found:
+            stage = latest.get(str(request["id"]), (0, "submitted"))[1]
+            if stage in ("purchase_confirmed", "in_transit", "delivered", "cancelled"):
+                continue
+            member = str(request["member_id"])
+            terms = terms_cache.setdefault(member, plans.deposit_terms(member))
+            expected = float(request["expected_total"]) if request.get("expected_total") else None
+            due.append({**request, "stage": stage, "tier": terms["tier"], "rate": terms["rate"],
+                        "reason": terms["reason"],
+                        "suggested_deposit": round(expected * terms["rate"], 2) if expected else None})
+        return due[:100]
+
+    @router.post("/platform/commerce/invoices/deposit", status_code=201)
+    def create_deposit_invoice(payload: DepositInput, authorization: str | None = Header(default=None)):
+        admin_id = require_admin(authorization)
+        require_shopify()
+        request = one(db().table("member_purchase_requests").select("id,member_id,request_title")
+                      .eq("id", str(payload.request_id)).maybe_single().execute())
+        if not request:
+            raise HTTPException(status_code=404, detail="Request not found.")
+        quote = plans.deposit_quote(str(request["member_id"]), payload.expected_total)
+        if quote["amount"] <= 0:
+            raise HTTPException(status_code=409, detail="No deposit needed: this Pro member is in good standing.")
+        try:
+            db().table("member_purchase_requests").update({"expected_total": round(payload.expected_total, 2),
+                                                           "expected_currency": payload.currency}) \
+                .eq("id", str(payload.request_id)).execute()
+            invoice = service.send_invoice(
+                member_id=str(request["member_id"]), title=f"Sourcing deposit: {request['request_title']}"[:255],
+                amount=quote["amount"], currency=payload.currency, request_id=str(payload.request_id),
+                actor_id=admin_id, kind="deposit", requires_shipping=False,
+                details={"expected_total": quote["expected_total"], "rate": quote["rate"], "tier": quote["tier"]})
+        except shopify.ShopifyError as exc:
+            raise shopify_failure(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            if "duplicate" in str(exc).casefold() or "unique" in str(exc).casefold():
+                raise HTTPException(status_code=409, detail="This request already has a deposit invoice.") from exc
+            logger.exception("Could not send deposit invoice")
+            raise HTTPException(status_code=503, detail="The deposit invoice could not be sent.") from exc
+        audit(admin_id, "deposit_sent", {"request_id": str(payload.request_id), "invoice_id": str(invoice["id"]),
+                                         "amount": quote["amount"], "rate": quote["rate"]})
+        return {"invoice": invoice}
+
     # ---- invoices for sourcing requests ------------------------------------------------------
     @router.get("/platform/commerce/invoices")
     def invoices(authorization: str | None = Header(default=None)):
@@ -357,15 +435,19 @@ def create_admin_commerce_router() -> APIRouter:
             selected = rows(db().table("operations_sourcing_member_options").select(
                 "id,request_id,product_name,product_url,price_amount,currency,selected_at")
                 .eq("status", "selected").order("selected_at", desc=True).limit(200).execute())
-            invoiced = {str(i["request_id"]) for i in sent if i.get("request_id") and i["status"] in ("draft", "sent", "paid")}
+            live = [i for i in sent if i.get("request_id") and i["status"] in ("draft", "sent", "paid")]
+            invoiced = {str(i["request_id"]) for i in live if i.get("kind", "order") == "order"}
+            deposits = {str(i["request_id"]): i for i in live if i.get("kind") == "deposit"}
             request_ids = [str(o["request_id"]) for o in selected if str(o["request_id"]) not in invoiced]
             requests = {str(r["id"]): r for r in rows(db().table("member_purchase_requests").select(
                 "id,member_id,request_title").in_("id", request_ids).execute())} if request_ids else {}
             ready = [{**option, "request_title": requests[str(option["request_id"])]["request_title"],
                       "member_id": requests[str(option["request_id"])]["member_id"],
-                      "can_invoice": bool(option.get("price_amount") and option.get("currency"))}
+                      "can_invoice": bool(option.get("price_amount") and option.get("currency")),
+                      "deposit": _deposit_view(deposits.get(str(option["request_id"])))}
                      for option in selected if str(option["request_id"]) in requests]
-            return {"invoices": sent, "ready_to_invoice": ready}
+            return {"invoices": sent, "ready_to_invoice": ready,
+                    "deposits_due": _deposits_due(exclude=invoiced | set(deposits))}
         except Exception as exc:
             logger.exception("Could not load invoices")
             raise HTTPException(status_code=503, detail="Invoices could not be loaded.") from exc
@@ -382,11 +464,17 @@ def create_admin_commerce_router() -> APIRouter:
                      .eq("request_id", str(payload.request_id)).eq("status", "selected").maybe_single().execute())
         if not option or not option.get("price_amount") or not option.get("currency"):
             raise HTTPException(status_code=409, detail="The member's chosen option needs a price and currency first.")
+        deposit = one(db().table("commerce_invoices").select("amount,currency").eq("request_id", str(payload.request_id))
+                      .eq("kind", "deposit").eq("status", "paid").limit(1).execute())
+        credit = 0.0
+        if deposit and deposit.get("currency") == option["currency"]:
+            credit = min(float(deposit["amount"]), float(option["price_amount"]))  # a deposit counts toward the order
         try:
             invoice = service.send_invoice(member_id=str(request["member_id"]),
                                            title=option.get("product_name") or request["request_title"],
                                            amount=float(option["price_amount"]), currency=option["currency"],
-                                           request_id=str(payload.request_id), actor_id=admin_id)
+                                           request_id=str(payload.request_id), actor_id=admin_id,
+                                           deposit_credit=credit)
         except shopify.ShopifyError as exc:
             raise shopify_failure(exc) from exc
         except ValueError as exc:

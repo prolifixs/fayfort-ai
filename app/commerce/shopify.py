@@ -367,19 +367,26 @@ def delete_discount(discount_gid: str, *, automatic: bool, client: httpx.Client 
 # Draft-order invoices (sourcing quotes and pools)
 # ---------------------------------------------------------------------------------------------
 def create_invoice(*, invoice_id: str, email: str, title: str, unit_price: float, currency: str, quantity: int,
-                   note: str, client: httpx.Client | None = None) -> tuple[str, str]:
+                   note: str, kind: str = "order", requires_shipping: bool = True, credit: float = 0.0,
+                   credit_title: str = "Sourcing deposit paid", client: httpx.Client | None = None) -> tuple[str, str]:
+    """Create and email a Shopify draft-order invoice. `credit` is taken off the total (a paid deposit)."""
+    draft_input: dict[str, Any] = {
+        "email": email,
+        "note": note,
+        "tags": ["fayfort-invoice", f"fayfort-{kind.replace('_', '-')}"],
+        "presentmentCurrencyCode": currency,
+        "customAttributes": [{"key": "fayfort_invoice_id", "value": invoice_id},
+                             {"key": "fayfort_invoice_kind", "value": kind}],
+        "lineItems": [{"title": title[:255], "quantity": quantity, "requiresShipping": requires_shipping,
+                       "taxable": True, "originalUnitPrice": f"{unit_price:.2f}"}],
+    }
+    if credit > 0:
+        draft_input["appliedDiscount"] = {"title": credit_title[:255], "description": credit_title[:255],
+                                          "value": round(credit, 2), "valueType": "FIXED_AMOUNT"}
     data = admin_graphql(
         "mutation Draft($input: DraftOrderInput!) { draftOrderCreate(input: $input) { "
         "draftOrder { id invoiceUrl } userErrors { field message } } }",
-        {"input": {
-            "email": email,
-            "note": note,
-            "tags": ["fayfort-invoice"],
-            "presentmentCurrencyCode": currency,
-            "customAttributes": [{"key": "fayfort_invoice_id", "value": invoice_id}],
-            "lineItems": [{"title": title[:255], "quantity": quantity, "requiresShipping": True, "taxable": True,
-                           "originalUnitPrice": f"{unit_price:.2f}"}],
-        }}, client=client)
+        {"input": draft_input}, client=client)
     payload = data.get("draftOrderCreate") or {}
     problem = user_errors(payload)
     if problem:

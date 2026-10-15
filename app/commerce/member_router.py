@@ -288,7 +288,8 @@ def create_member_commerce_router() -> APIRouter:
                 "tracking,status_url,placed_at,invoice_id").eq("member_id", member_id)
                 .order("placed_at", desc=True).limit(100).execute())
             invoices = rows(db().table("commerce_invoices").select(
-                "id,request_id,trend_item_id,title,amount,currency,quantity,invoice_url,status,sent_at,paid_at,created_at")
+                "id,request_id,trend_item_id,title,amount,currency,quantity,invoice_url,status,sent_at,paid_at,created_at,"
+                "kind,deposit_credit")
                 .eq("member_id", member_id).in_("status", ["sent", "paid"]).order("created_at", desc=True)
                 .limit(100).execute())
             wants = rows(db().table("commerce_pool_members").select("trend_item_id,request_id,joined_at")

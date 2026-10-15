@@ -1,6 +1,8 @@
 import { ReactNode, useEffect, useState } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { formatMemberTier } from "./memberShared";
+import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
+import type { MemberPlanSummary } from "./membershipApi";
 
 export type MemberAccountDialogKind = "points" | "tier" | "account" | "settings";
 
@@ -65,12 +67,13 @@ export function MemberDialog({
 const PLAN_ROWS: { label: string; free: string; standard: string; pro: string }[] = [
   {
     label: "Sourcing deposit",
-    free: "Deposit on every request",
-    standard: "Half the Free deposit",
-    pro: "No deposit while you keep buying",
+    free: "50% of the product price",
+    standard: "25% of the product price",
+    pro: "None while you keep buying",
   },
-  { label: "Consultation", free: "Full price", standard: "50% off", pro: "1 free each month" },
-  { label: "Supplier contacts", free: "Pay per contact", standard: "Pay per contact", pro: "10 included each month" },
+  { label: "Consultation", free: "$100", standard: "$50 (50% off)", pro: "1 free each month, then $50" },
+  { label: "Supplier contacts", free: "$15 each or 5 for $50", standard: "$15 each or 5 for $50", pro: "10 included each month" },
+  { label: "Hotels & restaurants", free: "Free", standard: "Free", pro: "Free" },
   { label: "Premium themes", free: "—", standard: "Included", pro: "Included" },
 ];
 
@@ -129,7 +132,17 @@ function PointsDialog({ profile }: { profile: Profile }) {
   );
 }
 
-function TierDialog({ profile }: { profile: Profile }) {
+function TierDialog({
+  profile,
+  accessToken,
+  plan,
+  onPlanChange,
+}: {
+  profile: Profile;
+  accessToken?: string | null;
+  plan?: MemberPlanSummary | null;
+  onPlanChange?: () => void;
+}) {
   const rank = Math.min(5, Math.max(1, Number(profile?.rank_level) || 1));
   const subrank = Math.min(5, Math.max(1, Number(profile?.subrank) || 1));
   const tier = formatMemberTier(profile?.member_tier);
@@ -168,6 +181,13 @@ function TierDialog({ profile }: { profile: Profile }) {
         Free plan.
       </p>
       <MemberPlanComparison currentTier={tier} />
+      {accessToken && (
+        <div className="member-perks">
+          <h3 className="member-perks-title">Your perks</h3>
+          <ConsultationCard accessToken={accessToken} plan={plan || null} onChange={() => onPlanChange?.()} />
+          <ContactCreditsCard accessToken={accessToken} status={plan?.contacts} />
+        </div>
+      )}
     </>
   );
 }
@@ -239,11 +259,17 @@ export function MemberAccountDialogs({
   onClose,
   onOpen,
   settings,
+  accessToken,
+  plan,
+  onPlanChange,
 }: {
   kind: MemberAccountDialogKind | null;
   profile: Profile;
   onClose: () => void;
   onOpen: (kind: MemberAccountDialogKind) => void;
+  accessToken?: string | null;
+  plan?: MemberPlanSummary | null;
+  onPlanChange?: () => void;
   /** The settings panel, passed in so this file doesn't import the account pages (avoids a cycle). */
   settings: ReactNode;
 }) {
@@ -257,7 +283,7 @@ export function MemberAccountDialogs({
   if (kind === "tier")
     return (
       <MemberDialog eyebrow="MEMBERSHIP" title="Member tier" onClose={onClose} wide>
-        <TierDialog profile={profile} />
+        <TierDialog profile={profile} accessToken={accessToken} plan={plan} onPlanChange={onPlanChange} />
       </MemberDialog>
     );
   if (kind === "account")
