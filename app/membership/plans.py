@@ -42,10 +42,28 @@ def month_start(now: datetime | None = None) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+RANK_FOR_STANDARD_RATES = 4  # Free members at this rank or higher borrow Standard rates (ranks.py)
+
+
+def member_standing(member_id: str) -> tuple[str, int]:
+    """(plan, rank level)."""
+    found = rows(db().table("member_profiles").select("member_tier,rank_level").eq("user_id", member_id)
+                 .limit(1).execute())
+    profile = found[0] if found else {}
+    tier = profile.get("member_tier") or "free"
+    return (tier if tier in TIERS else "free"), int(profile.get("rank_level") or 1)
+
+
 def member_tier(member_id: str) -> str:
-    found = rows(db().table("member_profiles").select("member_tier").eq("user_id", member_id).limit(1).execute())
-    tier = (found[0].get("member_tier") if found else None) or "free"
-    return tier if tier in TIERS else "free"
+    return member_standing(member_id)[0]
+
+
+def rate_tier(member_id: str) -> tuple[str, str]:
+    """(plan, plan whose rates apply). A Free member at rank 4+ pays Standard rates while the rank holds."""
+    tier, rank = member_standing(member_id)
+    if tier == "free" and rank >= RANK_FOR_STANDARD_RATES:
+        return tier, "standard"
+    return tier, tier
 
 
 def good_standing(member_id: str, now: datetime | None = None) -> dict[str, Any]:
@@ -62,7 +80,9 @@ def good_standing(member_id: str, now: datetime | None = None) -> dict[str, Any]
 
 
 def deposit_terms(member_id: str, now: datetime | None = None) -> dict[str, Any]:
-    tier = member_tier(member_id)
+    tier, rates = rate_tier(member_id)
+    if rates != tier:
+        return {"tier": tier, "rate": DEPOSIT_RATE[rates], "reason": "rank_standard_rate"}
     if tier == "pro":
         standing = good_standing(member_id, now)
         if standing["ok"]:
@@ -77,15 +97,15 @@ def deposit_quote(member_id: str, expected_total: float, now: datetime | None = 
 
 
 def consultation_quote(member_id: str, now: datetime | None = None) -> dict[str, Any]:
-    tier = member_tier(member_id)
+    tier, rates = rate_tier(member_id)
     used = 0
     if tier == "pro":
         used = len(rows(db().table("member_consultations").select("id").eq("member_id", member_id)
                         .eq("included", True).neq("status", "cancelled")
                         .gte("created_at", month_start(now).isoformat()).execute()))
     included_left = max(PRO_INCLUDED_CONSULTATIONS - used, 0) if tier == "pro" else 0
-    price = 0.0 if included_left else CONSULTATION_PRICE[tier]
-    return {"tier": tier, "price": price, "currency": CURRENCY, "included": bool(included_left),
+    price = 0.0 if included_left else CONSULTATION_PRICE[rates]
+    return {"tier": tier, "rank_rate": rates != tier, "price": price, "currency": CURRENCY, "included": bool(included_left),
             "included_left": included_left, "full_price": CONSULTATION_PRICE["free"]}
 
 

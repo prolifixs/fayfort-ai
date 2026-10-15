@@ -86,3 +86,45 @@ export function depositNote(plan: MemberPlanSummary | null, expectedTotal?: numb
   const amount = expectedTotal && expectedTotal > 0 ? ` (about ${formatMoney(expectedTotal * rate)})` : "";
   return `Your plan pays a ${percent} deposit${amount} once FayFort accepts the request. It counts toward your order; it isn't refunded if you don't buy.`;
 }
+
+export const RANK_NAMES: Record<number, string> = { 1: "Browser", 2: "Scout", 3: "Hunter", 4: "Insider", 5: "Founder's Circle" };
+
+/** Rank and points as the API reports them (app/membership/ranks.py). */
+export type RankStatus = {
+  rank: number;
+  subrank: number;
+  name: string;
+  step: number;
+  score: number;
+  balance: number;
+  window_days: number;
+  current_at: number;
+  next: { rank: number; subrank: number; name: string; at: number } | null;
+  grace: { below: boolean; ends_at: string | null; days: number };
+  ranks: { rank: number; name: string; at: number }[];
+  earn: { kind: string; label: string; points: string }[];
+  rewards: { id: "contact_credit"; label: string; cost: number; credits: number }[];
+  perks: { rank: number; label: string; active: boolean }[];
+  recent: { kind: string; label: string; points: number; occurred_at: string }[];
+};
+
+export function useMemberRank(accessToken: string | null | undefined) {
+  const [rank, setRank] = useState<RankStatus | null>(null);
+  const [error, setError] = useState("");
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!accessToken) return;
+    let mounted = true;
+    apiRequest<RankStatus>("/members/rank", accessToken)
+      .then((result) => {
+        if (!mounted) return;
+        setRank(result && typeof result.score === "number" && Array.isArray(result.earn) ? result : null);
+        setError("");
+      })
+      .catch((reason) => mounted && setError(reason instanceof Error ? reason.message : "Your rank could not be loaded."));
+    return () => {
+      mounted = false;
+    };
+  }, [accessToken, version]);
+  return { rank, setRank, error, reload: () => setVersion((v) => v + 1) };
+}

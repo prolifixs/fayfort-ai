@@ -583,6 +583,9 @@ def record_order(order: dict) -> dict:
             record_events(member_id, "shopify", [{"event_type": "checkout", "product_id": str(p["id"]),
                                                   "price": p.get("price_min")} for p in product_rows])
         db().table("commerce_cart_lines").delete().eq("member_id", member_id).execute()
+    if member_id and (newly_paid or order.get("financial_status") in ("refunded", "voided") or order.get("cancelled_at")):
+        from app.membership import ranks  # rank and points follow paid (and refunded) orders
+        ranks.safe_recompute(member_id)
     return values
 
 

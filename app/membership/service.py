@@ -84,6 +84,8 @@ def start_consultation(consultation: dict) -> dict:
         }).eq("id", item["id"]).execute()
     values = {"status": "requested", "conversation_id": conversation["id"], "updated_at": plans.now_utc().isoformat()}
     db().table("member_consultations").update(values).eq("id", consultation["id"]).execute()
+    from app.membership import ranks
+    ranks.safe_recompute(member_id)
     commerce.queue_email(member_id, category="notifications", template="commerce_consultation_booked",
                          title="Your consultation is booked",
                          body="A FayFort specialist will reply in your consultation chat to agree a time.",

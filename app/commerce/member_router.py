@@ -327,6 +327,8 @@ def create_member_commerce_router() -> APIRouter:
             db().table("commerce_giveaway_entries").upsert({"giveaway_id": str(giveaway_id), "member_id": member_id},
                                                            on_conflict="giveaway_id,member_id",
                                                            ignore_duplicates=True).execute()
+            from app.membership import ranks
+            ranks.safe_recompute(member_id)
             return {"giveaway_id": str(giveaway_id), "entered": True}
         except HTTPException:
             raise

@@ -21,7 +21,7 @@ import { FindItBlock, HotRails, ProductTile } from "./ShopComponents";
 import { BrowsePanel, CartButton, OrdersPanel, ProductPanel } from "./ShopPanels";
 import { MemberAccountDialogs, type MemberAccountDialogKind } from "./MemberAccountDialogs";
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
-import { depositNote, useMemberPlan } from "./membershipApi";
+import { RANK_NAMES, depositNote, useMemberPlan } from "./membershipApi";
 import { DirectoryPanel } from "./MemberPerks";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
@@ -642,7 +642,8 @@ export function MemberChatPage() {
                   <button type="button" role="menuitem" onClick={() => openAccountDialog("tier")}>
                     <span>Member tier</span>
                     <strong>
-                      Rank {Number(profile?.rank_level) || 1} · Subrank {Number(profile?.subrank) || 1}
+                      {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} ·{" "}
+                      {Number(profile?.subrank) || 1}
                     </strong>
                   </button>
                   <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>

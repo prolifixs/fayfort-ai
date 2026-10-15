@@ -419,3 +419,23 @@ article.shop-tile,.member-chat-suggestions article.shop-tile{max-width:none;marg
 .member-directory-locked{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-radius:9px;background:#f6f7f9;color:#687687;font-size:12px}
 .member-directory-notice{margin:0;padding:10px 12px;border-radius:9px;background:#fff7e8;color:#7a5410;font-size:12px}
 @media(max-width:650px){.member-directory{padding:12px 4px}.member-directory-header{flex-direction:column}.member-perk-row{align-items:flex-start;flex-direction:column}}
+/* Rank and points pop-ups. */
+.member-rank-next{display:grid;gap:6px;margin:10px 0 2px}
+.member-rank-next>p{margin:0;color:#526274;font-size:12px}
+.member-rank-next>p strong{color:#1c2434}
+.member-rank-bar{height:6px;overflow:hidden;border-radius:3px;background:#e7ecef}
+.member-rank-bar>i{display:block;height:100%;background:#2aa383}
+.member-rank-perks{display:grid;gap:6px;margin:10px 0 0;padding:0;list-style:none}
+.member-rank-perks li{display:grid;gap:2px;padding:9px 11px;border:1px dashed #d8e1e6;border-radius:9px;color:#687687;font-size:12px}
+.member-rank-perks li strong{color:#7a8794;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.member-rank-perks li.active{border-style:solid;border-color:#bfe0d3;background:#f4faf7;color:#263342}
+.member-rank-perks li.active strong{color:#147964}
+.member-reward{border-top:0;padding:10px 12px;border:1px solid #e3ebe8;border-radius:10px;background:#fbfdfc}
+.member-earn-table{width:100%;border-collapse:collapse;font-size:12px}
+.member-earn-table th,.member-earn-table td{padding:8px 4px;border-bottom:1px solid #edf0f3;text-align:left}
+.member-earn-table th{color:#354456;font-weight:500}
+.member-earn-table td{color:#147964;font-weight:650;text-align:right;white-space:nowrap}
+.member-activity-list{display:grid;margin:6px 0 0;padding:0;list-style:none}
+.member-activity-list li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f4;color:#526274;font-size:12px}
+.member-activity-list strong{color:#147964}
+.member-activity-list strong.spent{color:#a05a12}

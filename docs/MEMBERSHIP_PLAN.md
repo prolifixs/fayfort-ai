@@ -1,7 +1,7 @@
 # FayFort Membership Plan (plans, sourcing deposits, consultations, contacts, member rank)
 
-Status (2026-10-16): plan rules, sourcing deposits, consultations and the Supplier directory with contact unlocks are
-**built**. Plan billing (Stripe) and the rank engine are **not built yet**; until Stripe is connected a member's plan is
+Status (2026-10-16): plan rules, sourcing deposits, consultations, the Supplier directory with contact unlocks, and
+member ranks and points are **built**. Plan billing (Stripe) is **not built yet**; until Stripe is connected a member's plan is
 whatever `member_profiles.member_tier` says. All prices live in one file: `app/membership/plans.py`.
 
 ## 1. Plans (decided 2026-10-15)
@@ -61,22 +61,48 @@ whatever `member_profiles.member_tier` says. All prices live in one file: `app/m
   3. **Sourcing in progress is tied to an active plan.** If a member cancels during a free sourcing job, the deposit
      applies to that job. *(Needs Stripe.)*
 
-## 6. Member rank (the gamification layer, not built yet)
+## 6. Member ranks and points (built 2026-10-16)
 
-Rank 1–5 with subranks 1–5 (already on `member_profiles`) becomes the **good-standing score**.
+Activity becomes ledger rows (`member_activity_events`). Two numbers come out of it:
 
-- **Two separate numbers:** the status score sets rank and can't be spent; points (`points_balance`) are a currency.
-- **Raises rank:** confirmed purchases, sourcing requests that turn into purchases, continuous months subscribed, actions
-  that help others (shares that bring in buyers, filling group-buy pools, referrals that buy). Chat messages and repeated
-  taps don't count; daily caps apply.
-- **Rolling 90 days**, with a grace period before dropping one subrank.
-- **Free members at high rank** borrow Standard-level rates (lower deposit) while the rank holds.
-- **Paid members** keep their best perks only above a minimum rank (the good-standing rule).
+- **Status score** = points from the **last 90 days**. It sets the rank and can't be spent.
+- **Points balance** = everything earned minus what was spent. Spendable.
+
+| Activity | Points (score and balance) |
+| --- | --- |
+| Paid order (store checkout or invoice) | 50 + 1 per $1, max 250 per order |
+| Sourcing request that ends in a purchase (paid order invoice) | +100 |
+| Paid sourcing deposit | +20 |
+| Group buy you joined gets paid | +50 |
+| A link you shared brings a buyer (another member pays the group buy) | +30 each, max 10 per link |
+| Consultation booked | +30 |
+| Giveaway entered | +5 |
+
+Chatting, browsing and taps don't count. A refunded or cancelled order drops back to 0.
+
+| Rank | Name | Score to enter | Subranks |
+| --- | --- | --- | --- |
+| 1 | Browser | 0 | 5 equal steps up to 250 |
+| 2 | Scout | 250 | … up to 750 |
+| 3 | Hunter | 750 | … up to 1,750 |
+| 4 | Insider | 1,750 | … up to 3,500 |
+| 5 | Founder's Circle | 3,500 | … up to 6,000 |
+
+- **Up:** immediately, as soon as the score qualifies.
+- **Down:** a **30-day grace period** starts when the score falls below the current rank. After it, the member drops
+  **one subrank**, and another after each further 30 days while still below. Never straight to the bottom.
+- **Rank perk:** **Free members at Insider (rank 4) or higher pay Standard rates** (25% deposit, $50 consultations) while
+  the rank holds. Paid members keep Pro's deposit-free sourcing through the good-standing rule (section 2).
+- **Spend points:** 500 points = 1 supplier contact credit (Virtual points pop-up).
+- Ranks refresh after every paid/refunded order, giveaway entry and consultation, and for all active members every
+  6 hours (`MEMBER_RANKS_ENABLED`). Placeholder ranks from before the engine were reset to Browser 1.
+- Later (with Stripe): continuous months subscribed can add to the score; referrals once a referral link exists.
 
 ## 7. Member account menu (built 2026-10-15)
 
-The account icon (top right of the member chat) opens four pop-ups: **Virtual points**, **Member tier** (rank progress, plan
-comparison, Your perks: consultations and contact credits), **Account details** and **Settings**. Each closes with ×,
+The account icon (top right of the member chat) opens four pop-ups: **Virtual points** (balance, rewards, how to earn,
+recent activity), **Member tier** (rank name, progress to the next subrank, grace warning, rank perks, plan comparison,
+Your perks: consultations and contact credits), **Account details** and **Settings**. Each closes with ×,
 Close, Escape or a click outside.
 
 ## 8. Where things are
@@ -86,8 +112,9 @@ Close, Escape or a click outside.
 | Prices and rules | `app/membership/plans.py` |
 | Consultations, credit packs, paid-invoice handling | `app/membership/service.py` |
 | Directory search and unlocks | `app/membership/directory.py` |
-| Member API (`/members/plan`, `/members/consultations`, `/members/directory…`, `/members/contact-credits`) | `app/membership/router.py` |
+| Ranks, points, rewards, 6-hourly refresh | `app/membership/ranks.py` |
+| Member API (`/members/plan`, `/members/rank`, `/members/points/redeem`, `/members/consultations`, `/members/directory…`, `/members/contact-credits`) | `app/membership/router.py` |
 | Deposits due / deposit invoice / deposit credit | `app/commerce/admin_router.py` |
-| Database | `supabase/migrations/20261016100000_membership_plans.sql` |
+| Database | `supabase/migrations/20261016100000_membership_plans.sql`, `20261016200000_member_ranks.sql` |
 | Member UI | `dashboard/src/app/member/MemberPerks.tsx`, `MemberAccountDialogs.tsx`, `membershipApi.ts` |
 | Staff UI | `dashboard/src/app/staff/CommercePage.tsx` (Invoices tab) |

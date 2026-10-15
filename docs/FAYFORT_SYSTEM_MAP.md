@@ -245,6 +245,16 @@ flowchart LR
 
 Hotels and restaurants are free. Unlocks run in one database function so a credit can't be spent twice.
 
+**Ranks and points** (`app/membership/ranks.py`):
+
+```mermaid
+flowchart LR
+  ACT[Paid orders · sourcing purchases · deposits · group buys<br/>shares that bring buyers · consultations · giveaway entries] --> LED[(member_activity_events)]
+  LED -->|last 90 days| SC[Status score] --> RK[Rank 1–5 · subrank 1–5<br/>up at once, down 1 step after 30-day grace]
+  LED -->|earned − spent| PB[Points balance] -->|500| CC[Contact credit]
+  RK -->|Insider+ on Free| STD[Standard rates: 25% deposit, $50 consultation]
+```
+
 ## 12. Social channels (P9)
 
 TikTok Shop and Instagram/Facebook Shop are installed as Shopify sales channels. They read the same Shopify catalog, so

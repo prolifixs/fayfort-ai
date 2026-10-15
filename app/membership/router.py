@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.commerce import shopify
 from app.commerce.member_router import _Limiter, verified_member
-from app.membership import directory, plans, service
+from app.membership import directory, plans, ranks, service
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,11 @@ class UnlockInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     record_type: RecordType
     record_id: UUID
+
+
+class RedeemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reward: Literal["contact_credit"]
 
 
 class CreditInput(BaseModel):
@@ -71,6 +76,26 @@ def create_membership_router() -> APIRouter:
             return plans.plan_summary(member_id)
         except Exception as exc:
             raise _fail("Your plan could not be loaded.", exc) from exc
+
+    # ---- rank and points ---------------------------------------------------------------------
+    @router.get("/members/rank")
+    def rank(authorization: str | None = Header(default=None)):
+        member_id = verified_member(authorization)
+        try:
+            return ranks.status(member_id)
+        except Exception as exc:
+            raise _fail("Your rank could not be loaded.", exc) from exc
+
+    @router.post("/members/points/redeem")
+    def redeem(payload: RedeemInput, authorization: str | None = Header(default=None)):
+        member_id = verified_member(authorization)
+        writes.check(member_id)
+        try:
+            return ranks.redeem(member_id, payload.reward)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            raise _fail("Your points could not be spent.", exc) from exc
 
     # ---- consultations -----------------------------------------------------------------------
     @router.get("/members/consultations")

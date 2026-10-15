@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # the Supabase Free project is never paused for inactivity while real traffic is low.
     DATABASE_KEEPALIVE_ENABLED: bool = True
     DATABASE_KEEPALIVE_INTERVAL_SECONDS: int = 21600
+    # Member ranks (app/membership/ranks.py): refresh every active member's 90-day score every 6 hours.
+    MEMBER_RANKS_ENABLED: bool = True
     # Products and commerce plan (P0). Shopify is the commerce engine; FayFort reads its catalog,
     # sends checkouts and invoices to it, and receives its webhooks. Nothing calls Shopify until
     # SHOPIFY_STORE_DOMAIN and Admin API credentials are set.

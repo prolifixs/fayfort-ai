@@ -2,7 +2,8 @@ import { ReactNode, useEffect, useState } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { formatMemberTier } from "./memberShared";
 import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
-import type { MemberPlanSummary } from "./membershipApi";
+import { apiRequest } from "../../lib/api";
+import { type MemberPlanSummary, RANK_NAMES, type RankStatus, useMemberRank } from "./membershipApi";
 
 export type MemberAccountDialogKind = "points" | "tier" | "account" | "settings";
 
@@ -115,19 +116,91 @@ export function MemberPlanComparison({ currentTier }: { currentTier: string }) {
   );
 }
 
-function PointsDialog({ profile }: { profile: Profile }) {
-  const balance = Number(profile?.points_balance ?? 0) || 0;
+function PointsDialog({
+  profile,
+  accessToken,
+  onChange,
+}: {
+  profile: Profile;
+  accessToken?: string | null;
+  onChange?: () => void;
+}) {
+  const { rank, setRank, error } = useMemberRank(accessToken);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [problem, setProblem] = useState("");
+  const balance = rank ? rank.balance : Number(profile?.points_balance ?? 0) || 0;
+  async function redeem(reward: RankStatus["rewards"][number]) {
+    if (!accessToken) return;
+    setBusy(true);
+    setProblem("");
+    setNotice("");
+    try {
+      const next = await apiRequest<RankStatus>("/members/points/redeem", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ reward: reward.id }),
+      });
+      setRank(next);
+      setNotice(`Done: ${reward.label} added. Use it in the Supplier directory.`);
+      onChange?.();
+    } catch (reason) {
+      setProblem(reason instanceof Error ? reason.message : "Your points could not be spent.");
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <div className="member-dialog-stat">
         <small>Your balance</small>
         <strong>{new Intl.NumberFormat().format(balance)}</strong>
-        <span>virtual points</span>
+        <span>virtual points to spend</span>
       </div>
-      <p className="member-chat-dialog-copy">
-        Points are FayFort’s reward currency. You’ll earn them for purchases, sourcing requests that turn into orders,
-        and helping other members, and spend them on giveaway entries and perks. Earning opens with member ranks.
-      </p>
+      {rank?.rewards.map((reward) => (
+        <div className="member-perk-row member-reward" key={reward.id}>
+          <span>
+            <strong>{reward.label}</strong>
+            <small>{new Intl.NumberFormat().format(reward.cost)} points</small>
+          </span>
+          <button type="button" className="primary-button" disabled={busy || balance < reward.cost} onClick={() => void redeem(reward)}>
+            {balance < reward.cost ? `${new Intl.NumberFormat().format(reward.cost - balance)} to go` : "Redeem"}
+          </button>
+        </div>
+      ))}
+      {notice && <p role="status" className="member-deposit-note">{notice}</p>}
+      {(problem || error) && <p className="form-error" role="alert">{problem || error}</p>}
+      {rank && (
+        <>
+          <h3 className="member-perks-title">How to earn</h3>
+          <table className="member-earn-table">
+            <tbody>
+              {rank.earn.map((item) => (
+                <tr key={item.kind}>
+                  <th scope="row">{item.label}</th>
+                  <td>{item.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="member-plan-note">Chatting and browsing don't earn points. The same points raise your rank.</p>
+          {rank.recent.length > 0 && (
+            <>
+              <h3 className="member-perks-title">Recent activity</h3>
+              <ul className="member-activity-list">
+                {rank.recent.map((item, index) => (
+                  <li key={index}>
+                    <span>{item.label}</span>
+                    <strong className={item.points < 0 ? "spent" : undefined}>
+                      {item.points > 0 ? "+" : ""}
+                      {item.points}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -143,17 +216,23 @@ function TierDialog({
   plan?: MemberPlanSummary | null;
   onPlanChange?: () => void;
 }) {
-  const rank = Math.min(5, Math.max(1, Number(profile?.rank_level) || 1));
-  const subrank = Math.min(5, Math.max(1, Number(profile?.subrank) || 1));
+  const { rank: status } = useMemberRank(accessToken);
+  const rank = status?.rank ?? Math.min(5, Math.max(1, Number(profile?.rank_level) || 1));
+  const subrank = status?.subrank ?? Math.min(5, Math.max(1, Number(profile?.subrank) || 1));
   const tier = formatMemberTier(profile?.member_tier);
   const step = (rank - 1) * 5 + subrank;
+  const toNext = status?.next ? Math.max(status.next.at - status.score, 0) : 0;
+  const stepProgress =
+    status?.next && status.next.at > status.current_at
+      ? Math.min(100, Math.max(0, ((status.score - status.current_at) / (status.next.at - status.current_at)) * 100))
+      : 100;
   return (
     <>
       <div className="member-dialog-rank">
         <div>
-          <small>Rank</small>
+          <small>Rank {rank}</small>
           <strong>
-            {rank}
+            {status?.name || RANK_NAMES[rank]}
             <span> · Subrank {subrank}</span>
           </strong>
         </div>
@@ -171,15 +250,47 @@ function TierDialog({
         aria-valuenow={step}
       >
         {[1, 2, 3, 4, 5].map((level) => (
-          <span key={level} className={level < rank ? "done" : level === rank ? "now" : undefined}>
+          <span key={level} className={level < rank ? "done" : level === rank ? "now" : undefined} title={RANK_NAMES[level]}>
             <i style={{ width: level < rank ? "100%" : level === rank ? `${(subrank / 5) * 100}%` : "0%" }} />
           </span>
         ))}
       </div>
+      {status && (
+        <div className="member-rank-next">
+          <p>
+            <strong>{new Intl.NumberFormat().format(status.score)}</strong> points in the last {status.window_days} days
+            {status.next
+              ? ` · ${new Intl.NumberFormat().format(toNext)} more for ${status.next.name} ${status.next.subrank}`
+              : " · top rank"}
+          </p>
+          {status.next && (
+            <div className="member-rank-bar" aria-hidden="true">
+              <i style={{ width: `${stepProgress}%` }} />
+            </div>
+          )}
+          {status.grace.below && (
+            <p className="member-directory-notice" role="status">
+              Your recent activity is below this rank. Keep your rank by buying or sourcing before{" "}
+              {status.grace.ends_at ? new Date(status.grace.ends_at).toLocaleDateString() : "the grace period ends"}; after
+              that it drops one subrank at a time.
+            </p>
+          )}
+        </div>
+      )}
       <p className="member-chat-dialog-copy">
-        Your rank reflects how active you’ve been over the last 90 days. Higher ranks unlock lower rates, even on the
-        Free plan.
+        Your rank counts what you've done in the last 90 days: orders, sourcing that ends in a purchase, group buys, and
+        links that bring in buyers. From Insider (rank 4), Free members pay Standard rates.
       </p>
+      {status && status.perks.length > 0 && (
+        <ul className="member-rank-perks">
+          {status.perks.map((perk) => (
+            <li key={perk.label} className={perk.active ? "active" : undefined}>
+              <strong>{perk.active ? "Unlocked" : `From ${RANK_NAMES[perk.rank]}`}</strong>
+              <span>{perk.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <MemberPlanComparison currentTier={tier} />
       {accessToken && (
         <div className="member-perks">
@@ -277,7 +388,7 @@ export function MemberAccountDialogs({
   if (kind === "points")
     return (
       <MemberDialog eyebrow="REWARDS" title="Virtual points" onClose={onClose}>
-        <PointsDialog profile={profile} />
+        <PointsDialog profile={profile} accessToken={accessToken} onChange={onPlanChange} />
       </MemberDialog>
     );
   if (kind === "tier")

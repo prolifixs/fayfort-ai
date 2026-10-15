@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.commerce import db as commerce_db, service as commerce_service
 from app.commerce.admin_router import create_admin_commerce_router
-from app.membership import plans, service
+from app.membership import plans, ranks, service
 from app.membership.router import create_membership_router
 from tests.test_commerce import ADMIN, MEMBER, NOW, Db, Query, ago
 
@@ -87,6 +87,19 @@ class MDb(Db):
             unlocks.append({"id": str(uuid.uuid4()), "member_id": key[0], "record_type": key[1], "record_id": key[2],
                             "method": method, "created_at": NOW.isoformat()})
             return SimpleNamespace(execute=lambda: SimpleNamespace(data={"status": "unlocked", "method": method}))
+        if name == "redeem_member_points":
+            self.rpcs.append((name, params))
+            events = self.rows.setdefault("member_activity_events", [])
+            balance = sum(e["points"] for e in events if e["member_id"] == params["p_member_id"])
+            if balance < params["p_cost"]:
+                def fail():
+                    raise RuntimeError("not_enough_points")
+                return SimpleNamespace(execute=fail)
+            events.append({"id": str(uuid.uuid4()), "member_id": params["p_member_id"], "kind": "redeem",
+                           "source_key": str(uuid.uuid4()), "points": -params["p_cost"], "occurred_at": NOW.isoformat()})
+            self.rows.setdefault("member_contact_credits", []).append(
+                {"member_id": params["p_member_id"], "delta": params["p_credits"], "reason": "points"})
+            return SimpleNamespace(execute=lambda: SimpleNamespace(data=balance - params["p_cost"]))
         if name == "request_member_conversation_support":
             self.rpcs.append((name, params))
             item = {"id": "work-1", "member_conversation_id": params["p_conversation_id"], "status": "open",
@@ -103,7 +116,7 @@ HOTEL = str(uuid.UUID(int=103))
 
 def membership_db(tier: str = "free", **extra) -> MDb:
     rows = {
-        "member_profiles": [{"user_id": MEMBER, "member_tier": tier}],
+        "member_profiles": [{"user_id": MEMBER, "member_tier": tier, "rank_level": 1, "subrank": 1}],
         "directory_markets": [{"id": MARKET, "place_name": "Guangzhou Hair Market", "city": "Guangzhou",
                                "district": "Liwan", "address_en": "12 Wig Road", "address_cn": "假发路12号",
                                "buyer_notes": "Go before 10am", "verification_status": "verified"}],
@@ -288,6 +301,74 @@ class DepositTests(Case):
                               json={"request_id": self.rid, "expected_total": 300}, headers=ADMIN_AUTH)
         self.assertEqual(refused.status_code, 409)
         self.assertIn("good standing", refused.json()["detail"])
+
+
+class RankTests(Case):
+    def activity_db(self, tier: str = "free") -> MDb:
+        return membership_db(tier,
+            commerce_orders=[{"id": "o1", "shopify_order_id": "gid://shopify/Order/1", "member_id": MEMBER,
+                              "financial_status": "paid", "total": 120, "placed_at": ago(days=3)}],
+            commerce_invoices=[
+                {"id": "i-order", "member_id": MEMBER, "kind": "order", "status": "paid", "request_id": "r1",
+                 "paid_at": ago(days=3)},
+                {"id": "i-dep", "member_id": MEMBER, "kind": "deposit", "status": "paid", "request_id": "r1",
+                 "paid_at": ago(days=10)}],
+            commerce_giveaway_entries=[{"giveaway_id": "g1", "member_id": MEMBER, "entered_at": ago(days=1)}])
+
+    def test_steps(self):
+        self.assertEqual(ranks.step(0), (1, 1))
+        self.assertEqual(ranks.step(250), (2, 1))
+        self.assertEqual(ranks.step(749), (2, 5))
+        self.assertEqual(ranks.step(10_000), (5, 5))
+        self.assertEqual(ranks.threshold(2, 2), 350)
+
+    def test_activity_sets_score_rank_and_points(self):
+        self.use(self.activity_db())
+        result = ranks.recompute(MEMBER)
+        # order 50 + 120, sourcing purchase 100, deposit 20, giveaway 5
+        self.assertEqual((result["score"], result["balance"]), (295, 295))
+        profile = self.db.rows["member_profiles"][0]
+        self.assertEqual((profile["rank_level"], profile["subrank"], profile["points_balance"]), (2, 1, 295))
+        ranks.recompute(MEMBER)  # idempotent: no double counting
+        self.assertEqual(self.db.rows["member_profiles"][0]["status_score"], 295)
+        self.assertEqual(len(self.db.rows["member_activity_events"]), 4)
+
+    def test_refund_starts_grace_then_drops_one_subrank(self):
+        from datetime import timedelta
+        self.use(self.activity_db())
+        ranks.recompute(MEMBER)
+        self.db.rows["commerce_orders"][0]["financial_status"] = "refunded"
+        held = ranks.recompute(MEMBER)
+        self.assertEqual((held["score"], held["rank"], held["subrank"]), (125, 2, 1))  # kept during the grace period
+        self.assertIsNotNone(held["below_since"])
+        later = ranks.recompute(MEMBER, NOW + timedelta(days=31))
+        self.assertEqual((later["rank"], later["subrank"]), (1, 5))  # one subrank down, not to the bottom
+
+    def test_shares_that_bring_buyers_count(self):
+        self.use(membership_db("free",
+            commerce_trend_shares=[{"trend_item_id": "t1", "member_id": MEMBER, "shared_at": ago(days=5)}],
+            commerce_invoices=[{"id": "i-b", "member_id": "buyer-1", "trend_item_id": "t1", "kind": "order",
+                                "status": "paid", "paid_at": ago(days=2)}]))
+        self.assertEqual(ranks.recompute(MEMBER)["score"], 30)
+
+    def test_free_member_at_rank_four_gets_standard_rates(self):
+        self.use(membership_db("free"))
+        self.db.rows["member_profiles"][0]["rank_level"] = 4
+        self.assertEqual(plans.deposit_terms(MEMBER)["rate"], 0.25)
+        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 50.0)
+
+    def test_rank_api_and_points_redemption(self):
+        client = self.client(self.activity_db())
+        status = client.get("/members/rank", headers=AUTH).json()
+        self.assertEqual((status["name"], status["score"], status["next"]["at"]), ("Scout", 295, 350))
+        refused = client.post("/members/points/redeem", json={"reward": "contact_credit"}, headers=AUTH)
+        self.assertEqual(refused.status_code, 409)
+        self.db.rows["commerce_orders"].append({"id": "o2", "shopify_order_id": "gid://shopify/Order/2", "member_id": MEMBER,
+                                                "financial_status": "paid", "total": 400, "placed_at": ago(days=1)})
+        done = client.post("/members/points/redeem", json={"reward": "contact_credit"}, headers=AUTH)
+        self.assertEqual(done.status_code, 200, done.text)
+        self.assertEqual(done.json()["balance"], 295 + 250 - 500)
+        self.assertEqual(plans.contact_status(MEMBER)["credits"], 1)
 
 
 class ShopifyInvoiceTests(unittest.TestCase):

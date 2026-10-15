@@ -112,7 +112,7 @@ describe("authenticated dashboard workspace",()=>{
   expect(window.location.pathname).toBe("/member/chat");
   fireEvent.click(within(points).getByRole("button",{name:"Close"}));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  fireEvent.click(within(menu).getByRole("menuitem",{name:/Rank 3 · Subrank 4/}));
+  fireEvent.click(within(menu).getByRole("menuitem",{name:/Hunter · 4/}));
   const tier=await screen.findByRole("dialog",{name:"Member tier"});
   expect(within(tier).getByRole("progressbar",{name:"Rank progress"})).toHaveAttribute("aria-valuenow","14");
   fireEvent.keyDown(window,{key:"Escape"});
