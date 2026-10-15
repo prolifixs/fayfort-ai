@@ -86,25 +86,15 @@
 .member-account-dropdown>a{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border-radius:7px;color:#354456;text-decoration:none;font-size:12px}
 .member-account-dropdown>a:hover,.member-account-dropdown>a:focus-visible{background:#f4f8f6;color:#147964}
 .member-account-dropdown>a strong{color:#526274;font-size:11px;text-align:right}
-.member-settings-card,.member-rewards-card,.member-membership-card{width:min(100%,620px)}
+.member-settings-card,.member-membership-card{width:min(100%,620px)}
 .member-settings-section{margin:14px 0;padding:14px;border:1px solid #e7e9ef;border-radius:10px;background:#fff}
 .member-settings-section h2{margin:0;font-size:14px}
 .member-photo-controls{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:10px}.member-photo-preview{width:58px;height:58px;object-fit:cover;border:1px solid #dfe3ea;border-radius:50%}.member-photo-file-label{display:grid;gap:6px;color:#596274;font-size:11px;font-weight:600}.member-photo-file-label input{max-width:240px;font:inherit;font-size:11px}.member-account-icon img{width:100%;height:100%;object-fit:cover;border-radius:inherit}.member-account-icon{overflow:hidden}
 .member-settings-section>p{margin:7px 0;color:#798394;font-size:11px;line-height:1.55}
 .member-settings-section>button:disabled{opacity:.55;cursor:not-allowed}
 .member-shipping-form{display:grid;gap:11px;margin-top:12px}.member-shipping-form>label,.member-shipping-grid label,.member-phone-field>span{display:grid;gap:5px;color:#596274;font-size:11px;font-weight:600}.member-shipping-form input,.member-shipping-form select,.member-shipping-grid select{box-sizing:border-box;width:100%;min-height:39px;padding:9px 10px;border:1px solid #dfe3ea;border-radius:7px;background:#fff;color:#263342;font:inherit;font-size:12px}.member-shipping-form .quiet-note{font-weight:400}.member-shipping-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.member-phone-field{display:grid;gap:5px}.member-phone-input{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:8px}.member-shipping-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:3px}.member-shipping-actions button{min-height:40px}
-.member-rewards-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:20px 0 0;padding:4px;border-radius:9px;background:#f1f4f5}
-.member-rewards-tabs button{min-height:38px;border:0;border-radius:7px;background:transparent;color:#677586;font:inherit;font-size:11px;font-weight:650;cursor:pointer}
-.member-rewards-tabs button[aria-selected="true"]{background:#fff;color:#147964;box-shadow:0 1px 4px #1c243414}
-.member-rewards-blank{min-height:130px}
-.member-settings-card> a,.member-rewards-card> a{display:inline-block;margin-top:14px;color:#147964;font-size:11px;font-weight:650}
+.member-settings-card> a{display:inline-block;margin-top:14px;color:#147964;font-size:11px;font-weight:650}
 .member-settings-section>.member-plan-link{display:inline-flex;align-items:center;margin-top:6px;text-decoration:none}
-.member-plan-list{display:grid;gap:10px;margin:16px 0}
-.member-plan-card{padding:15px;border:1px solid #e7e9ef;border-radius:11px;background:#fff}
-.member-plan-card h2{margin:5px 0;font-size:17px}
-.member-plan-card>small{color:#788493;font-size:9px;font-weight:750;letter-spacing:.08em}
-.member-plan-card>p{margin:7px 0 12px;color:#657384;font-size:12px;line-height:1.5}
-.member-plan-card>strong{color:#147964;font-size:11px}
 .member-current-plan{padding:12px;border-radius:9px;background:#f1f7f5;color:#344455;font-size:12px}
 .member-current-plan strong{color:#147964}
 .member-membership-card .quiet-note{font-size:11px;line-height:1.5}
@@ -346,3 +336,42 @@ article.shop-tile,.member-chat-suggestions article.shop-tile{max-width:none;marg
 /* Keep the last chat cards clear of the sticky composer, and keep shop labels plain text. */
 .member-chat-messages{padding-bottom:40px}
 .shop-tile small,.shop-cart-lines small,.shop-panel-header small,.shop-findit small{padding:0;border:0;background:none;border-radius:0}
+/* Member account menu pop-ups (points, tier, account details, settings). */
+.member-account-dropdown>button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px;border:0;border-radius:7px;background:transparent;color:#354456;font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.member-account-dropdown>button:hover,.member-account-dropdown>button:focus-visible{background:#f4f8f6;color:#147964}
+.member-account-dropdown>button strong{color:#526274;font-size:11px;text-align:right}
+.member-chat-dialog.member-account-dialog{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.member-chat-dialog.member-account-dialog.wide{width:min(720px,100%)}
+.member-account-dialog>header{margin:0;padding:20px 22px 12px;border-bottom:1px solid var(--member-border,#e6eaee)}
+.member-account-dialog-body{flex:1;min-height:0;overflow:auto;padding:16px 22px}
+.member-account-dialog>footer{display:flex;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--member-border,#e6eaee)}
+.member-dialog-stat{display:grid;justify-items:start;gap:2px;margin-bottom:12px;padding:18px;border-radius:12px;background:#f4f8f6}
+.member-dialog-stat small,.member-dialog-rank small{color:#778391;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.member-dialog-stat strong{color:#147964;font-size:34px;line-height:1.1}
+.member-dialog-stat span{color:#687687;font-size:12px}
+.member-dialog-rank{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.member-dialog-rank>div{display:grid;gap:4px;padding:14px;border:1px solid #e3ebe8;border-radius:10px}
+.member-dialog-rank strong{color:#1c2434;font-size:22px}
+.member-dialog-rank strong span{color:#687687;font-size:13px;font-weight:600}
+.member-rank-track{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:12px 0 4px}
+.member-rank-track>span{height:8px;overflow:hidden;border-radius:4px;background:#e7ecef}
+.member-rank-track>span>i{display:block;height:100%;background:#147964}
+.member-plan-compare{margin-top:14px;overflow-x:auto}
+.member-plan-compare table{width:100%;min-width:480px;border-collapse:collapse;font-size:12px}
+.member-plan-compare th,.member-plan-compare td{padding:10px 8px;border-bottom:1px solid #edf0f3;text-align:left;vertical-align:top}
+.member-plan-compare thead th{color:#263342;font-size:13px}
+.member-plan-compare thead th small{display:block;margin-top:2px;color:#147964;font-size:10px;font-weight:700}
+.member-plan-compare tbody th{color:#526274;font-weight:650;width:28%}
+.member-plan-compare td{color:#354456}
+.member-plan-compare .current{background:#f2f8f5}
+.member-plan-note{margin:10px 0 0;color:#687687;font-size:11px;line-height:1.5}
+.member-account-facts{display:grid;gap:0;margin:0}
+.member-account-facts>div{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid #edf0f3}
+.member-account-facts dt{color:#778391;font-size:12px}
+.member-account-facts dd{margin:0;color:#263342;font-size:13px;font-weight:600;text-align:right;overflow-wrap:anywhere}
+.member-account-dialog-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:16px}
+.member-account-dialog .member-settings-section:first-child{margin-top:0}
+@media(max-width:650px){.member-account-dialog>header{padding:16px 16px 10px}.member-account-dialog-body{padding:14px 16px}.member-account-dialog>footer{padding:10px 16px}.member-dialog-rank{grid-template-columns:1fr}}
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.member-theme-dialog-backdrop{z-index:1600}
+@media(max-width:560px){.member-plan-compare table{min-width:0;font-size:11px}.member-plan-compare th,.member-plan-compare td{padding:8px 4px}.member-plan-compare thead th{font-size:12px}.member-plan-compare tbody th{width:24%}}

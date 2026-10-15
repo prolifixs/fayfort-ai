@@ -50,16 +50,15 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.queryByRole("button",{name:/Apple/})).not.toBeInTheDocument();
  });
 
- it("shows member Free, Standard, and Pro plans without exposing checkout or prices",async()=>{
+ it("shows the member plan comparison without exposing checkout",async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL)=>String(input).endsWith("/members/me")?{ok:true,status:200,json:async()=>({profile:{user_id:"member-1",member_tier:"free",selected_theme:"base"}}),headers:new Headers()} as Response:{ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response);
   window.history.replaceState({},"","/member/membership");render(<App/>);
   expect(await screen.findByText("Your current plan:")).toHaveTextContent("Free");
-  expect(screen.getByRole("heading",{name:"Free"})).toBeInTheDocument();
-  expect(screen.getByRole("heading",{name:"Standard"})).toBeInTheDocument();
-  expect(screen.getByRole("heading",{name:"Pro"})).toBeInTheDocument();
-  expect(screen.getByText("Premium theme access. Other Standard benefits will be announced later.")).toBeInTheDocument();
-  expect(screen.getByText(/sourcing, consulting, and service-fee waivers/)).toBeInTheDocument();
-  expect(screen.getAllByText("Details coming soon")).toHaveLength(2);
+  for(const plan of ["Free","Standard","Pro"])expect(screen.getByRole("columnheader",{name:new RegExp(plan)})).toBeInTheDocument();
+  expect(screen.getByRole("columnheader",{name:/Free\s*Your plan/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Consultation\s*Full price\s*50% off\s*1 free each month/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Supplier contacts\s*Pay per contact\s*Pay per contact\s*10 included each month/})).toBeInTheDocument();
+  expect(screen.getByText(/counts toward your order/)).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:/subscribe|upgrade|checkout/i})).not.toBeInTheDocument();
  });
 
@@ -106,8 +105,25 @@ describe("authenticated dashboard workspace",()=>{
   render(<App/>);
   const menu=await screen.findByRole("menu");
   expect(within(menu).getByText("Jordan Member")).toBeInTheDocument();
-  expect(within(menu).getByRole("menuitem",{name:/Virtual points\s*250/})).toHaveAttribute("href","/member/rewards?view=points");
-  expect(within(menu).getByRole("menuitem",{name:/Rank 3 · Subrank 4/})).toHaveAttribute("href","/member/rewards?view=tier");
+  fireEvent.click(within(menu).getByRole("menuitem",{name:/Virtual points\s*250/}));
+  const points=await screen.findByRole("dialog",{name:"Virtual points"});
+  expect(within(points).getByText("250")).toBeInTheDocument();
+  expect(window.location.pathname).toBe("/member/chat");
+  fireEvent.click(within(points).getByRole("button",{name:"Close"}));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(within(menu).getByRole("menuitem",{name:/Rank 3 · Subrank 4/}));
+  const tier=await screen.findByRole("dialog",{name:"Member tier"});
+  expect(within(tier).getByRole("progressbar",{name:"Rank progress"})).toHaveAttribute("aria-valuenow","14");
+  fireEvent.keyDown(window,{key:"Escape"});
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(within(menu).getByRole("menuitem",{name:"Account details"}));
+  const account2=await screen.findByRole("dialog",{name:"Account details"});
+  expect(within(account2).getByText("Jordan Member")).toBeInTheDocument();
+  fireEvent.click(within(account2).getByRole("button",{name:"Edit in settings"}));
+  const settings=await screen.findByRole("dialog",{name:"Settings"});
+  expect(await within(settings).findByRole("heading",{name:"Sign-in methods"})).toBeInTheDocument();
+  fireEvent.click(within(settings).getByRole("button",{name:"Close Settings"}));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([input,init])=>String(input).endsWith("/members/me")&&init?.method&&init.method!=="GET")).toBe(false);
  });

@@ -19,6 +19,8 @@ import type { Cart, FindItResult, Giveaway, ShopCard, ShopHome, TrendCard } from
 import { shopSessionId, trackIntent } from "./commerceApi";
 import { FindItBlock, HotRails, ProductTile } from "./ShopComponents";
 import { BrowsePanel, CartButton, OrdersPanel, ProductPanel } from "./ShopPanels";
+import { MemberAccountDialogs, type MemberAccountDialogKind } from "./MemberAccountDialogs";
+import { MemberSettingsPanel } from "./MemberSettingsPanel";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product"];
@@ -42,6 +44,8 @@ export function MemberChatPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [verified, setVerified] = useState(false);
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
+  const [accountDialog, setAccountDialog] = useState<MemberAccountDialogKind | null>(null);
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const [chats, setChats] = useState<MemberChat[]>([]);
   const [activeChat, setActiveChat] = useState<MemberChat | null>(null);
   const [messages, setMessages] = useState<MemberChatMessage[]>([]);
@@ -568,6 +572,11 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  function openAccountDialog(kind: MemberAccountDialogKind) {
+    if (accountMenuRef.current) accountMenuRef.current.open = false;
+    setAccountDialog(kind);
+  }
+  const closeAccountDialog = useCallback(() => setAccountDialog(null), []);
   // Products already shown in a Find It result aren't repeated under "Suggestions".
   const findItIds = new Set(
     messages.flatMap((message) =>
@@ -591,7 +600,7 @@ export function MemberChatPage() {
             <div className="member-chat-header-actions">
               <MemberNotificationsBar accessToken={token} header />
               <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
-              <details className="member-account-menu">
+              <details className="member-account-menu" ref={accountMenuRef}>
                 <summary className="member-account-icon" aria-label="Open member account menu" title="Member account">
                   {typeof profile?.profile_photo_url === "string" ? (
                     <img src={profile.profile_photo_url} alt="" />
@@ -616,27 +625,39 @@ export function MemberChatPage() {
                         : "Member"}
                     </strong>
                   </div>
-                  <a role="menuitem" href="/member/rewards?view=points">
+                  <button type="button" role="menuitem" onClick={() => openAccountDialog("points")}>
                     <span>Virtual points</span>
                     <strong>{new Intl.NumberFormat().format(Number(profile?.points_balance ?? 0) || 0)}</strong>
-                  </a>
-                  <a role="menuitem" href="/member/rewards?view=tier">
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openAccountDialog("tier")}>
                     <span>Member tier</span>
                     <strong>
                       Rank {Number(profile?.rank_level) || 1} · Subrank {Number(profile?.subrank) || 1}
                     </strong>
-                  </a>
-                  <a role="menuitem" href="/member/account">
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
                     Account details
-                  </a>
-                  <a role="menuitem" href="/member/settings">
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
                     Settings
-                  </a>
+                  </button>
                 </div>
               </details>
             </div>
           )}
         </header>
+        <MemberAccountDialogs
+          kind={accountDialog}
+          profile={profile}
+          onClose={closeAccountDialog}
+          onOpen={setAccountDialog}
+          settings={
+            <MemberSettingsPanel
+              onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
+              onOpenPlans={() => setAccountDialog("tier")}
+            />
+          }
+        />
         {authLoading ? (
           <p role="status">Checking your member sign-in…</p>
         ) : !token ? (
