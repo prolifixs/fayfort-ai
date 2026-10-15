@@ -96,3 +96,24 @@ add `https://app.fayfort.com/**` to the redirect URLs.
 - **Turning a type off.** Control Center → Emails → Email types. Members choose their own in Settings → Email notifications. Every customer email has an unsubscribe link, and newsletters also carry one-click `List-Unsubscribe` headers.
 - **Troubleshooting.** Control Center → Emails → Sent emails shows each email's status and the reason it was skipped or failed. Failed customer emails can be retried from there.
 - **Turnstile.** The public site key ships in the dashboard and runs only on `*.fayfort.com`. Once that build is live, enter the secret in Supabase → Authentication → Attack Protection → Captcha (Cloudflare Turnstile). Supabase then requires the check on sign-up, sign-in and password reset. Local dashboards on 127.0.0.1 can't pass it, so sign in on app.fayfort.com while captcha is on.
+
+## Products and commerce (commerce plan P0–P10)
+
+Shopify (Basic plan, one store) is the engine; FayFort is the experience. See `docs/PRODUCT_COMMERCE_PLAN.md`.
+
+1. **Database**: apply `supabase/migrations/20261015100000_commerce.sql` (additive; safe before the code deploy).
+2. **Shopify app** (owner): Shopify admin → Settings → Apps → Develop apps → *Build apps in Dev Dashboard*. Create an app
+   named "FayFort", give it the Admin API scopes `read_products, write_products, read_inventory, read_orders,
+   write_draft_orders, read_draft_orders, write_discounts, read_discounts`, release a version and install it on the store.
+   Copy the **Client ID** and **Client secret**.
+3. **Headless channel** (owner): install Shopify's free *Headless* sales channel, create a storefront and copy its
+   **private** Storefront access token. Enable the Storefront scopes `unauthenticated_read_product_listings`,
+   `unauthenticated_write_checkouts` and `unauthenticated_read_checkouts`.
+4. **Server settings** (owner): `nano /opt/fayfort/fayfort-ai/deploy/api/api.env`, fill the Shopify block from
+   `api.env.example`, then redeploy the API.
+5. **Connect** (Control Center → Shop → Overview): *Set up Shopify* creates the FayFort category field and registers the
+   webhooks at `https://api.fayfort.com/commerce/shopify/webhooks`; then *Sync now* copies the catalog.
+6. **Categories**: Shopify products match the 968 FayFort categories by the `fayfort.category_ref` field, product type or
+   tags. Anything unmatched appears under Shop → Category mapping.
+7. **Social channels (last)**: install the free *TikTok* and *Facebook & Instagram* channel apps and publish products to
+   them. They read the same Shopify catalog; FayFort needs no changes.

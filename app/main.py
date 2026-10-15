@@ -91,11 +91,17 @@ _member_chat_retention_task: asyncio.Task | None = None
 _member_review_retention_task: asyncio.Task | None = None
 _infrastructure_monitor_task: asyncio.Task | None = None
 _email_sender_task: asyncio.Task | None = None
+_commerce_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task
+    if settings.COMMERCE_SYNC_ENABLED:
+        from app.commerce.loop import commerce_loop
+        if _commerce_task is None or _commerce_task.done():
+            _commerce_task = asyncio.create_task(commerce_loop(), name="fayfort-commerce")
+            logger.info("Commerce upkeep started")
     if settings.EMAIL_DELIVERY_ENABLED:
         from app.mailer.sender import email_sender_loop
         if _email_sender_task is None or _email_sender_task.done():
@@ -146,8 +152,8 @@ async def start_automation_scheduler() -> None:
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -159,6 +165,7 @@ async def stop_automation_scheduler() -> None:
     _member_review_retention_task = None
     _infrastructure_monitor_task = None
     _email_sender_task = None
+    _commerce_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -750,6 +757,12 @@ from app.workforce.router import create_workforce_router
 app.include_router(create_workforce_router())
 from app.mailer.router import create_email_router
 app.include_router(create_email_router())
+from app.commerce.member_router import create_member_commerce_router
+from app.commerce.admin_router import create_admin_commerce_router
+from app.commerce.webhooks import create_shopify_webhook_router
+app.include_router(create_member_commerce_router())
+app.include_router(create_admin_commerce_router())
+app.include_router(create_shopify_webhook_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

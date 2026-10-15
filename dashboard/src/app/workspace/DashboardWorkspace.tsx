@@ -7,6 +7,7 @@ import { PlatformRequestAssignmentPage, WorkerRequestsPage } from "../staff/Work
 import { WorkforcePage } from "../staff/WorkforcePage";
 import { StaffAccountPage } from "../staff/StaffAccountPage";
 import { EmailCenterPage } from "../staff/EmailCenterPage";
+import { CommercePage } from "../staff/CommercePage";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { AgentAvailabilityPanel, HandoffsPage } from "./HandoffsPage";
@@ -50,7 +51,8 @@ export const descriptions: Record<string, string> = {
   Knowledge: "Business-approved FAQ answers with exact question matching and version history.",
   Analytics: "Saved business-event history with bounded counts and time-window filters.",
   Settings: "Safe business configuration managed through the FayFort control plane.",
-  Giveaways: "A staff workspace for future giveaway management.",
+  Giveaways: "Run giveaways: members enter from the chat's front page, you draw winners after the end time.",
+  Shop: "Shopify connection, the trend queue and pools, invoices, flash sales, giveaways and orders.",
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
@@ -369,6 +371,13 @@ export function DashboardWorkspace({
                     <span>W</span>FayFort Workers
                   </button>
                   <button
+                    className={active === "Shop" ? "nav-item active" : "nav-item"}
+                    aria-current={active === "Shop" ? "page" : undefined}
+                    onClick={() => setActive("Shop")}
+                  >
+                    <span>S</span>Shop
+                  </button>
+                  <button
                     className={active === "Emails" ? "nav-item active" : "nav-item"}
                     aria-current={active === "Emails" ? "page" : undefined}
                     onClick={() => setActive("Emails")}
@@ -457,14 +466,15 @@ export function DashboardWorkspace({
             <EmailCenterPage accessToken={accessToken} />
           ) : active === "My account" ? (
             <StaffAccountPage accessToken={accessToken} email={signedInEmail || ""} isWorker={activeWorker && !platformAdmin} />
-          ) : active === "Giveaways" && (platformAdmin || activeWorker) ? (
+          ) : active === "Shop" && platformAdmin ? (
+            <CommercePage accessToken={accessToken} />
+          ) : active === "Giveaways" && platformAdmin ? (
+            <CommercePage accessToken={accessToken} initialTab="giveaways" />
+          ) : active === "Giveaways" && activeWorker ? (
             <section className="empty" aria-label="Giveaways workspace">
               <b>G</b>
-              <h2>No giveaways yet</h2>
-              <p>
-                This staff section is ready for future giveaway records. Uploads, campaigns, entries, winner selection,
-                and messaging have not been added.
-              </p>
+              <h2>Giveaways are run by platform admins</h2>
+              <p>Members enter giveaways from the chat's front page. A platform admin creates them and draws the winners.</p>
             </section>
           ) : active === "Member Requests" && (platformAdmin || activeWorker) ? (
             platformAdmin ? (

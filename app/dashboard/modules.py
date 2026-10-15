@@ -492,7 +492,7 @@ def create_workspace_modules_router() -> APIRouter:
         can_manage = bool(trusted_platform_admin(authorization))
         try:
             query = (supabase.table("directory_products")
-                .select("id,name,category_ref,description,availability_status,active,media_url,media_type,media_source,media_storage_path,created_at,updated_at"))
+                .select("id,name,category_ref,description,availability_status,active,media_url,media_type,media_source,media_storage_path,source,created_at,updated_at"))
             if not can_manage:
                 query = query.eq("active", True)
             products = query.order("name").limit(500).execute().data or []
@@ -526,6 +526,9 @@ def create_workspace_modules_router() -> APIRouter:
         admin = authorize_platform_admin(business_id, authorization)
         try:
             changes = payload.changes()
+            current = (supabase.table("directory_products").select("source").eq("id", product_id).limit(1).execute().data or [])
+            if current and isinstance(current, list) and isinstance(current[0], dict) and current[0].get("source") == "shopify":
+                raise HTTPException(status_code=409, detail="This product comes from Shopify. Edit it in Shopify; FayFort updates automatically.")
             if "category_ref" in changes:
                 category = (supabase.table("directory_categories").select("source_ref")
                     .eq("source_ref", changes["category_ref"]).limit(1).execute().data or [])

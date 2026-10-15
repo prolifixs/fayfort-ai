@@ -37,6 +37,26 @@ class Settings(BaseSettings):
     EMAIL_REPLY_TO: str = "support@fayfort.com"
     EMAIL_DELIVERY_ENABLED: bool = False
     EMAIL_SENDER_INTERVAL_SECONDS: int = 15
+    # Products and commerce plan (P0). Shopify is the commerce engine; FayFort reads its catalog,
+    # sends checkouts and invoices to it, and receives its webhooks. Nothing calls Shopify until
+    # SHOPIFY_STORE_DOMAIN and Admin API credentials are set.
+    # Admin API: either a Dev Dashboard app's client id + secret (client credentials grant, token
+    # renewed automatically every 24 h) or a legacy custom-app access token.
+    SHOPIFY_STORE_DOMAIN: str = ""  # e.g. fayfort.myshopify.com
+    SHOPIFY_CLIENT_ID: str = ""
+    SHOPIFY_CLIENT_SECRET: str = ""  # also verifies webhook signatures
+    SHOPIFY_ADMIN_ACCESS_TOKEN: str = ""  # optional legacy alternative to the client id + secret
+    SHOPIFY_WEBHOOK_SECRET: str = ""  # optional; defaults to SHOPIFY_CLIENT_SECRET
+    # Headless channel private Storefront token, used for checkout carts. Without it, checkout
+    # falls back to Shopify cart links (needs the Online Store channel).
+    SHOPIFY_STOREFRONT_ACCESS_TOKEN: str = ""
+    SHOPIFY_API_VERSION: str = "2025-07"
+    COMMERCE_SYNC_ENABLED: bool = False
+    COMMERCE_RECONCILE_INTERVAL_SECONDS: int = 21600
+    COMMERCE_CURRENCY: str = "USD"
+    COMMERCE_UNDER_PRICE: float = 25.0
+    # Optional Meta app access token ("app_id|client_token") for Instagram link previews.
+    META_OEMBED_ACCESS_TOKEN: str = ""
 
     SUPABASE_URL: str 
     SUPABASE_ANON_KEY: str

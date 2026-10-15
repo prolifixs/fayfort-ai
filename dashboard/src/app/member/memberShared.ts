@@ -1,3 +1,4 @@
+import type { FindItResult } from "./commerceApi";
 import type { DirectoryProduct, ProductCategory } from "../workspace/types";
 
 export type MemberShippingForm = {
@@ -180,6 +181,8 @@ export type MemberChatMessage = {
   content: string;
   related_product_ids: string[];
   created_at: string;
+  /** Find It result for a pasted link or search: exact match, closest alternatives, Source it. */
+  find_it?: FindItResult | null;
 };
 
 export type MemberOwnedRequest = {

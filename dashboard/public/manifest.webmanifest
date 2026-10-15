@@ -1,0 +1,18 @@
+{
+  "name": "FayFort",
+  "short_name": "FayFort",
+  "description": "Find it, source it, buy it. Paste or share any TikTok, Instagram or shop link.",
+  "start_url": "/member/chat",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#197c69",
+  "icons": [
+    { "src": "/fayfort-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "share_target": {
+    "action": "/member/share",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

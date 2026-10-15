@@ -15,6 +15,27 @@ import { requestProgressIndex, requestProgressStages, requestStageLabels } from 
 import type { ProductCategory } from "../workspace/types";
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
 import { ProductMediaPreview } from "../workspace/DirectoryPages";
+import type { Cart, FindItResult, Giveaway, ShopCard, ShopHome, TrendCard } from "./commerceApi";
+import { shopSessionId, trackIntent } from "./commerceApi";
+import { FindItBlock, HotRails, ProductTile } from "./ShopComponents";
+import { BrowsePanel, CartButton, OrdersPanel, ProductPanel } from "./ShopPanels";
+
+type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product";
+const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product"];
+function panelFromUrl(): MemberPanel {
+  const panel = new URLSearchParams(window.location.search).get("panel") as MemberPanel | null;
+  return panel && memberPanels.includes(panel) ? panel : "chat";
+}
+/** Android "Share to FayFort" (web share target) and links into the chat prefill the composer. */
+function sharedText(): string {
+  if (window.location.pathname !== "/member/share") return "";
+  const params = new URLSearchParams(window.location.search);
+  return [params.get("text"), params.get("url")]
+    .filter((value): value is string => !!value && !!value.trim())
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .join(" ")
+    .slice(0, 2000);
+}
 
 export function MemberChatPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -27,7 +48,11 @@ export function MemberChatPage() {
   const [products, setProducts] = useState<MemberCatalogProduct[]>([]);
   const [requests, setRequests] = useState<MemberOwnedRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState("");
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => sharedText());
+  const [home, setHome] = useState<ShopHome | null>(null);
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [productId, setProductId] = useState(() => new URLSearchParams(window.location.search).get("product") || "");
+  const [shopBusyId, setShopBusyId] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deletingChatId, setDeletingChatId] = useState("");
@@ -55,26 +80,103 @@ export function MemberChatPage() {
   const [requestProgressBusy, setRequestProgressBusy] = useState(false);
   const [progressRequest, setProgressRequest] = useState<MemberOwnedRequest | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set());
-  const [activePanel, setActivePanel] = useState<"chat" | "catalog" | "saved" | "requests">(() => {
-    const panel = new URLSearchParams(window.location.search).get("panel");
-    return panel === "catalog" || panel === "saved" || panel === "requests" ? panel : "chat";
-  });
-  const [chatExpanded, setChatExpanded] = useState(false);
-  function selectMemberPanel(panel: "chat" | "catalog" | "saved" | "requests") {
+  const [activePanel, setActivePanel] = useState<MemberPanel>(() =>
+    panelFromUrl() === "product" && !new URLSearchParams(window.location.search).get("product") ? "chat" : panelFromUrl(),
+  );
+  const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
+  function selectMemberPanel(panel: MemberPanel) {
     setActivePanel(panel);
     setChatExpanded(false);
     const url = panel === "chat" ? "/member/chat" : `/member/chat?panel=${panel}`;
     window.history.pushState({ memberPanel: panel }, "", url);
   }
+  /** Product pages open beside the chat, so the member can keep asking about the item. */
+  function openProduct(card: ShopCard | { id: string }) {
+    setProductId(card.id);
+    setActivePanel("product");
+    setChatExpanded(true);
+    window.history.pushState({ memberPanel: "product" }, "", `/member/chat?panel=product&product=${encodeURIComponent(card.id)}`);
+  }
   useEffect(() => {
+    if (window.location.pathname === "/member/share") window.history.replaceState({}, "", "/member/chat");
     const onPopState = () => {
-      const panel = new URLSearchParams(window.location.search).get("panel");
-      setActivePanel(panel === "catalog" || panel === "saved" || panel === "requests" ? panel : "chat");
-      setChatExpanded(false);
+      const panel = panelFromUrl();
+      setProductId(new URLSearchParams(window.location.search).get("product") || "");
+      setActivePanel(panel);
+      setChatExpanded(panel === "product");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+  const loadShop = useCallback(async (accessToken: string) => {
+    try {
+      const [shop, currentCart] = await Promise.all([
+        apiRequest<ShopHome>("/members/shop/home", accessToken),
+        apiRequest<Cart>("/members/cart", accessToken),
+      ]);
+      setHome(shop && Array.isArray(shop.rails) ? shop : null);
+      setCart(currentCart && Array.isArray(currentCart.lines) ? currentCart : null);
+    } catch {
+      /* The shop is optional around the chat; the chat keeps working without it. */
+    }
+  }, []);
+  async function wantTrend(trend: TrendCard) {
+    if (!token || shopBusyId) return;
+    setShopBusyId(trend.id);
+    setError("");
+    try {
+      const result = await apiRequest<{ request_id: string | null; want_count: number }>(
+        `/members/find-it/${trend.id}/want`,
+        token,
+        { method: "POST", body: JSON.stringify({ session_id: shopSessionId() }) },
+      );
+      setMessages((current) =>
+        current.map((message) =>
+          message.find_it?.link?.id === trend.id
+            ? {
+                ...message,
+                find_it: {
+                  ...message.find_it,
+                  link: { ...message.find_it.link, member_wants: true, want_count: result.want_count },
+                },
+              }
+            : message,
+        ),
+      );
+      setNotice("FayFort will source it for you. Follow it in Orders & requests.");
+      await Promise.all([loadRequests(token), loadShop(token)]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We couldn't start sourcing this item.");
+    } finally {
+      setShopBusyId("");
+    }
+  }
+  async function enterGiveaway(giveaway: Giveaway) {
+    if (!token || shopBusyId) return;
+    setShopBusyId(giveaway.id);
+    setError("");
+    try {
+      await apiRequest(`/members/giveaways/${giveaway.id}/enter`, token, { method: "POST" });
+      setHome((current) =>
+        current
+          ? { ...current, giveaways: current.giveaways.map((item) => (item.id === giveaway.id ? { ...item, entered: true } : item)) }
+          : current,
+      );
+      setNotice("You're entered. Good luck!");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your entry could not be saved.");
+    } finally {
+      setShopBusyId("");
+    }
+  }
+  async function pasteLink() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setDraft((current) => (current.trim() ? `${current.trim()} ${text.trim()}` : text.trim()).slice(0, 4000));
+    } catch {
+      setNotice("Paste the link into the message box (long-press, then Paste).");
+    }
+  }
   const loadChats = useCallback(async (accessToken: string) => {
     const result = await apiRequest<{ conversations: MemberChat[] }>("/members/conversations", accessToken);
     setChats(result.conversations || []);
@@ -205,6 +307,7 @@ export function MemberChatPage() {
         const rows = await loadChats(accessToken);
         await loadRequests(accessToken);
         await openRequestedChat(accessToken, rows);
+        void loadShop(accessToken);
       } catch (reason) {
         if (mounted) setError(reason instanceof Error ? reason.message : "Member chat could not be loaded.");
       }
@@ -231,6 +334,7 @@ export function MemberChatPage() {
             const rows = await loadChats(accessToken);
             await loadRequests(accessToken);
             await openRequestedChat(accessToken, rows);
+            void loadShop(accessToken);
           })
           .catch((reason) => {
             if (mounted) setError(reason instanceof Error ? reason.message : "Verify your email to use member chat.");
@@ -241,7 +345,7 @@ export function MemberChatPage() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [loadChats, loadRequests, openRequestedChat]);
+  }, [loadChats, loadRequests, openRequestedChat, loadShop]);
   async function createChat() {
     if (!token || busy || loading) return;
     setActivePanel("chat");
@@ -332,9 +436,9 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
-  async function beginRequest(product: MemberCatalogProduct | null = null) {
+  async function beginRequest(product: MemberCatalogProduct | null = null, title = "") {
     setRequestProduct(product);
-    setRequestTitle(product?.name || "");
+    setRequestTitle(product?.name || title.slice(0, 160));
     setRequestDetails("");
     setRequestSourceType(product ? "catalog_product" : "description");
     setRequestSourceUrl("");
@@ -404,7 +508,7 @@ export function MemberChatPage() {
       setRequestProduct(null);
       setRequestSourceFile(null);
       setRequestFormOpen(false);
-      setNotice("Your sourcing request was submitted. Follow progress in Requests.");
+      setNotice("Your sourcing request was submitted. Follow progress in Orders & requests.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Your sourcing request could not be submitted.");
     } finally {
@@ -424,6 +528,7 @@ export function MemberChatPage() {
         member_message: MemberChatMessage;
         assistant_message: MemberChatMessage;
         products: MemberCatalogProduct[];
+        find_it?: FindItResult | null;
       }>(`/members/conversations/${activeChat.id}/messages`, token, {
         method: "POST",
         body: JSON.stringify({ content }),
@@ -433,7 +538,9 @@ export function MemberChatPage() {
         result.member_message.id,
         result.assistant_message.id,
       ]);
-      setMessages((current) => [...current, result.member_message, result.assistant_message]);
+      const assistant = result.find_it ? { ...result.assistant_message, find_it: result.find_it } : result.assistant_message;
+      setMessages((current) => [...current, result.member_message, assistant]);
+      if (result.find_it?.link) void loadShop(token);
       playMemberSound();
       setProducts(result.products || []);
       setRetryAt(null);
@@ -476,6 +583,7 @@ export function MemberChatPage() {
           {verified && token && (
             <div className="member-chat-header-actions">
               <MemberNotificationsBar accessToken={token} header />
+              <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
               <details className="member-account-menu">
                 <summary className="member-account-icon" aria-label="Open member account menu" title="Member account">
                   {typeof profile?.profile_photo_url === "string" ? (
@@ -603,7 +711,7 @@ export function MemberChatPage() {
                   aria-current={activePanel === "catalog" ? "page" : undefined}
                   onClick={() => selectMemberPanel("catalog")}
                 >
-                  Browse catalog
+                  Browse
                 </button>
                 <button
                   type="button"
@@ -619,7 +727,7 @@ export function MemberChatPage() {
                   aria-current={activePanel === "requests" ? "page" : undefined}
                   onClick={() => selectMemberPanel("requests")}
                 >
-                  Requests
+                  Orders & requests
                 </button>
               </nav>
             </aside>
@@ -630,7 +738,27 @@ export function MemberChatPage() {
                   : "member-chat-workspace-content"
               }
             >
-              {activePanel !== "chat" && <MemberWorkspacePanel accessToken={token} mode={activePanel} />}{" "}
+              {activePanel === "catalog" && (
+                <BrowsePanel
+                  accessToken={token}
+                  home={home}
+                  onOpen={openProduct}
+                  onWant={(trend) => void wantTrend(trend)}
+                  onEnter={(giveaway) => void enterGiveaway(giveaway)}
+                  busyId={shopBusyId}
+                />
+              )}
+              {activePanel === "requests" && <OrdersPanel accessToken={token} />}
+              {activePanel === "saved" && <MemberWorkspacePanel accessToken={token} mode="saved" />}
+              {activePanel === "product" && productId && (
+                <ProductPanel
+                  accessToken={token}
+                  productId={productId}
+                  onOpen={openProduct}
+                  onCartChange={setCart}
+                  onClose={() => selectMemberPanel("chat")}
+                />
+              )}{" "}
               {(activePanel === "chat" || chatExpanded) && (
                 <section className="member-chat-conversation" aria-label="Member product discovery chat">
                   <button
@@ -674,7 +802,17 @@ export function MemberChatPage() {
                               Describe a product, use, or category. I’ll help you explore active FayFort catalog
                               listings.
                             </p>
-                            <a href="/member/products">Browse products directly</a>
+                            <a href="/member/chat?panel=catalog">Browse products directly</a>
+                            {home && (
+                              <HotRails
+                                rails={home.rails.slice(0, 4)}
+                                giveaways={home.giveaways}
+                                onOpen={openProduct}
+                                onWant={(trend) => void wantTrend(trend)}
+                                onEnter={(giveaway) => void enterGiveaway(giveaway)}
+                                busyId={shopBusyId}
+                              />
+                            )}
                           </div>
                         )}
                         {messages.map((message) => (
@@ -687,6 +825,15 @@ export function MemberChatPage() {
                                   : "FayFort assistant"}
                             </small>
                             <p>{message.content}</p>
+                            {message.find_it && (
+                              <FindItBlock
+                                result={message.find_it}
+                                onOpen={openProduct}
+                                onWant={(trend) => void wantTrend(trend)}
+                                onRequest={(title) => void beginRequest(null, title)}
+                                busy={!!shopBusyId}
+                              />
+                            )}
                           </article>
                         ))}
                         {busy && (
@@ -696,30 +843,20 @@ export function MemberChatPage() {
                         )}
                         {products.length > 0 && (
                           <section className="member-chat-suggestions" aria-label="Catalog suggestions">
-                            <h2>Active catalog suggestions</h2>
-                            {products.map((product) => (
-                              <article key={product.id}>
-                                <div>
-                                  <small>
-                                    {product.category_ref || "Product"} ·{" "}
-                                    {product.availability_status.replaceAll("_", " ")}
-                                  </small>
-                                  <strong>{product.name}</strong>
-                                  {product.description && <p>{product.description}</p>}
-                                </div>
-                                {product.media_url && <img src={product.media_url} alt="" />}
-                                <a href="/member/products">View in catalog</a>
-                                {!activeChat.retention_hold && (
-                                  <button
-                                    type="button"
-                                    className="secondary-button"
-                                    onClick={() => beginRequest(product)}
-                                  >
-                                    Request this item
-                                  </button>
-                                )}
-                              </article>
-                            ))}
+                            <h2>Suggestions</h2>
+                            <div className="shop-rail-track">
+                              {products.map((product) => (
+                                <ProductTile
+                                  key={product.id}
+                                  card={product as unknown as ShopCard}
+                                  compact
+                                  onOpen={openProduct}
+                                  onRequest={
+                                    activeChat.retention_hold ? undefined : () => void beginRequest(product)
+                                  }
+                                />
+                              ))}
+                            </div>
                           </section>
                         )}
                       </div>
@@ -753,7 +890,6 @@ export function MemberChatPage() {
                                     ["description", "Describe it"],
                                     ["saved_product", "Saved product"],
                                     ["catalog_product", "Site catalog"],
-                                    ["url", "Product link"],
                                     ["image", "Screenshot"],
                                   ] as const
                                 ).map(([value, label]) => (
@@ -816,19 +952,6 @@ export function MemberChatPage() {
                                     !requestChoicesLoading && (
                                       <small>No saved products yet. Choose Site catalog instead.</small>
                                     )}
-                                </label>
-                              )}
-                              {requestSourceType === "url" && (
-                                <label>
-                                  Product or social-media link
-                                  <input
-                                    type="url"
-                                    required
-                                    maxLength={2000}
-                                    value={requestSourceUrl}
-                                    onChange={(event) => setRequestSourceUrl(event.target.value)}
-                                    placeholder="https://www.instagram.com/…"
-                                  />
                                 </label>
                               )}
                               {requestSourceType === "image" && (
@@ -1084,12 +1207,25 @@ export function MemberChatPage() {
                           onChange={(event) => setDraft(event.target.value)}
                           maxLength={4000}
                           rows={1}
-                          placeholder="Describe what you are looking for…"
+                          placeholder="Describe it or paste a TikTok, Instagram or shop link…"
                           disabled={busy || activeChat.retention_hold}
                         />
                         <div className="member-chat-composer-footer">
                           {!activeChat.retention_hold && (
                             <div className="member-chat-tools" aria-label="Chat actions">
+                              <button
+                                type="button"
+                                className="member-chat-tool-button"
+                                title="Paste a link"
+                                aria-label="Paste a link"
+                                onClick={() => void pasteLink()}
+                              >
+                                <svg aria-hidden="true" viewBox="0 0 24 24">
+                                  <path d="M9 4h6v3H9z" />
+                                  <path d="M8 5.5H6.5A1.5 1.5 0 0 0 5 7v12.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7a1.5 1.5 0 0 0-1.5-1.5H16" />
+                                  <path d="M10.5 15.5 13.5 12.5M9.5 13l-.8.8a2 2 0 0 0 2.8 2.8l.8-.8m2.2-2.6.8-.8a2 2 0 0 0-2.8-2.8l-.8.8" />
+                                </svg>
+                              </button>
                               <button
                                 type="button"
                                 className="member-chat-tool-button"
@@ -1380,6 +1516,7 @@ export function MemberWorkspacePanel({
       await apiRequest(`/members/products/${product.id}/saved`, accessToken, {
         method: savedIds.includes(product.id) ? "DELETE" : "POST",
       });
+      if (!savedIds.includes(product.id)) trackIntent(accessToken, [{ event_type: "save", product_id: product.id }]);
       await load(search, categoryRef, mode === "saved");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Saved products could not be updated.");

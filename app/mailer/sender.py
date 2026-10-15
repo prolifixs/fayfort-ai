@@ -107,6 +107,13 @@ def build_member_email(row: dict, preferences: dict) -> RenderedEmail | None:
         if not letter:
             return None
         return newsletter_email(subject=letter["subject"], body_text=letter["body_text"], unsubscribe_url=unsubscribe)
+    if str(row.get("template") or "").startswith("commerce_"):
+        # Commerce emails (giveaway wins, "found it") carry their own text; Shopify sends order emails itself.
+        payload = row.get("payload") or {}
+        if not payload.get("title") or not payload.get("body"):
+            return None
+        return notification_email(category=row["category"], title=str(payload["title"]), body=str(payload["body"]),
+                                  url=app_url(str(payload.get("href") or "/member/chat")), unsubscribe_url=unsubscribe)
     if not row.get("notification_id"):
         return None
     notifications = (supabase.table("member_notifications")

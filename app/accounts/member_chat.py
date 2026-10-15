@@ -65,6 +65,32 @@ def _catalog_matches(text: str) -> list[dict[str, Any]]:
     return [row for _, row in scored[:5]]
 
 
+def _with_commerce_cards(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add price, sale and stock to chat product suggestions (commerce card fields)."""
+    if not products:
+        return products
+    try:
+        from app.commerce import service as commerce
+        full = {str(p["id"]): p for p in commerce.load_products(ids=[str(p["id"]) for p in products])}
+        cards = {c["id"]: c for c in commerce.cards(list(full.values()))}
+        return [{**product, **cards.get(str(product["id"]), {})} for product in products]
+    except Exception:
+        logger.exception("Could not add commerce details to chat products")
+        return products
+
+
+def _find_it_for_message(member_id: str, conversation_id: str, content: str) -> dict[str, Any] | None:
+    """A pasted link in the chat composer runs Find It (exact match, alternatives, Source it)."""
+    try:
+        from app.commerce import links, service as commerce
+        if not links.find_url(content):
+            return None
+        return commerce.find_it(member_id, content, session_id=f"chat:{conversation_id}"[:64])
+    except Exception:
+        logger.exception("Find It could not resolve a chat link")
+        return None
+
+
 def _invoke_member_model(*, member_id: str, messages: list[dict[str, str]]) -> tuple[str, int, int, str, str]:
     model, provider = _configured_model_route()
     input_price, output_price = fetch_pinned_provider_prices()
@@ -244,15 +270,16 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                 .eq("id", str(conversation_id)).eq("member_id", member_id).maybe_single().execute())
             if not _response_data(owner):
                 raise HTTPException(status_code=404, detail="Chat not found.")
-            rows = (supabase.table("member_messages").select("id,sender_type,content,related_product_ids,created_at")
+            rows = (supabase.table("member_messages").select("id,sender_type,content,related_product_ids,find_it,created_at")
                 .eq("conversation_id", str(conversation_id)).order("created_at").limit(500).execute().data or [])
             product_ids = list(dict.fromkeys(product_id for row in rows
-                for product_id in row.get("related_product_ids", []) if product_id))
+                for product_id in (row.get("related_product_ids") or []) if product_id))
             products = []
             if product_ids:
                 products = (supabase.table("directory_products")
                     .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
                     .eq("active", True).in_("id", product_ids).execute().data or [])
+                products = _with_commerce_cards(products)
             return {"messages": rows, "products": products}
         except HTTPException:
             raise
@@ -281,6 +308,18 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             previous = (supabase.table("member_messages").select("sender_type,content")
                 .eq("conversation_id", str(conversation_id)).order("created_at", desc=True).limit(12).execute().data or [])
             matches = _catalog_matches(payload.content)
+            find_result = _find_it_for_message(member_id, str(conversation_id), payload.content)
+            if find_result:
+                found_ids = [item["id"] for item in ([find_result.get("exact")] if find_result.get("exact") else [])
+                             + list(find_result.get("alternatives") or [])]
+                by_id = {str(item["id"]): item for item in matches}
+                extra = [] if not found_ids else (supabase.table("directory_products")
+                    .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
+                    .eq("active", True).in_("id", found_ids).execute().data or [])
+                for item in extra:
+                    by_id.setdefault(str(item["id"]), item)
+                ordered = [by_id[i] for i in found_ids if i in by_id]
+                matches = (ordered + [m for m in matches if str(m["id"]) not in found_ids])[:5]
             catalog_facts = "\n".join(
                 f"- Product {item['id']}: {item['name']}; category {item.get('category_ref') or 'unlisted'}; "
                 f"catalog status {item.get('availability_status') or 'unknown'}; details {item.get('description') or 'not provided'}"
@@ -288,7 +327,10 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             system = ("You are FayFort's member product discovery assistant. Help users find products using only the active catalog facts below. "
                 "Never invent product names, prices, stock, availability, delivery, or business policies. Catalog status is not a live inventory promise. "
                 "If no relevant match is listed, ask a short clarifying question or suggest browsing the catalog. Do not claim to create a request, contact staff, or complete an action.\n"
-                f"Active catalog matches:\n{catalog_facts or '(No active catalog matches were found for this message.)'}")
+                f"Active catalog matches:\n{catalog_facts or '(No active catalog matches were found for this message.)'}"
+                + ("\nThe member shared a link. FayFort shows them cards for it below your reply: an exact match if the store has it, "
+                   "the closest alternatives, and a Source it button that asks the FayFort team to find it. Refer to those cards briefly."
+                   if find_result and find_result.get("kind") == "link" else ""))
             history = list(reversed(previous))
             messages = [{"role": "system", "content": system}]
             messages.extend({"role": "user" if item["sender_type"] == "member" else "assistant",
@@ -296,15 +338,18 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             answer, _, _, _, _ = _invoke_member_model(member_id=member_id, messages=messages)
             answer = _guard_response_grounding(answer=answer, customer_message=payload.content,
                 knowledge_context=catalog_facts, action_decision=None)
-            assistant_row = (supabase.table("member_messages").insert({"conversation_id": str(conversation_id),
-                "sender_type": "assistant", "content": answer,
-                "related_product_ids": [item["id"] for item in matches]}).execute().data or [None])[0]
+            assistant_values = {"conversation_id": str(conversation_id), "sender_type": "assistant", "content": answer,
+                "related_product_ids": [item["id"] for item in matches]}
+            if find_result:
+                assistant_values["find_it"] = find_result
+            assistant_row = (supabase.table("member_messages").insert(assistant_values).execute().data or [None])[0]
             if not assistant_row:
                 raise RuntimeError("Assistant message insert returned no row")
             title = payload.content[:117] + "…" if len(payload.content) > 120 else payload.content
             supabase.table("member_conversations").update({"title": title, "last_activity_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", str(conversation_id)).eq("member_id", member_id).execute()
-            return {"member_message": user_row, "assistant_message": assistant_row, "products": matches}
+            return {"member_message": user_row, "assistant_message": assistant_row,
+                    "products": _with_commerce_cards(matches), "find_it": find_result}
         except HTTPException as exc:
             if exc.status_code == 429 and user_row and user_row.get("id"):
                 try:

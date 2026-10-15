@@ -27,7 +27,7 @@ import {
 export function MemberRoutePage() {
   if (window.location.pathname === "/member/notifications") return <MemberNotificationsPage />;
   if (window.location.pathname === "/member/products") return <MemberProductsPage />;
-  if (window.location.pathname === "/member/chat") return <MemberChatPage />;
+  if (window.location.pathname === "/member/chat" || window.location.pathname === "/member/share") return <MemberChatPage />;
   if (window.location.pathname === "/member/settings") return <MemberSettingsPage />;
   if (window.location.pathname === "/member/membership") return <MemberMembershipPage />;
   if (window.location.pathname === "/member/rewards") return <MemberRewardsPage />;

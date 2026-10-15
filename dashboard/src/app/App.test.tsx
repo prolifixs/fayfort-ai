@@ -63,13 +63,13 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.queryByRole("button",{name:/subscribe|upgrade|checkout/i})).not.toBeInTheDocument();
  });
 
- it("shows an empty giveaways placeholder to platform staff without campaign controls",async()=>{
+ it("opens the giveaway campaign tools for platform admins",async()=>{
   render(<DashboardWorkspace accessToken="test-access-token" platformAdmin eventStreaming={false}/>);
   const nav=screen.getByRole("navigation",{name:"Main navigation"});
   fireEvent.click(within(nav).getByRole("button",{name:/Giveaways/}));
   expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
-  expect(screen.getByRole("heading",{name:"No giveaways yet"})).toBeInTheDocument();
-  expect(screen.queryByRole("button",{name:/upload|campaign|create giveaway/i})).not.toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"Create giveaway"})).toBeInTheDocument();
+  expect(screen.getByRole("tab",{name:"Giveaways",selected:true})).toBeInTheDocument();
  });
 
  it("lets an active FayFort worker open Giveaways without a business workspace",async()=>{
@@ -168,7 +168,7 @@ describe("authenticated dashboard workspace",()=>{
   expect(await screen.findByRole("heading",{name:"Create a sourcing request"})).toBeInTheDocument();
   fireEvent.change(screen.getByRole("textbox",{name:"Details for your request (optional)"}),{target:{value:"Please confirm available sizes."}});
   fireEvent.click(screen.getByRole("button",{name:"Submit request"}));
-  expect(await screen.findByText("Your sourcing request was submitted. Follow progress in Requests.")).toBeInTheDocument();
+  expect(await screen.findByText("Your sourcing request was submitted. Follow progress in Orders & requests.")).toBeInTheDocument();
   expect(submittedBody).toEqual({request_title:"Sample wrench",request_description:"Please confirm available sizes.",source_type:"catalog_product",source_url:null,product_id:"product-human",conversation_id:"chat-human"});
  });
 
