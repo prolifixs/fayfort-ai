@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react
 import { apiRequest } from "../lib/api";
 import { dashboardAuthConfigured, supabaseClient } from "../lib/supabase";
 import { playMemberSound } from "./memberSound";
+import { useDismiss } from "./ui/useDismiss";
 
 export type MemberNotification = {
   id: string;
@@ -29,6 +30,16 @@ export function MemberNotificationsBar({ accessToken, header = false }: { access
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const previousUnreadIds = useRef<Set<string> | null>(null);
+  const controlRef = useRef<HTMLDivElement>(null);
+  // In the app bar the latest activity shows as a toast for a few seconds; it stays in the bell list until read.
+  const [toastSeen, setToastSeen] = useState<string[]>([]);
+  const toastId = header ? data.notifications.find(item => !item.read_at && !item.banner_dismissed_at && !toastSeen.includes(item.id))?.id : undefined;
+  useEffect(() => {
+    if (!toastId) return;
+    const timer = window.setTimeout(() => setToastSeen(current => [...current, toastId]), 8000);
+    return () => window.clearTimeout(timer);
+  }, [toastId]);
+  useDismiss(open, () => setOpen(false), [controlRef]);
   const load = useCallback(async () => {
     if (!accessToken) return;
     try {
@@ -91,11 +102,11 @@ export function MemberNotificationsBar({ accessToken, header = false }: { access
     }
   }
   if (!accessToken) return null;
-  const banner = data.notifications.find(item => !item.read_at && !item.banner_dismissed_at);
+  const banner = data.notifications.find(item => !item.read_at && !item.banner_dismissed_at && !(header && toastSeen.includes(item.id)));
   return <div className={header ? "member-notification-area member-notification-area-header" : "member-notification-area"}>
-    <div className="member-notification-control">
+    <div className="member-notification-control" ref={controlRef}>
       <button className="member-notification-bell" type="button" aria-label={`Notifications${data.unread_count ? `, ${data.unread_count} unread` : ""}`} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(value => !value)}>
-        <span aria-hidden="true">🔔</span><span>Notifications</span>{data.unread_count > 0 && <b>{data.unread_count > 99 ? "99+" : data.unread_count}</b>}
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2H4.5z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span>{data.unread_count > 0 && <b>{data.unread_count > 99 ? "99+" : data.unread_count}</b>}
       </button>
       {open && <section className="member-notification-popover" role="dialog" aria-label="Notifications">
         <div className="member-notification-heading"><div><h2>Notifications</h2><p>{data.unread_count ? `${data.unread_count} unread` : "You’re all caught up."}</p></div><button type="button" disabled={busy || data.unread_count === 0} onClick={() => void markAllRead()}>Mark all read</button></div>

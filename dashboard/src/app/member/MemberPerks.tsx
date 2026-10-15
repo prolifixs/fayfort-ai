@@ -309,7 +309,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
   const tab = DIRECTORY_TABS.find((item) => item.id === type);
   const unlockLabel = status?.pro_allowance_left ? "Unlock (included)" : status?.credits ? "Unlock (1 credit)" : "Unlock";
   return (
-    <section className="member-directory" aria-label="Supplier directory">
+    <section className="member-workspace-panel member-directory" aria-label="Supplier directory">
       <div className="member-directory-header">
         <div>
           <h2>Supplier directory</h2>

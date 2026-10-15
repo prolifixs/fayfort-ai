@@ -14,8 +14,8 @@ import { MemberPhotoReviewApp } from "./staff/MemberPhotoReview";
 import { MemberRoutePage } from "./member/MemberAccountPages";
 import { SetupScreen } from "./SetupScreen";
 import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
-// Keep last: preserves the original stylesheet cascade order.
-import "./member-chat.css";
+// Member app styles (tokens are loaded first in main.tsx).
+import "./member/member.css";
 
 export function App() {
   if (window.location.pathname === "/operations")

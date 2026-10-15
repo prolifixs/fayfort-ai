@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useDismiss } from "../ui/useDismiss";
 import { apiRequest } from "../../lib/api";
 import type { Cart, ProductDetail, Rail, ShopCard, TrendCard, Giveaway } from "./commerceApi";
 import { money, shopSessionId, trackIntent } from "./commerceApi";
@@ -151,7 +152,7 @@ export function ProductPanel({
           )}
           {notice && <p role="status">{notice}</p>}
           {detail.product.description && <p className="shop-description">{detail.product.description}</p>}
-          {detail.pairs_with.length ? (
+          {detail.pairs_with?.length ? (
             <section className="shop-rail" aria-label="Goes well with">
               <h3>Goes well with</h3>
               <div className="shop-rail-track">
@@ -181,6 +182,8 @@ export function CartButton({
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState("");
+  const cartRef = useRef<HTMLDivElement>(null);
+  useDismiss(open, () => setOpen(false), [cartRef]);
   const [error, setError] = useState("");
   const count = cart?.lines.reduce((total, line) => total + line.quantity, 0) || 0;
   async function setQuantity(variantId: string, quantity: number) {
@@ -211,7 +214,7 @@ export function CartButton({
     }
   }
   return (
-    <div className="shop-cart-control">
+    <div className="shop-cart-control" ref={cartRef}>
       <button
         type="button"
         className="member-notification-bell shop-cart-button"
@@ -228,6 +231,7 @@ export function CartButton({
       </button>
       {open && (
         <section className="shop-cart-drawer" role="dialog" aria-label="Your cart">
+          <div className="sheet-handle" aria-hidden="true" />
           <header>
             <h2>Your cart</h2>
             <button type="button" className="shop-close" aria-label="Close cart" onClick={() => setOpen(false)}>

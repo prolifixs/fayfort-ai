@@ -1,0 +1,139 @@
+/* FayFort design tokens (docs/UX_LAYOUT_PLAN.md stage 1).
+   Every colour, size, radius, shadow and layer in the apps comes from here. Themes only change the
+   base colour tokens (set on .member-theme-runtime by MemberThemeRuntime); everything derived from
+   them (borders, hovers, soft fills) is recomputed where the theme is applied.
+   Breakpoints: phone < 640px, tablet 640–1023px, desktop >= 1024px. */
+
+:root {
+  /* Type */
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --text-2xs: 0.6875rem; /* 11px: badges, counters */
+  --text-xs: 0.75rem;    /* 12px: captions, meta */
+  --text-sm: 0.8125rem;  /* 13px: secondary UI */
+  --text-md: 0.875rem;   /* 14px: UI default */
+  --text-base: 0.9375rem;/* 15px: body, chat */
+  --text-lg: 1.0625rem;  /* 17px: card titles */
+  --text-xl: 1.25rem;    /* 20px: section titles */
+  --text-2xl: 1.625rem;  /* 26px: page titles */
+  --text-3xl: 2rem;      /* 32px: hero numbers */
+  --leading-tight: 1.3;
+  --leading: 1.55;
+  --leading-loose: 1.7;
+  --weight-medium: 550;
+  --weight-strong: 650;
+
+  /* Space (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --gutter: 16px; /* page side padding; grows on larger screens */
+
+  /* Shape */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --radius-card: var(--radius-md);
+  --radius-panel: var(--radius-lg);
+
+  /* Layout */
+  --sidebar-w: 272px;
+  --content-w: 768px;
+  --wide-w: 1120px;
+  --topbar-h: 56px;
+  --tap: 44px; /* minimum touch target */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Layers */
+  --z-sticky: 10;
+  --z-topbar: 30;
+  --z-popover: 60;
+  --z-drawer: 80;
+  --z-dialog: 100;
+  --z-toast: 120;
+
+  /* Motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --duration: 180ms;
+
+  /* Base colours (the FayFort base theme). Themes override these eight. */
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fa;
+  --color-text: #17212b;
+  --color-muted: #5b6876;
+  --color-accent: #005a9c;
+  --color-accent-text: #ffffff;
+  --color-border-strong: #637180;
+  --color-focus: #005a9c;
+
+  /* Fixed status colours */
+  --color-success: #147964;
+  --color-danger: #b42318;
+  --color-warning: #8a5a00;
+  --color-sale: #c2410c;
+
+  /* Staff apps keep the FayFort green */
+  --staff-accent: #197c69;
+}
+
+/* Derived colours: declared wherever the base colours can change, so themes recompute them. */
+:root,
+.member-theme-runtime {
+  --color-border: color-mix(in srgb, var(--color-text) 13%, transparent);
+  --color-border-subtle: color-mix(in srgb, var(--color-text) 8%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-pressed: color-mix(in srgb, var(--color-text) 10%, transparent);
+  --color-surface-2: color-mix(in srgb, var(--color-text) 5%, var(--color-bg));
+  --color-faint: color-mix(in srgb, var(--color-muted) 75%, var(--color-bg));
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg));
+  --color-accent-hover: color-mix(in srgb, var(--color-accent) 88%, black);
+  --color-success-soft: color-mix(in srgb, var(--color-success) 10%, var(--color-bg));
+  --color-danger-soft: color-mix(in srgb, var(--color-danger) 9%, var(--color-bg));
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 11%, var(--color-bg));
+  --color-scrim: rgb(10 16 24 / 45%);
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-md: 0 6px 20px rgb(16 24 40 / 10%);
+  --shadow-lg: 0 20px 60px rgb(16 24 40 / 18%);
+  --shadow-card: none;
+  --card-border: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  :root { --gutter: 24px; }
+}
+@media (min-width: 1024px) {
+  :root { --gutter: 32px; }
+}
+
+/* Base */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+  color: var(--color-text);
+  background: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+}
+img, video, svg { max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.sr-only, .visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}

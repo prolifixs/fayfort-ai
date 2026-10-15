@@ -23,6 +23,7 @@ import { MemberAccountDialogs, type MemberAccountDialogKind } from "./MemberAcco
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { RANK_NAMES, depositNote, useMemberPlan } from "./membershipApi";
 import { DirectoryPanel } from "./MemberPerks";
+import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
@@ -52,7 +53,19 @@ export function MemberChatPage() {
   const requestBudgetValue = Number(requestBudget);
   const requestExpectedTotal =
     requestBudget.trim() && Number.isFinite(requestBudgetValue) && requestBudgetValue > 0 ? requestBudgetValue : null;
-  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const isDesktop = useMediaQuery(DESKTOP);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const infoRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  useDismiss(accountOpen, () => setAccountOpen(false), [accountRef]);
+  useDismiss(infoOpen, () => setInfoOpen(false), [infoRef]);
+  useDismiss(sidebarOpen && !isDesktop, () => setSidebarOpen(false), [sidebarRef]);
   const [chats, setChats] = useState<MemberChat[]>([]);
   const [activeChat, setActiveChat] = useState<MemberChat | null>(null);
   const [messages, setMessages] = useState<MemberChatMessage[]>([]);
@@ -60,14 +73,27 @@ export function MemberChatPage() {
   const [requests, setRequests] = useState<MemberOwnedRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState("");
   const [draft, setDraft] = useState(() => sharedText());
+  // The composer grows with its text (up to about eight lines), like a messaging app.
+  useEffect(() => {
+    const box = composerRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = Math.min(box.scrollHeight, 200) + "px";
+  }, [draft]);
   const [home, setHome] = useState<ShopHome | null>(null);
   const [cart, setCart] = useState<Cart | null>(null);
   const [productId, setProductId] = useState(() => new URLSearchParams(window.location.search).get("product") || "");
   const [shopBusyId, setShopBusyId] = useState("");
   const [busy, setBusy] = useState(false);
+  // Keep the newest message in view, like a messaging app.
+  useEffect(() => {
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [messages.length, busy]);
   const [loading, setLoading] = useState(false);
   const [deletingChatId, setDeletingChatId] = useState("");
   const [chatMenuId, setChatMenuId] = useState("");
+  useDismiss(!!chatMenuId, () => setChatMenuId(""), [chatMenuRef]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [retryAt, setRetryAt] = useState<number | null>(null);
@@ -97,6 +123,7 @@ export function MemberChatPage() {
   const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
   function selectMemberPanel(panel: MemberPanel) {
     setActivePanel(panel);
+    setSidebarOpen(false);
     setChatExpanded(false);
     const url = panel === "chat" ? "/member/chat" : `/member/chat?panel=${panel}`;
     window.history.pushState({ memberPanel: panel }, "", url);
@@ -359,6 +386,7 @@ export function MemberChatPage() {
   }, [loadChats, loadRequests, openRequestedChat, loadShop]);
   async function createChat() {
     if (!token || busy || loading) return;
+    setSidebarOpen(false);
     setActivePanel("chat");
     setChatExpanded(false);
     if (activeChat && messages.length === 0) return;
@@ -385,6 +413,7 @@ export function MemberChatPage() {
   }
   async function chooseChat(chat: MemberChat) {
     if (!token) return;
+    setSidebarOpen(false);
     setActivePanel("chat");
     setChatExpanded(false);
     setChatMenuId("");
@@ -583,7 +612,8 @@ export function MemberChatPage() {
     }
   }
   function openAccountDialog(kind: MemberAccountDialogKind) {
-    if (accountMenuRef.current) accountMenuRef.current.open = false;
+    setAccountOpen(false);
+    setSidebarOpen(false);
     setAccountDialog(kind);
   }
   const closeAccountDialog = useCallback(() => setAccountDialog(null), []);
@@ -614,68 +644,279 @@ export function MemberChatPage() {
     ),
   );
   const suggestedProducts = products.filter((product) => !findItIds.has(product.id));
+  const memberName =
+    typeof profile?.display_name === "string" && profile.display_name.trim() ? profile.display_name.trim() : "Member";
+  const panelTitles: Record<MemberPanel, string> = {
+    chat: activeChat?.title || "New chat",
+    catalog: "Browse",
+    saved: "Saved products",
+    requests: "Orders & requests",
+    product: "Product",
+    directory: "Supplier directory",
+  };
+  const split = activePanel !== "chat" && chatExpanded && isDesktop;
+  const showChat = activePanel === "chat" || split;
+  const navItems: { panel: MemberPanel; label: string; icon: string }[] = [
+    { panel: "catalog", label: "Browse", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+    { panel: "saved", label: "Saved products", icon: "M6 4h12v16l-6-4-6 4z" },
+    { panel: "requests", label: "Orders & requests", icon: "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" },
+    { panel: "directory", label: "Supplier directory", icon: "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  ];
   if (!dashboardAuthConfigured) return <SetupScreen />;
-  return (
-    <main className="auth-page member-chat-page">
-      <section className="member-chat-shell">
-        <header className="member-chat-header">
-          <a className="brand-mark" href="/member/chat" aria-label="FayFort chat home">
-            F
-          </a>
-          <div className="member-chat-heading">
-            <small>FAYFORT MEMBER</small>
-            <h1>Find what you need</h1>
+  if (authLoading || !token || !verified) {
+    return (
+      <main className="mapp-gate">
+        <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
+          <span className="brand-mark">F</span>
+          <span>FayFort</span>
+        </a>
+        {authLoading ? (
+          <p role="status">Checking your member sign-in…</p>
+        ) : !token ? (
+          <div className="member-chat-empty">
+            <h1>Sign in to start a chat</h1>
+            <p>Chat helps you explore active catalog products. You can browse the catalog without using AI chat.</p>
+            <a className="primary-button" href="/member/account">
+              Member sign in
+            </a>
           </div>
-          {verified && token && (
-            <div className="member-chat-header-actions">
-              <MemberNotificationsBar accessToken={token} header />
-              <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
-              <details className="member-account-menu" ref={accountMenuRef}>
-                <summary className="member-account-icon" aria-label="Open member account menu" title="Member account">
-                  {typeof profile?.profile_photo_url === "string" ? (
-                    <img src={profile.profile_photo_url} alt="" />
-                  ) : (
+        ) : (
+          <p role="status">{error || "Checking verified member access…"}</p>
+        )}
+      </main>
+    );
+  }
+  return (
+    <div className={sidebarOpen && !isDesktop ? "mapp sidebar-open" : "mapp"}>
+      <aside
+        id="member-sidebar"
+        className="mapp-sidebar"
+        aria-label="Chats and navigation"
+        ref={sidebarRef}
+        aria-hidden={!isDesktop && !sidebarOpen ? true : undefined}
+      >
+        <div className="mapp-sidebar-head">
+          <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
+            <span className="brand-mark">F</span>
+            <span>FayFort</span>
+          </a>
+          {!isDesktop && (
+            <button type="button" className="icon-button" aria-label="Close menu" onClick={() => setSidebarOpen(false)}>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <button type="button" className="mapp-new-chat" onClick={() => void createChat()} disabled={busy}>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <span>New chat</span>
+        </button>
+        <nav className="mapp-nav" aria-label="Member navigation">
+          {navItems.map((item) => (
+            <button
+              key={item.panel}
+              type="button"
+              className={activePanel === item.panel ? "active" : ""}
+              aria-current={activePanel === item.panel ? "page" : undefined}
+              onClick={() => selectMemberPanel(item.panel)}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d={item.icon} />
+              </svg>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <section className="mapp-history" aria-label="Your chats">
+          <h2>Chats</h2>
+          {chats.length === 0 ? (
+            <p className="mapp-history-empty">Your chats will appear here.</p>
+          ) : (
+            chats.map((chat) => (
+              <div
+                className={activeChat?.id === chat.id && activePanel === "chat" ? "member-chat-row active" : "member-chat-row"}
+                key={chat.id}
+              >
+                <button className="member-chat-list-item" onClick={() => void chooseChat(chat)}>
+                  <strong>{chat.title}</strong>
+                  <small>
+                    {chat.retention_hold
+                      ? "Request linked · retained"
+                      : chat.support_status
+                        ? `Staff support · ${chat.support_status.replaceAll("_", " ")}`
+                        : "Member chat"}
+                  </small>
+                </button>
+                <div className="member-chat-options" ref={chatMenuId === chat.id ? chatMenuRef : undefined}>
+                  <button
+                    type="button"
+                    className="member-chat-options-trigger"
+                    aria-label={"Chat options for " + chat.title}
+                    aria-haspopup="menu"
+                    aria-expanded={chatMenuId === chat.id}
+                    disabled={deletingChatId === chat.id}
+                    onClick={() => setChatMenuId((current) => (current === chat.id ? "" : chat.id))}
+                  >
                     <svg aria-hidden="true" viewBox="0 0 24 24">
-                      <path
-                        d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      />
+                      <path d="M6 12h.01M12 12h.01M18 12h.01" />
                     </svg>
+                  </button>
+                  {chatMenuId === chat.id && (
+                    <div className="member-chat-options-menu" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={!!chat.retention_hold || !!chat.linked_request_id || deletingChatId === chat.id}
+                        title={
+                          chat.retention_hold || chat.linked_request_id
+                            ? "Chats linked to a sourcing request are retained"
+                            : undefined
+                        }
+                        onClick={() => void deleteChat(chat)}
+                      >
+                        {deletingChatId === chat.id ? "Deleting…" : "Delete chat"}
+                      </button>
+                      {(chat.retention_hold || chat.linked_request_id) && <small>Retained with sourcing request</small>}
+                    </div>
                   )}
-                </summary>
-                <div className="member-account-dropdown" role="menu">
-                  <div className="member-account-dropdown-name">
-                    <small>Member name</small>
-                    <strong>
-                      {typeof profile?.display_name === "string" && profile.display_name.trim()
-                        ? profile.display_name.trim()
-                        : "Member"}
-                    </strong>
-                  </div>
-                  <button type="button" role="menuitem" onClick={() => openAccountDialog("points")}>
-                    <span>Virtual points</span>
-                    <strong>{new Intl.NumberFormat().format(Number(profile?.points_balance ?? 0) || 0)}</strong>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => openAccountDialog("tier")}>
-                    <span>Member tier</span>
-                    <strong>
-                      {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} ·{" "}
-                      {Number(profile?.subrank) || 1}
-                    </strong>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
-                    Account details
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
-                    Settings
-                  </button>
                 </div>
-              </details>
+              </div>
+            ))
+          )}
+        </section>
+        <div className="mapp-account" ref={accountRef}>
+          {accountOpen && (
+            <div className="member-account-dropdown" role="menu" aria-label="Account">
+              <div className="member-account-dropdown-name">
+                <small>Member name</small>
+                <strong>{memberName}</strong>
+              </div>
+              <button type="button" role="menuitem" onClick={() => openAccountDialog("points")}>
+                <span>Virtual points</span>
+                <strong>{new Intl.NumberFormat().format(Number(profile?.points_balance ?? 0) || 0)}</strong>
+              </button>
+              <button type="button" role="menuitem" onClick={() => openAccountDialog("tier")}>
+                <span>Member tier</span>
+                <strong>
+                  {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
+                </strong>
+              </button>
+              <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
+                Account details
+              </button>
+              <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
+                Settings
+              </button>
             </div>
           )}
+          <button
+            type="button"
+            className="mapp-account-button"
+            aria-label="Open member account menu"
+            aria-haspopup="menu"
+            aria-expanded={accountOpen}
+            onClick={() => setAccountOpen((value) => !value)}
+          >
+            <span className="member-account-icon" aria-hidden="true">
+              {typeof profile?.profile_photo_url === "string" ? (
+                <img src={profile.profile_photo_url} alt="" />
+              ) : (
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0" />
+                </svg>
+              )}
+            </span>
+            <span className="mapp-account-text">
+              <strong>{memberName}</strong>
+              <small>
+                {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
+              </small>
+            </span>
+          </button>
+        </div>
+      </aside>
+      {!isDesktop && sidebarOpen && <div className="mapp-scrim" aria-hidden="true" />}
+      <div className="mapp-main">
+        <header className="mapp-topbar">
+          {!isDesktop && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Open menu"
+              aria-controls="member-sidebar"
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen(true)}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 7h16M4 12h16M4 17h10" />
+              </svg>
+            </button>
+          )}
+          <h1 className="mapp-title">{panelTitles[activePanel]}</h1>
+          <div className="mapp-topbar-actions">
+            {activeChat && showChat && (
+              <div className="mapp-info" ref={infoRef}>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Chat information"
+                  aria-haspopup="dialog"
+                  aria-expanded={infoOpen}
+                  onClick={() => setInfoOpen((value) => !value)}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 11v5M12 8h.01" />
+                  </svg>
+                </button>
+                {infoOpen && (
+                  <section className="mapp-popover member-chat-info-body" role="dialog" aria-label="Chat information">
+                    <h2>Chat information</h2>
+                    {activeChat.retention_hold && (
+                      <p>
+                        <strong>Request-linked chat:</strong> This conversation is retained with your sourcing request
+                        and is read-only. Follow updates in Orders & requests.
+                      </p>
+                    )}
+                    <p>
+                      <strong>Chat limits:</strong> AI chat has monthly and hourly usage limits. If you reach a limit,
+                      you can return when it resets.
+                    </p>
+                    <p>
+                      <strong>Browse anytime:</strong> Catalog browsing and saved products remain available even when
+                      chat is limited.
+                    </p>
+                    <p>
+                      <strong>Need a person?</strong> Ask FayFort staff to take a look at this conversation.
+                    </p>
+                    {!activeChat.retention_hold && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => void requestStaffSupport()}
+                        disabled={
+                          busy ||
+                          (!!activeChat.support_status &&
+                            ["open", "claimed", "blocked"].includes(activeChat.support_status))
+                        }
+                      >
+                        {busy
+                          ? "Requesting support…"
+                          : activeChat.support_status && ["open", "claimed", "blocked"].includes(activeChat.support_status)
+                            ? "Staff support requested"
+                            : "Ask staff for help"}
+                      </button>
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+            <MemberNotificationsBar accessToken={token} header />
+            <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
+          </div>
         </header>
         <MemberAccountDialogs
           kind={accountDialog}
@@ -692,122 +933,7 @@ export function MemberChatPage() {
             />
           }
         />
-        {authLoading ? (
-          <p role="status">Checking your member sign-in…</p>
-        ) : !token ? (
-          <div className="member-chat-empty">
-            <h2>Sign in to start a chat</h2>
-            <p>Chat helps you explore active catalog products. You can browse the catalog without using AI chat.</p>
-            <a className="primary-button" href="/member/account">
-              Member sign in
-            </a>
-          </div>
-        ) : !verified ? (
-          <p role="status">{error || "Checking verified member access…"}</p>
-        ) : (
-          <div className="member-chat-layout">
-            <aside className="member-chat-list" aria-label="Chats and member navigation">
-              <section className="member-chat-history">
-                <button className="primary-button" onClick={() => void createChat()} disabled={busy}>
-                  New chat
-                </button>
-                {chats.length === 0 ? (
-                  <p>Your chats will appear here.</p>
-                ) : (
-                  chats.map((chat) => (
-                    <div
-                      className={activeChat?.id === chat.id ? "member-chat-row active" : "member-chat-row"}
-                      key={chat.id}
-                    >
-                      <button className="member-chat-list-item" onClick={() => void chooseChat(chat)}>
-                        <strong>{chat.title}</strong>
-                        <small>
-                          {chat.retention_hold
-                            ? "Request linked · retained"
-                            : chat.support_status
-                              ? `Staff support · ${chat.support_status.replaceAll("_", " ")}`
-                              : "Member chat"}
-                        </small>
-                      </button>
-                      <div className="member-chat-options">
-                        <button
-                          type="button"
-                          className="member-chat-options-trigger"
-                          aria-label={"Chat options for " + chat.title}
-                          aria-haspopup="menu"
-                          aria-expanded={chatMenuId === chat.id}
-                          disabled={deletingChatId === chat.id}
-                          onClick={() => setChatMenuId((current) => (current === chat.id ? "" : chat.id))}
-                        >
-                          ⋯
-                        </button>
-                        {chatMenuId === chat.id && (
-                          <div className="member-chat-options-menu" role="menu">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              disabled={!!chat.retention_hold || !!chat.linked_request_id || deletingChatId === chat.id}
-                              title={
-                                chat.retention_hold || chat.linked_request_id
-                                  ? "Chats linked to a sourcing request are retained"
-                                  : undefined
-                              }
-                              onClick={() => void deleteChat(chat)}
-                            >
-                              {deletingChatId === chat.id ? "Deleting…" : "Delete chat"}
-                            </button>
-                            {(chat.retention_hold || chat.linked_request_id) && (
-                              <small>Retained with sourcing request</small>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </section>
-              <nav className="member-chat-navigation" aria-label="Member navigation">
-                <button
-                  type="button"
-                  className={activePanel === "catalog" ? "active" : ""}
-                  aria-current={activePanel === "catalog" ? "page" : undefined}
-                  onClick={() => selectMemberPanel("catalog")}
-                >
-                  Browse
-                </button>
-                <button
-                  type="button"
-                  className={activePanel === "saved" ? "active" : ""}
-                  aria-current={activePanel === "saved" ? "page" : undefined}
-                  onClick={() => selectMemberPanel("saved")}
-                >
-                  Saved products
-                </button>
-                <button
-                  type="button"
-                  className={activePanel === "requests" ? "active" : ""}
-                  aria-current={activePanel === "requests" ? "page" : undefined}
-                  onClick={() => selectMemberPanel("requests")}
-                >
-                  Orders & requests
-                </button>
-                <button
-                  type="button"
-                  className={activePanel === "directory" ? "active" : ""}
-                  aria-current={activePanel === "directory" ? "page" : undefined}
-                  onClick={() => selectMemberPanel("directory")}
-                >
-                  Supplier directory
-                </button>
-              </nav>
-            </aside>
-            <div
-              className={
-                activePanel !== "chat" && chatExpanded
-                  ? "member-chat-workspace-content split"
-                  : "member-chat-workspace-content"
-              }
-            >
+        <div className={split ? "mapp-content split" : "mapp-content"}>
               {activePanel === "catalog" && (
                 <BrowsePanel
                   accessToken={token}
@@ -829,18 +955,22 @@ export function MemberChatPage() {
                   onCartChange={setCart}
                   onClose={() => selectMemberPanel("chat")}
                 />
-              )}{" "}
-              {(activePanel === "chat" || chatExpanded) && (
+              )}
+              {showChat && (
                 <section className="member-chat-conversation" aria-label="Member product discovery chat">
-                  <button
-                    type="button"
-                    className="member-chat-minimize"
-                    aria-label="Minimize chat panel"
-                    title="Minimize chat"
-                    onClick={() => setChatExpanded(false)}
-                  >
-                    −
-                  </button>
+                  {split && (
+                    <button
+                      type="button"
+                      className="member-chat-minimize icon-button"
+                      aria-label="Minimize chat panel"
+                      title="Minimize chat"
+                      onClick={() => setChatExpanded(false)}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M6 12h12" />
+                      </svg>
+                    </button>
+                  )}
                   {activeChat?.retention_hold && (
                     <div className="member-chat-request-progress-trigger">
                       <button
@@ -865,7 +995,7 @@ export function MemberChatPage() {
                   )}
                   {activeChat ? (
                     <>
-                      <div className="member-chat-messages" aria-live="polite">
+                      <div className="member-chat-messages" aria-live="polite" ref={messagesRef}>
                         {messages.length === 0 && !loading && (
                           <div className="member-chat-welcome">
                             <h2>What are you looking for?</h2>
@@ -1283,8 +1413,15 @@ export function MemberChatPage() {
                         </label>
                         <textarea
                           id="member-chat-message"
+                          ref={composerRef}
                           value={draft}
                           onChange={(event) => setDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey && isDesktop && !event.nativeEvent.isComposing) {
+                              event.preventDefault();
+                              event.currentTarget.form?.requestSubmit();
+                            }
+                          }}
                           maxLength={4000}
                           rows={1}
                           placeholder="Describe it or paste a TikTok, Instagram or shop link…"
@@ -1369,62 +1506,9 @@ export function MemberChatPage() {
                             )}
                           </button>
                         </div>
-                        <details className="member-chat-info">
-                          <summary>
-                            <span className="member-chat-info-icon" aria-hidden="true">
-                              i
-                            </span>
-                            <span>
-                              <strong>Chat information</strong>
-                              <small>
-                                {activeChat.retention_hold
-                                  ? "This chat is retained with your linked request."
-                                  : "About privacy, chat limits, and catalog browsing"}
-                              </small>
-                            </span>
-                            <span className="member-chat-info-chevron" aria-hidden="true">
-                              ⌄
-                            </span>
-                          </summary>
-                          <div className="member-chat-info-body">
-                            {activeChat.retention_hold && (
-                              <p>
-                                <strong>Request-linked chat:</strong> This conversation is retained with your sourcing
-                                request and is read-only. Follow updates in Requests.
-                              </p>
-                            )}
-                            <p>
-                              <strong>Chat limits:</strong> AI chat has monthly and hourly usage limits. If you reach a
-                              limit, you can return when it resets.
-                            </p>
-                            <p>
-                              <strong>Browse anytime:</strong> Catalog browsing and saved products remain available even
-                              when chat is limited.
-                            </p>
-                            <p>
-                              <strong>Need a person?</strong> Ask FayFort staff to take a look at this conversation.
-                            </p>
-                            {!activeChat.retention_hold && (
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => void requestStaffSupport()}
-                                disabled={
-                                  busy ||
-                                  (!!activeChat.support_status &&
-                                    ["open", "claimed", "blocked"].includes(activeChat.support_status))
-                                }
-                              >
-                                {busy
-                                  ? "Requesting support…"
-                                  : activeChat.support_status &&
-                                      ["open", "claimed", "blocked"].includes(activeChat.support_status)
-                                    ? "Staff support requested"
-                                    : "Ask staff for help"}
-                              </button>
-                            )}
-                          </div>
-                        </details>
+                        <p className="member-chat-fineprint">
+                          FayFort AI can make mistakes.<span> Staff can join any chat when you ask for help.</span>
+                        </p>
                         {cooldownSeconds > 0 && (
                           <small className="member-chat-cooldown-note">
                             Next chat turn in {Math.floor(cooldownSeconds / 60)}:
@@ -1444,13 +1528,13 @@ export function MemberChatPage() {
                   )}
                 </section>
               )}
-              {activePanel !== "chat" && !chatExpanded && (
+              {activePanel !== "chat" && !split && (
                 <button
                   type="button"
                   className="member-chat-restore"
-                  aria-label="Open chat beside this panel"
+                  aria-label={isDesktop ? "Open chat beside this panel" : "Back to chat"}
                   title="Open chat"
-                  onClick={() => setChatExpanded(true)}
+                  onClick={() => (isDesktop ? setChatExpanded(true) : selectMemberPanel("chat"))}
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.7 8.7 0 0 1-3.4-.7L4 20l1.4-3.5A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" />
@@ -1458,11 +1542,9 @@ export function MemberChatPage() {
                   <span>Chat</span>
                 </button>
               )}
-            </div>
-          </div>
-        )}
-      </section>
-    </main>
+        </div>
+      </div>
+    </div>
   );
 }
 
