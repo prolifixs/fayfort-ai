@@ -79,10 +79,32 @@ def good_standing(member_id: str, now: datetime | None = None) -> dict[str, Any]
     return {"ok": ok, "requests": requests, "purchases": purchases, "window_days": GOOD_STANDING_DAYS}
 
 
+FIRST_MONTH_DAYS = 30
+
+
+def in_first_month(member_id: str, now: datetime | None = None) -> bool:
+    """True while a Stripe subscription's continuous run is younger than 30 days (manual plans have no row)."""
+    found = rows(db().table("member_subscriptions").select("continuous_since,status").eq("member_id", member_id)
+                 .limit(1).execute())
+    since = found[0].get("continuous_since") if found else None
+    if not since:
+        return False
+    try:
+        started = datetime.fromisoformat(str(since).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if not started.tzinfo:
+        started = started.replace(tzinfo=timezone.utc)
+    return (now or now_utc()) - started < timedelta(days=FIRST_MONTH_DAYS)
+
+
 def deposit_terms(member_id: str, now: datetime | None = None) -> dict[str, Any]:
     tier, rates = rate_tier(member_id)
     if rates != tier:
         return {"tier": tier, "rate": DEPOSIT_RATE[rates], "reason": "rank_standard_rate"}
+    if tier == "pro" and in_first_month(member_id, now):
+        # Perks grow with continuous months subscribed: a new Pro member pays the Standard deposit in month 1.
+        return {"tier": tier, "rate": DEPOSIT_RATE["standard"], "reason": "pro_first_month"}
     if tier == "pro":
         standing = good_standing(member_id, now)
         if standing["ok"]:

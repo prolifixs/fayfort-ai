@@ -12,6 +12,7 @@ import { useCaptcha } from "../auth/Turnstile";
 import { formatMemberTier } from "./memberShared";
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { MemberPlanComparison } from "./MemberAccountDialogs";
+import { PlanBilling } from "./PlanBilling";
 
 export function MemberRoutePage() {
   if (window.location.pathname === "/member/notifications") return <MemberNotificationsPage />;
@@ -350,6 +351,7 @@ export function MemberMembershipPage() {
                   Your current plan: <strong>{currentTier}</strong>
                 </p>
                 <MemberPlanComparison currentTier={currentTier} />
+                {token && <PlanBilling accessToken={token} />}
               </>
             )}
           </>

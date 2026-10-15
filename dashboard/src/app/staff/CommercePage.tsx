@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
 
-type Tab = "overview" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders";
+type Tab = "overview" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders" | "billing";
 
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
@@ -12,6 +12,7 @@ const TABS: [Tab, string][] = [
   ["giveaways", "Giveaways"],
   ["products", "Category mapping"],
   ["orders", "Orders"],
+  ["billing", "Member plans"],
 ];
 
 function money(value: number | string | null | undefined, currency = "USD") {
@@ -72,6 +73,7 @@ export function CommercePage({ accessToken, initialTab = "overview" }: { accessT
       {tab === "giveaways" && <GiveawaysPanel accessToken={accessToken} />}
       {tab === "products" && <MappingPanel accessToken={accessToken} />}
       {tab === "orders" && <OrdersPanel accessToken={accessToken} />}
+      {tab === "billing" && <BillingPanel accessToken={accessToken} />}
     </div>
   );
 }
@@ -936,6 +938,71 @@ function OrdersPanel({ accessToken }: { accessToken: string }) {
             ))}
           </tbody>
         </table>
+      )}
+    </section>
+  );
+}
+
+interface BillingStatus {
+  configured: boolean;
+  mode: "test" | "live" | "not_configured";
+  ready: boolean;
+  prices: Record<"standard" | "pro", { id: string | null; monthly: number; currency: string }>;
+  webhook: { url: string | null; ready: boolean; managed_by: "env" | "fayfort" };
+  problem: string | null;
+  checked_at: string | null;
+  subscribers: Record<"standard" | "pro", number>;
+}
+
+/** Member plan billing through Stripe: everything is created automatically once STRIPE_SECRET_KEY is set. */
+function BillingPanel({ accessToken }: { accessToken: string }) {
+  const { data, error, load, setError } = useLoad<BillingStatus>("/platform/billing/status", accessToken);
+  const [busy, setBusy] = useState(false);
+  async function setup() {
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest("/platform/billing/setup", accessToken, { method: "POST" });
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Stripe setup failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="control-panel" aria-label="Member plans billing">
+      <div className="panel-heading">
+        <h2>Member plans (Stripe)</h2>
+        <p>
+          Standard and Pro are monthly Stripe subscriptions. With the Stripe secret key on the API server, FayFort creates
+          the products, prices, customer portal and webhook by itself and keeps every member's plan in sync.
+        </p>
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {!data ? (
+        <p role="status">Loading…</p>
+      ) : !data.configured ? (
+        <div className="empty-copy">
+          Stripe isn't connected. Add <code>STRIPE_SECRET_KEY</code> to the API server's settings and restart it; setup
+          then runs automatically.
+        </div>
+      ) : (
+        <>
+          <dl className="billing-status">
+            <div><dt>Status</dt><dd>{data.ready ? "Ready" : "Needs attention"} · {data.mode === "live" ? "Live mode" : "Test mode"}</dd></div>
+            <div><dt>Standard</dt><dd>{money(data.prices.standard.monthly, data.prices.standard.currency.toUpperCase())}/month · {data.subscribers.standard} active</dd></div>
+            <div><dt>Pro</dt><dd>{money(data.prices.pro.monthly, data.prices.pro.currency.toUpperCase())}/month · {data.subscribers.pro} active</dd></div>
+            <div><dt>Webhook</dt><dd>{data.webhook.ready ? "Connected" : "Not connected"}{data.webhook.url ? ` · ${data.webhook.url}` : ""}</dd></div>
+            {data.checked_at && <div><dt>Last checked</dt><dd>{relativeTime(data.checked_at)}</dd></div>}
+          </dl>
+          {data.problem && <p className="form-error" role="alert">{data.problem}</p>}
+          <div className="record-actions">
+            <button type="button" disabled={busy} onClick={() => void setup()}>
+              {busy ? "Checking Stripe…" : "Run setup and sync now"}
+            </button>
+          </div>
+        </>
       )}
     </section>
   );

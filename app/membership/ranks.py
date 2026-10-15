@@ -39,6 +39,7 @@ EARN = {
     "share_buyer": {"label": "A link you shared brings a buyer", "points": "+30 each"},
     "consultation": {"label": "Consultation booked", "points": "+30"},
     "giveaway_entry": {"label": "Giveaway entered", "points": "+5"},
+    "subscription": {"label": "Each paid month on Standard / Pro", "points": "+50 / +100"},
 }
 REWARDS = {"contact_credit": {"label": "1 supplier contact credit", "cost": 500, "credits": 1}}
 SHARE_BUYERS_PER_ITEM = 10
@@ -110,6 +111,10 @@ def collect(member_id: str) -> list[dict]:
                       .eq("member_id", member_id).limit(1000).execute()):
         events.append({"kind": "giveaway_entry", "source_key": str(entry["giveaway_id"]), "points": 5,
                        "occurred_at": _iso(entry.get("entered_at"))})
+    for payment in rows(db().table("member_subscription_payments").select("stripe_invoice_id,plan,paid_at")
+                        .eq("member_id", member_id).limit(200).execute()):
+        events.append({"kind": "subscription", "source_key": str(payment["stripe_invoice_id"]),
+                       "points": 100 if payment.get("plan") == "pro" else 50, "occurred_at": _iso(payment.get("paid_at"))})
     events += _share_buyers(member_id)
     return [e for e in events if e["occurred_at"]]
 
@@ -270,6 +275,7 @@ def active_member_ids(now: datetime | None = None) -> set[str]:
     since = ((now or plans.now_utc()) - timedelta(days=WINDOW_DAYS + GRACE_DAYS)).isoformat()
     ids: set[str] = set()
     for table, column in (("member_activity_events", "occurred_at"), ("commerce_orders", "placed_at"),
+                          ("member_subscription_payments", "paid_at"),
                           ("commerce_invoices", "created_at"), ("commerce_giveaway_entries", "entered_at"),
                           ("member_consultations", "created_at")):
         try:

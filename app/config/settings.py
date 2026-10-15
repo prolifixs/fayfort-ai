@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     # the Supabase Free project is never paused for inactivity while real traffic is low.
     DATABASE_KEEPALIVE_ENABLED: bool = True
     DATABASE_KEEPALIVE_INTERVAL_SECONDS: int = 21600
+    # Member plan billing through Stripe (app/billing). Only STRIPE_SECRET_KEY is required: on start the API creates
+    # the Standard/Pro products and monthly prices, the customer portal and the webhook endpoint in Stripe by itself.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""  # optional; only if you create the webhook endpoint yourself
+    STRIPE_PRICE_STANDARD: str = ""  # optional; use an existing Stripe price id instead of creating one
+    STRIPE_PRICE_PRO: str = ""
+    MEMBER_STANDARD_MONTHLY_PRICE: float = 19.0
+    MEMBER_PRO_MONTHLY_PRICE: float = 49.0
+    BILLING_CURRENCY: str = "usd"
+    BILLING_SYNC_INTERVAL_SECONDS: int = 1800
+    SUBSCRIPTION_RETURN_GRACE_DAYS: int = 14  # back within this many days keeps the continuous-months count
+    SUBSCRIPTION_MAX_PAUSE_MONTHS: int = 3
     # Member ranks (app/membership/ranks.py): refresh every active member's 90-day score every 6 hours.
     MEMBER_RANKS_ENABLED: bool = True
     # Products and commerce plan (P0). Shopify is the commerce engine; FayFort reads its catalog,

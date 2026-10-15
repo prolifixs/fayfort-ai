@@ -439,3 +439,9 @@ article.shop-tile,.member-chat-suggestions article.shop-tile{max-width:none;marg
 .member-activity-list li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f4;color:#526274;font-size:12px}
 .member-activity-list strong{color:#147964}
 .member-activity-list strong.spent{color:#a05a12}
+/* Plan billing (Stripe). */
+.member-billing{margin-top:12px;border-color:#cfe5db;background:#f6fbf8}
+.member-pause{display:inline-flex;align-items:center;gap:6px;color:#526274;font-size:12px}
+.member-pause select{min-height:34px;padding:4px 8px;border:1px solid #dfe3ea;border-radius:7px;background:#fff;font:inherit;font-size:12px}
+.member-upgrade{justify-content:flex-start}
+@media(max-width:560px){.member-perk-actions{justify-content:stretch}.member-perk-actions>*{flex:1 1 100%}}

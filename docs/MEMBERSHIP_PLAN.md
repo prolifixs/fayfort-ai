@@ -1,8 +1,9 @@
 # FayFort Membership Plan (plans, sourcing deposits, consultations, contacts, member rank)
 
 Status (2026-10-16): plan rules, sourcing deposits, consultations, the Supplier directory with contact unlocks, and
-member ranks and points are **built**. Plan billing (Stripe) is **not built yet**; until Stripe is connected a member's plan is
-whatever `member_profiles.member_tier` says. All prices live in one file: `app/membership/plans.py`.
+member ranks and points, and plan billing through Stripe are **built**. Billing starts as soon as `STRIPE_SECRET_KEY`
+is set on the API server (deploy/README.md → Member plan billing). Until then a member's plan is whatever
+`member_profiles.member_tier` says. All prices live in one file: `app/membership/plans.py`.
 
 ## 1. Plans (decided 2026-10-15)
 
@@ -15,7 +16,10 @@ whatever `member_profiles.member_tier` says. All prices live in one file: `app/m
 | Premium themes | No | Yes | Yes |
 
 - Plan perks apply only while the subscription is active.
-- **Subscriptions (Standard/Pro) will be billed through Stripe. This is the last build step.**
+- **Billing:** Standard **$19/month** and Pro **$49/month** (defaults; `MEMBER_STANDARD_MONTHLY_PRICE`,
+  `MEMBER_PRO_MONTHLY_PRICE`). Members subscribe through Stripe Checkout and manage (switch plan, card, cancel at period
+  end, invoices) in the Stripe customer portal, both from **Member tier** in the chat. The plan follows the
+  subscription: active / trialing / past due = the plan; paused, cancelled or unpaid = Free.
 
 ## 2. Sourcing deposit
 
@@ -50,16 +54,17 @@ whatever `member_profiles.member_tier` says. All prices live in one file: `app/m
 - Unlocked records stay in **My contacts** for good, including after a plan ends.
 - Unlocks run in one database function (`unlock_member_contact`), serialised per member, so a credit can't be spent twice.
 
-## 5. Members who pay but aren't consistent
+## 5. Members who pay but aren't consistent (built with Stripe)
 
-- **Pay but rarely use:** don't penalise them. Send a monthly nudge about what's new in their categories, and offer **pause**
-  (low fee, keeps history) instead of only cancel. *(Needs Stripe.)*
+- **Pay but rarely use:** not penalised. Members can **pause** (1–3 months, `SUBSCRIPTION_MAX_PAUSE_MONTHS`) instead of
+  cancelling: no payments and no plan perks while paused, but their months in a row and history are kept.
 - **Join only when they need something (subscribe → use → cancel):**
-  1. **Perks grow with continuous months subscribed.** In month 1, Pro sourcing still takes a deposit. Cancelling resets
-     the count; coming back within a grace period *(tbd, e.g. 14 days)* keeps it. *(Needs Stripe's subscription dates.)*
-  2. **Good standing** (built, section 2).
-  3. **Sourcing in progress is tied to an active plan.** If a member cancels during a free sourcing job, the deposit
-     applies to that job. *(Needs Stripe.)*
+  1. **Perks grow with continuous months subscribed.** In the first 30 days of a continuous run, Pro pays the Standard
+     deposit (25%). Coming back within **14 days** (`SUBSCRIPTION_RETURN_GRACE_DAYS`) keeps the run; later, it restarts.
+  2. **Good standing** (section 2).
+  3. **Sourcing in progress follows the plan.** Deposits are worked out when staff send them, so a request whose member
+     has cancelled Pro shows up in Deposits due at the Free rate.
+- Every paid month adds to rank: **+50 Standard, +100 Pro**.
 
 ## 6. Member ranks and points (built 2026-10-16)
 
@@ -96,7 +101,7 @@ Chatting, browsing and taps don't count. A refunded or cancelled order drops bac
 - **Spend points:** 500 points = 1 supplier contact credit (Virtual points pop-up).
 - Ranks refresh after every paid/refunded order, giveaway entry and consultation, and for all active members every
   6 hours (`MEMBER_RANKS_ENABLED`). Placeholder ranks from before the engine were reset to Browser 1.
-- Later (with Stripe): continuous months subscribed can add to the score; referrals once a referral link exists.
+- Paid subscription months add to the score (+50 Standard, +100 Pro). Referrals can be added once a referral link exists.
 
 ## 7. Member account menu (built 2026-10-15)
 
@@ -113,8 +118,10 @@ Close, Escape or a click outside.
 | Consultations, credit packs, paid-invoice handling | `app/membership/service.py` |
 | Directory search and unlocks | `app/membership/directory.py` |
 | Ranks, points, rewards, 6-hourly refresh | `app/membership/ranks.py` |
+| Stripe client, setup, subscriptions, webhook, 30-min reconcile | `app/billing/stripe_api.py`, `service.py`, `router.py` |
 | Member API (`/members/plan`, `/members/rank`, `/members/points/redeem`, `/members/consultations`, `/members/directory…`, `/members/contact-credits`) | `app/membership/router.py` |
 | Deposits due / deposit invoice / deposit credit | `app/commerce/admin_router.py` |
-| Database | `supabase/migrations/20261016100000_membership_plans.sql`, `20261016200000_member_ranks.sql` |
+| Database | `supabase/migrations/20261016100000_membership_plans.sql`, `20261016200000_member_ranks.sql`, `20261016300000_member_billing.sql` |
 | Member UI | `dashboard/src/app/member/MemberPerks.tsx`, `MemberAccountDialogs.tsx`, `membershipApi.ts` |
-| Staff UI | `dashboard/src/app/staff/CommercePage.tsx` (Invoices tab) |
+| Member billing UI | `dashboard/src/app/member/PlanBilling.tsx` (Member tier pop-up and /member/membership) |
+| Staff UI | `dashboard/src/app/staff/CommercePage.tsx` (Invoices and Member plans tabs) |

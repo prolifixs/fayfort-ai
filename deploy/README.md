@@ -129,3 +129,26 @@ Shopify (Basic plan, one store) is the engine; FayFort is the experience. See `d
 - **Keep-alive** (`app/infrastructure/keepalive.py`, on by default). Every 6 hours the API reads the database, writes
   `platform_heartbeats` and calls Supabase Auth, so the Free project isn't paused for inactivity. Needs migration
   `20261015200000_platform_heartbeats.sql`.
+
+## Member plan billing (Stripe)
+
+Standard and Pro are monthly Stripe subscriptions (`app/billing`). **The only thing to add is the secret key:**
+
+1. In Stripe → Developers → API keys, copy the **Secret key** (`sk_test_…` to try it, `sk_live_…` for real payments).
+2. On the VPS add it to `/opt/fayfort/api.env`: `STRIPE_SECRET_KEY=sk_…`, then restart the API
+   (`docker compose -f deploy/api/compose.yml up -d api`).
+
+About 30 seconds after start the API creates, in that Stripe account and only once: the **FayFort Standard** and
+**FayFort Pro** products with monthly prices (`MEMBER_STANDARD_MONTHLY_PRICE`, default 19; `MEMBER_PRO_MONTHLY_PRICE`,
+default 49; `BILLING_CURRENCY`, default usd), the **customer portal** (switch plan, update card, cancel at period end,
+invoices) and the **webhook** `PUBLIC_API_URL/billing/stripe/webhook` (its signing secret is stored in
+`billing_settings`). Control Center → Shop → **Member plans** shows the status and has **Run setup and sync now**.
+Every 30 minutes the API also re-reads every subscriber from Stripe, so a missed webhook fixes itself.
+
+- Changing a price: set the new amount in `api.env` and restart; a new Stripe price is created for new subscribers
+  (existing subscribers keep theirs until you migrate them in Stripe).
+- Switching test → live: replace the key with the live one; setup runs again for the live account.
+- Optional: `STRIPE_PRICE_STANDARD` / `STRIPE_PRICE_PRO` to use prices you made yourself, `STRIPE_WEBHOOK_SECRET` if you
+  create the webhook endpoint yourself.
+- Plan follows the subscription: active, trialing or past due (Stripe still retrying the card) = Standard/Pro; paused,
+  cancelled or unpaid = Free. Members subscribe, manage and pause from Member tier in the chat.

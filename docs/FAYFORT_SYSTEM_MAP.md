@@ -255,6 +255,18 @@ flowchart LR
   RK -->|Insider+ on Free| STD[Standard rates: 25% deposit, $50 consultation]
 ```
 
+**Plan billing** (`app/billing`, Stripe):
+
+```mermaid
+flowchart LR
+  KEY[STRIPE_SECRET_KEY] --> SET[Auto setup: products, monthly prices,<br/>customer portal, webhook]
+  M[Member tier: Get Standard / Pro] --> CO[Stripe Checkout] --> SUB[(Stripe subscription)]
+  SUB -->|webhook + 30-min reconcile| MS[(member_subscriptions)] --> TIER[member_tier: plan or Free]
+  SUB -->|paid month| PAY[(member_subscription_payments)] --> RANKS[+50 / +100 rank points]
+  M2[Manage subscription] --> PORTAL[Stripe customer portal]
+  M3[Pause 1–3 months] --> SUB
+```
+
 ## 12. Social channels (P9)
 
 TikTok Shop and Instagram/Facebook Shop are installed as Shopify sales channels. They read the same Shopify catalog, so

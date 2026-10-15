@@ -96,11 +96,12 @@ _commerce_task: asyncio.Task | None = None
 _handoff_window_task: asyncio.Task | None = None
 _keepalive_task: asyncio.Task | None = None
 _rank_task: asyncio.Task | None = None
+_billing_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task
     if settings.HANDOFF_WINDOW_ENABLED and (_handoff_window_task is None or _handoff_window_task.done()):
         _handoff_window_task = asyncio.create_task(handoff_window.handoff_window_loop(), name="fayfort-handoff-window")
     if settings.DATABASE_KEEPALIVE_ENABLED and (_keepalive_task is None or _keepalive_task.done()):
@@ -109,6 +110,9 @@ async def start_automation_scheduler() -> None:
     if settings.MEMBER_RANKS_ENABLED and (_rank_task is None or _rank_task.done()):
         from app.membership.ranks import rank_loop
         _rank_task = asyncio.create_task(rank_loop(), name="fayfort-member-ranks")
+    if _billing_task is None or _billing_task.done():
+        from app.billing.service import billing_loop  # idle until STRIPE_SECRET_KEY is set
+        _billing_task = asyncio.create_task(billing_loop(), name="fayfort-billing")
     if settings.COMMERCE_SYNC_ENABLED:
         from app.commerce.loop import commerce_loop
         if _commerce_task is None or _commerce_task.done():
@@ -164,8 +168,8 @@ async def start_automation_scheduler() -> None:
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -181,6 +185,7 @@ async def stop_automation_scheduler() -> None:
     _handoff_window_task = None
     _keepalive_task = None
     _rank_task = None
+    _billing_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -802,6 +807,8 @@ app.include_router(create_admin_commerce_router())
 app.include_router(create_shopify_webhook_router())
 from app.membership.router import create_membership_router
 app.include_router(create_membership_router())
+from app.billing.router import create_billing_router
+app.include_router(create_billing_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsultationCard, DirectoryPanel } from "./MemberPerks";
 import { MemberAccountDialogs } from "./MemberAccountDialogs";
+import { PlanBilling } from "./PlanBilling";
 import { type ContactStatus, depositNote, type MemberPlanSummary } from "./membershipApi";
 
 vi.mock("../../lib/supabase", () => ({ dashboardAuthConfigured: true, supabaseClient: null }));
@@ -138,5 +139,36 @@ describe("member plan perks", () => {
     fireEvent.click(screen.getByRole("button", { name: "Redeem" }));
     expect(await screen.findByText("100")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("1 supplier contact credit added");
+  });
+
+  it("sends members to Stripe to subscribe, and lets subscribers manage or pause", async () => {
+    const view = {
+      available: true, plan: null, status: "none", paused: false, current_period_end: null, cancel_at_period_end: false,
+      continuous_since: null, months: 0, has_customer: false, max_pause_months: 3,
+      prices: { standard: { monthly: 19, currency: "usd" }, pro: { monthly: 49, currency: "usd" } },
+    };
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const posted: string[] = [];
+    let current: Record<string, unknown> = view;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") posted.push(url.replace(/^.*\/members/, "/members") + " " + (init.body || ""));
+      if (url.endsWith("/members/subscription/checkout")) return ok({ url: "https://checkout.stripe.com/c/pay/cs_1" });
+      if (url.endsWith("/members/subscription/pause")) return ok({ ...current, paused: true, plan: "pro" });
+      if (url.endsWith("/members/subscription")) return ok(current);
+      return ok({});
+    });
+    const first = render(<PlanBilling accessToken="t" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Get Pro · $49/month" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_1"));
+    expect(posted[0]).toContain('{"plan":"pro"}');
+    first.unmount();
+    current = { ...view, plan: "pro", status: "active", current_period_end: "2026-11-15T00:00:00Z", months: 2, has_customer: true };
+    render(<PlanBilling accessToken="t" />);
+    expect(await screen.findByText(/2 months in a row/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage subscription" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pause instead of cancelling" }));
+    expect(await screen.findByRole("button", { name: "Resume my plan" })).toBeInTheDocument();
   });
 });

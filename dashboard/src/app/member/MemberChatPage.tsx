@@ -587,6 +587,26 @@ export function MemberChatPage() {
     setAccountDialog(kind);
   }
   const closeAccountDialog = useCallback(() => setAccountDialog(null), []);
+  // Back from Stripe Checkout: thank the member and show their plan once the webhook has updated it.
+  useEffect(() => {
+    if (!verified || !token) return;
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get("billing");
+    if (!billing) return;
+    params.delete("billing");
+    window.history.replaceState({}, "", window.location.pathname + (params.toString() ? `?${params}` : ""));
+    if (billing !== "success") return;
+    setNotice("Thanks! Your payment went through. Your plan updates in a few seconds.");
+    const timer = window.setTimeout(() => {
+      apiRequest<{ profile: Record<string, unknown> }>("/members/me", token)
+        .then((me) => setProfile(me.profile))
+        .catch(() => undefined);
+      reloadPlan();
+      setAccountDialog("tier");
+    }, 4000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verified, token]);
   // Products already shown in a Find It result aren't repeated under "Suggestions".
   const findItIds = new Set(
     messages.flatMap((message) =>

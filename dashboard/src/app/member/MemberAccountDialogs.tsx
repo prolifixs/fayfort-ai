@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { formatMemberTier } from "./memberShared";
 import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
+import { PlanBilling } from "./PlanBilling";
 import { apiRequest } from "../../lib/api";
 import { type MemberPlanSummary, RANK_NAMES, type RankStatus, useMemberRank } from "./membershipApi";
 
@@ -109,8 +110,8 @@ export function MemberPlanComparison({ currentTier }: { currentTier: string }) {
         </tbody>
       </table>
       <p className="member-plan-note">
-        A sourcing deposit counts toward your order when you buy. Plan perks apply while your subscription is active.
-        Plan upgrades open soon.
+        A sourcing deposit counts toward your order when you buy. Plan perks apply while your subscription is active;
+        Pro's deposit-free sourcing starts after your first month.
       </p>
     </div>
   );
@@ -292,6 +293,7 @@ function TierDialog({
         </ul>
       )}
       <MemberPlanComparison currentTier={tier} />
+      {accessToken && <PlanBilling accessToken={accessToken} onChange={() => onPlanChange?.()} />}
       {accessToken && (
         <div className="member-perks">
           <h3 className="member-perks-title">Your perks</h3>

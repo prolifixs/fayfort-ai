@@ -128,3 +128,34 @@ export function useMemberRank(accessToken: string | null | undefined) {
   }, [accessToken, version]);
   return { rank, setRank, error, reload: () => setVersion((v) => v + 1) };
 }
+
+/** The member's Stripe subscription (app/billing). */
+export type SubscriptionView = {
+  available: boolean;
+  plan: "standard" | "pro" | null;
+  status: string;
+  paused: boolean;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  continuous_since: string | null;
+  months: number;
+  has_customer: boolean;
+  prices: Record<"standard" | "pro", { monthly: number; currency: string }>;
+  max_pause_months: number;
+};
+
+export function useSubscription(accessToken: string | null | undefined) {
+  const [subscription, setSubscription] = useState<SubscriptionView | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!accessToken) return;
+    let mounted = true;
+    apiRequest<SubscriptionView>("/members/subscription", accessToken)
+      .then((result) => mounted && setSubscription(result && result.prices ? result : null))
+      .catch(() => mounted && setSubscription(null));
+    return () => {
+      mounted = false;
+    };
+  }, [accessToken, version]);
+  return { subscription, setSubscription, reload: () => setVersion((v) => v + 1) };
+}
