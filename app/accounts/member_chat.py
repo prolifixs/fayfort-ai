@@ -305,6 +305,23 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                 "sender_type": "member", "content": payload.content}).execute().data or [None])[0]
             if not user_row:
                 raise RuntimeError("Member message insert returned no row")
+            # Handoff window: while a FayFort person is actively chatting, the AI stays quiet (with a
+            # holding note if they've been quiet a while); after their idle window the AI resumes.
+            support_state = None
+            try:
+                from app.handoffs import window as handoff_window
+                support_state = handoff_window.member_support_state(str(conversation_id))
+            except Exception:
+                logger.exception("Member support window could not be evaluated")
+            if support_state is not None and support_state.phase == "human_active":
+                holding_row = None
+                if support_state.holding_due:
+                    holding_row = (supabase.table("member_messages").insert({"conversation_id": str(conversation_id),
+                        "sender_type": "assistant", "content": handoff_window.HUMAN_BUSY_REPLY}).execute().data or [None])[0]
+                supabase.table("member_conversations").update({"last_activity_at": datetime.now(timezone.utc).isoformat()})\
+                    .eq("id", str(conversation_id)).eq("member_id", member_id).execute()
+                return {"member_message": user_row, "assistant_message": holding_row, "products": [], "find_it": None,
+                        "human_active": True}
             previous = (supabase.table("member_messages").select("sender_type,content")
                 .eq("conversation_id", str(conversation_id)).order("created_at", desc=True).limit(12).execute().data or [])
             matches = _catalog_matches(payload.content)

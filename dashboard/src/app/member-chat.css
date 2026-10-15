@@ -343,3 +343,6 @@ article.shop-tile,.member-chat-suggestions article.shop-tile{max-width:none;marg
 .member-chat-suggestions article.shop-tile button{grid-column:auto;justify-self:stretch}
 .shop-findit-link article.shop-tile{grid-template-columns:96px minmax(0,1fr);grid-template-rows:auto}
 .member-chat-welcome{width:100%}
+/* Keep the last chat cards clear of the sticky composer, and keep shop labels plain text. */
+.member-chat-messages{padding-bottom:40px}
+.shop-tile small,.shop-cart-lines small,.shop-panel-header small,.shop-findit small{padding:0;border:0;background:none;border-radius:0}

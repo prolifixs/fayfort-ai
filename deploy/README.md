@@ -118,3 +118,14 @@ Shopify (Basic plan, one store) is the engine; FayFort is the experience. See `d
    services or the LANDED ebook) to keep it out of the FayFort shop entirely.
 7. **Social channels (last)**: install the free *TikTok* and *Facebook & Instagram* channel apps and publish products to
    them. They read the same Shopify catalog; FayFort needs no changes.
+
+## Handoff windows and database keep-alive
+
+- **Handoff windows** (`app/handoffs/window.py`, on by default). After a customer asks for a person, they get a
+  holding reply instead of silence (at most every 5 minutes). If nobody replies within 15 minutes, or the person
+  stops replying for 30 minutes, the handoff closes, the customer is told the AI is back, and the AI answers again.
+  On the website chat the AI keeps answering while the member waits and steps back only while a person is chatting.
+  Tune with the `HANDOFF_*` settings in `/opt/fayfort/api.env`.
+- **Keep-alive** (`app/infrastructure/keepalive.py`, on by default). Every 6 hours the API reads the database, writes
+  `platform_heartbeats` and calls Supabase Auth, so the Free project isn't paused for inactivity. Needs migration
+  `20261015200000_platform_heartbeats.sql`.

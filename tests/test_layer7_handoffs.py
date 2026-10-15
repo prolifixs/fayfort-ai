@@ -112,8 +112,13 @@ class HandoffPipelineTests(unittest.TestCase):
     @patch("app.main.trusted_business_member", return_value={"user_id":USER,"role":"admin"})
     @patch("app.main.get_conversation", return_value={"id":CONVERSATION,"business_id":BUSINESS})
     def test_customer_message_during_handoff_does_not_run_ai(self, conversation, identity, create_message, active, analyze):
+        from datetime import datetime, timedelta, timezone
         from app.main import send_message
-        result = send_message(CONVERSATION, {"content":"I need a human"}, "Bearer test")
+        recent = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        active.return_value = {"id":HANDOFF,"status":"active","requested_at":recent,"business_id":BUSINESS}
+        # A person replied a minute ago: the AI stays quiet and no holding note is due.
+        with patch("app.main.handoff_window.conversation_timeline", return_value=(recent, recent)):
+            result = send_message(CONVERSATION, {"content":"I need a human"}, "Bearer test")
         self.assertTrue(result["automation_paused"])
         self.assertIsNone(result["ai_message"])
         analyze.assert_not_called()

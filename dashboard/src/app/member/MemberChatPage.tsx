@@ -526,23 +526,23 @@ export function MemberChatPage() {
     try {
       const result = await apiRequest<{
         member_message: MemberChatMessage;
-        assistant_message: MemberChatMessage;
+        assistant_message: MemberChatMessage | null;
         products: MemberCatalogProduct[];
+        human_active?: boolean;
         find_it?: FindItResult | null;
       }>(`/members/conversations/${activeChat.id}/messages`, token, {
         method: "POST",
         body: JSON.stringify({ content }),
       });
-      seenMessageIds.current = new Set([
-        ...seenMessageIds.current,
-        result.member_message.id,
-        result.assistant_message.id,
-      ]);
-      const assistant = result.find_it ? { ...result.assistant_message, find_it: result.find_it } : result.assistant_message;
-      setMessages((current) => [...current, result.member_message, assistant]);
+      const reply = result.assistant_message;
+      seenMessageIds.current = new Set([...seenMessageIds.current, result.member_message.id, ...(reply ? [reply.id] : [])]);
+      const assistant = reply && result.find_it ? { ...reply, find_it: result.find_it } : reply;
+      // While a FayFort person is chatting, the AI stays quiet; their reply arrives on the next refresh.
+      setMessages((current) => [...current, result.member_message, ...(assistant ? [assistant] : [])]);
+      if (result.human_active && !assistant) setNotice("A FayFort team member is in this chat and will reply here.");
       if (result.find_it?.link) void loadShop(token);
-      playMemberSound();
-      setProducts(result.products || []);
+      if (assistant) playMemberSound();
+      if (!result.human_active) setProducts(result.products || []);
       setRetryAt(null);
       const updated = {
         ...activeChat,
@@ -568,6 +568,13 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  // Products already shown in a Find It result aren't repeated under "Suggestions".
+  const findItIds = new Set(
+    messages.flatMap((message) =>
+      message.find_it ? [message.find_it.exact, ...message.find_it.alternatives].filter(Boolean).map((card) => card!.id) : [],
+    ),
+  );
+  const suggestedProducts = products.filter((product) => !findItIds.has(product.id));
   if (!dashboardAuthConfigured) return <SetupScreen />;
   return (
     <main className="auth-page member-chat-page">
@@ -841,11 +848,11 @@ export function MemberChatPage() {
                             Searching the catalog and preparing a reply…
                           </p>
                         )}
-                        {products.length > 0 && (
+                        {suggestedProducts.length > 0 && (
                           <section className="member-chat-suggestions" aria-label="Catalog suggestions">
                             <h2>Suggestions</h2>
                             <div className="shop-rail-track">
-                              {products.map((product) => (
+                              {suggestedProducts.map((product) => (
                                 <ProductTile
                                   key={product.id}
                                   card={product as unknown as ShopCard}
@@ -1289,7 +1296,7 @@ export function MemberChatPage() {
                             )}
                           </button>
                         </div>
-                        <details className="member-chat-info" open>
+                        <details className="member-chat-info">
                           <summary>
                             <span className="member-chat-info-icon" aria-hidden="true">
                               i

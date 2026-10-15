@@ -30,6 +30,7 @@ from app.database.conversations import (
 )
 from app.database.handoffs import active_handoff_for_conversation
 from app.handoffs.automatic import HANDOFF_REQUESTED_REPLY, customer_asked_for_human, request_customer_handoff
+from app.handoffs import window as handoff_window
 from app.database.messages import (
     list_messages,
     create_message,
@@ -92,11 +93,18 @@ _member_review_retention_task: asyncio.Task | None = None
 _infrastructure_monitor_task: asyncio.Task | None = None
 _email_sender_task: asyncio.Task | None = None
 _commerce_task: asyncio.Task | None = None
+_handoff_window_task: asyncio.Task | None = None
+_keepalive_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task
+    if settings.HANDOFF_WINDOW_ENABLED and (_handoff_window_task is None or _handoff_window_task.done()):
+        _handoff_window_task = asyncio.create_task(handoff_window.handoff_window_loop(), name="fayfort-handoff-window")
+    if settings.DATABASE_KEEPALIVE_ENABLED and (_keepalive_task is None or _keepalive_task.done()):
+        from app.infrastructure.keepalive import keepalive_loop
+        _keepalive_task = asyncio.create_task(keepalive_loop(), name="fayfort-database-keepalive")
     if settings.COMMERCE_SYNC_ENABLED:
         from app.commerce.loop import commerce_loop
         if _commerce_task is None or _commerce_task.done():
@@ -152,8 +160,8 @@ async def start_automation_scheduler() -> None:
 
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
-    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task) if task is not None]
+    global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -166,6 +174,8 @@ async def stop_automation_scheduler() -> None:
     _infrastructure_monitor_task = None
     _email_sender_task = None
     _commerce_task = None
+    _handoff_window_task = None
+    _keepalive_task = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -496,14 +506,36 @@ def _send_message_core(
 
     active_handoff = active_handoff_for_conversation(business_id, conversation_id)
     if active_handoff:
-        return {
-            "conversation_id": conversation_id,
-            "customer_message": customer_message,
-            "ai_message": None,
-            "response": "Your message has been added to the conversation for the assigned human agent.",
-            "handoff": {"id": active_handoff["id"], "status": active_handoff["status"]},
-            "automation_paused": True,
-        }
+        # Handoff window: never leave the customer in silence (app/handoffs/window.py).
+        try:
+            last_human, last_reply = handoff_window.conversation_timeline(conversation_id, active_handoff["requested_at"])
+            window_state = handoff_window.evaluate(opened_at=active_handoff["requested_at"],
+                                                   last_human_at=last_human, last_reply_at=last_reply)
+        except Exception:
+            logger.exception("Handoff window could not be evaluated; keeping the handoff")
+            window_state = handoff_window.WindowState("waiting", None, True)
+        if window_state.phase == "expired":
+            handoff_window.close_handoff_for_timeout(
+                active_handoff, "no_reply_within_window" if window_state.last_human_at is None else "agent_idle")
+            active_handoff = None  # the AI picks the conversation back up below
+        else:
+            holding = None
+            if window_state.holding_due:
+                holding = create_message(
+                    conversation_id=conversation_id,
+                    external_message_id=str(uuid.uuid4()),
+                    sender_type="ai",
+                    content=(handoff_window.waiting_reply() if window_state.phase == "waiting"
+                             else handoff_window.HUMAN_BUSY_REPLY),
+                )
+            return {
+                "conversation_id": conversation_id,
+                "customer_message": customer_message,
+                "ai_message": holding,
+                "response": holding["content"] if holding else None,
+                "handoff": {"id": active_handoff["id"], "status": active_handoff["status"]},
+                "automation_paused": True,
+            }
     # 2. Get conversation history
     messages = list_messages(
     conversation_id,

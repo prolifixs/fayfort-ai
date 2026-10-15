@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     EMAIL_REPLY_TO: str = "support@fayfort.com"
     EMAIL_DELIVERY_ENABLED: bool = False
     EMAIL_SENDER_INTERVAL_SECONDS: int = 15
+    # Human handoff windows (app/handoffs/window.py): a customer is never left in silence.
+    HANDOFF_WINDOW_ENABLED: bool = True
+    HANDOFF_WAIT_MINUTES: int = 15        # nobody replied after a person was asked for -> AI resumes
+    HANDOFF_IDLE_MINUTES: int = 30        # the person stopped replying -> AI resumes
+    HANDOFF_HOLDING_INTERVAL_MINUTES: int = 5  # at most one holding reply per this many minutes
+    # Database keep-alive (app/infrastructure/keepalive.py): a small read and write every few hours so
+    # the Supabase Free project is never paused for inactivity while real traffic is low.
+    DATABASE_KEEPALIVE_ENABLED: bool = True
+    DATABASE_KEEPALIVE_INTERVAL_SECONDS: int = 21600
     # Products and commerce plan (P0). Shopify is the commerce engine; FayFort reads its catalog,
     # sends checkouts and invoices to it, and receives its webhooks. Nothing calls Shopify until
     # SHOPIFY_STORE_DOMAIN and Admin API credentials are set.
