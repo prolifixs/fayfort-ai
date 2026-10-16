@@ -820,6 +820,8 @@ from app.membership.router import create_membership_router
 app.include_router(create_membership_router())
 from app.billing.router import create_billing_router
 app.include_router(create_billing_router())
+from app.ads.router import create_ads_router  # noqa: E402
+app.include_router(create_ads_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

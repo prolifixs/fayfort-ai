@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signedInMember } from "./member-fixtures";
+import { manyProducts, signedInMember } from "./member-fixtures";
 
 /** Layout QA for the member app at phone, iPad, laptop and desktop widths (docs/UX_LAYOUT_PLAN.md stage 7).
  * Screenshots land in test-results/ux/ for review: `npx playwright test member-layout`. */
@@ -109,3 +109,24 @@ test("pop-ups and the product view at each size (screenshots for review)", async
   await page.waitForTimeout(250);
   await page.screenshot({ path: "test-results/ux/points-sheet-phone.png" });
 });
+
+for (const size of [SIZES[0], SIZES[2]]) {
+  test(`ads for free members fit a ${size.name} and stay out of the way`, async ({ page }) => {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await signedInMember(page);
+    await page.route("**/members/shop/products?**", (route) => route.fulfill({ json: { products: manyProducts, categories: [] } }));
+    await page.goto("/member/chat?panel=catalog");
+    await page.locator('[data-placement="browse_top"]').scrollIntoViewIfNeeded();
+    await expect(page.getByText("Go ad-free with Standard")).toBeVisible();
+    await expect(page.locator('[data-placement="browse_feed"]')).toHaveCount(1);
+    // The page limit is 3: Browse top + one in-feed ad, plus the desktop menu ad.
+    expect(await page.locator(".fayfort-ad").count()).toBeLessThanOrEqual(3);
+    await noSideScroll(page);
+    await page.locator('[data-placement="browse_feed"]').scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-placement="browse_feed"]').getByText("Find verified suppliers")).toBeVisible();
+    await page.screenshot({ path: `test-results/ux/ads-browse-${size.name}.png` });
+    await page.locator('[data-placement="browse_top"]').scrollIntoViewIfNeeded();
+    await page.getByText("Go ad-free with Standard").click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+  });
+}

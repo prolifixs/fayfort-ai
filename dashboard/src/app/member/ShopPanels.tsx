@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../ui/useDismiss";
 import { apiRequest } from "../../lib/api";
 import type { Cart, ProductDetail, Rail, ShopCard, TrendCard, Giveaway } from "./commerceApi";
@@ -6,6 +6,10 @@ import { money, shopSessionId, trackIntent } from "./commerceApi";
 import { Countdown, HotRails, PriceLine, ProductTile, TrendTile } from "./ShopComponents";
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
 import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
+import { AdSlot } from "./ads";
+
+/** Browse grid positions (0-based) after which an in-feed ad may appear. */
+const FEED_AD_AFTER = new Set([7, 23]);
 
 /** Product page that opens beside the chat (the familiar side panel), so the member can keep asking. */
 export function ProductPanel({
@@ -156,6 +160,7 @@ export function ProductPanel({
           )}
           {notice && <p role="status">{notice}</p>}
           {detail.product.description && <p className="shop-description">{detail.product.description}</p>}
+          <AdSlot placement="product_detail" />
           {detail.pairs_with?.length ? (
             <section className="shop-rail" aria-label="Goes well with">
               <h3>Goes well with</h3>
@@ -536,6 +541,7 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
       ) : null}
       <h3 className="shop-section-title">Sourcing requests</h3>
       <MemberRequestsPanel accessToken={accessToken} />
+      <AdSlot placement="orders_footer" />
     </section>
   );
 }
@@ -619,6 +625,7 @@ export function BrowsePanel({
       {!filtering && home ? (
         <HotRails rails={home.rails} giveaways={home.giveaways} onOpen={onOpen} onWant={onWant} onEnter={onEnter} busyId={busyId} accessToken={accessToken} />
       ) : null}
+      {!filtering && <AdSlot placement="browse_top" />}
       <form className="member-product-filters member-workspace-filters shop-filters" onSubmit={search}>
         <label>
           Search products
@@ -699,8 +706,11 @@ export function BrowsePanel({
         <p className="empty-copy">Nothing matches yet. Ask in the chat or paste a link and FayFort will source it.</p>
       ) : (
         <section className="shop-grid" aria-label="Available products">
-          {(result?.products || []).map((card) => (
-            <ProductTile key={card.id} card={card} onOpen={onOpen} accessToken={accessToken} />
+          {(result?.products || []).map((card, index) => (
+            <Fragment key={card.id}>
+              <ProductTile card={card} onOpen={onOpen} accessToken={accessToken} />
+              {FEED_AD_AFTER.has(index) && index < (result?.products.length || 0) - 1 && <AdSlot placement="browse_feed" />}
+            </Fragment>
           ))}
         </section>
       )}
@@ -763,6 +773,7 @@ export function SavedPanel({
           ))}
         </section>
       )}
+      {cards && cards.length >= 4 && <AdSlot placement="saved_footer" />}
     </section>
   );
 }

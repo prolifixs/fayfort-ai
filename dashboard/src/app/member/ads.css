@@ -1,0 +1,44 @@
+/* Ads (docs/ADS_PLAN.md). Uses the member theme tokens, with fallbacks so Control Center previews look the same. */
+.fayfort-ad{position:relative;display:grid;gap:4px;min-width:0;margin:0;list-style:none}
+.fayfort-ad-banner{margin:14px 0}
+.fayfort-ad-square{margin:10px 12px 4px;max-width:260px}
+.fayfort-ad-feed{grid-template-rows:1fr auto;align-content:stretch}
+.member-directory-list>li.fayfort-ad{padding:0;border:0;background:none}
+.fayfort-ad-label{position:absolute;top:6px;left:8px;z-index:1;padding:1px 6px;border-radius:var(--radius-pill,999px);background:color-mix(in srgb,var(--color-bg,#fff) 88%,transparent);color:var(--color-muted,#667085);font-size:var(--text-2xs,11px);font-weight:700;letter-spacing:.03em;pointer-events:none}
+.fayfort-ad-google{min-height:90px;overflow:hidden;border-radius:var(--radius-md,10px);background:var(--color-surface,#f5f6f7)}
+.fayfort-ad-square .fayfort-ad-google{min-height:200px}
+.fayfort-ad-feed .fayfort-ad-google{min-height:240px}
+.fayfort-ad-remove{justify-self:end;padding:2px 4px;border:0;background:none;color:var(--color-muted,#667085);font:inherit;font-size:var(--text-2xs,11px);text-decoration:underline;cursor:pointer}
+.fayfort-ad-remove:hover{color:var(--color-text,#101828)}
+
+.fayfort-ad-custom{position:relative;min-width:0;height:100%}
+.fayfort-ad-link{display:flex;align-items:center;gap:14px;box-sizing:border-box;width:100%;height:100%;min-height:84px;padding:22px 16px 14px;border:1px solid var(--color-border,#e4e7ec);border-radius:var(--radius-md,10px);background:var(--ad-bg);color:var(--ad-text);font:inherit;text-align:left;text-decoration:none;cursor:pointer;transition:border-color var(--duration,.15s) var(--ease,ease)}
+.fayfort-ad-link:hover{border-color:var(--ad-cta)}
+.fayfort-ad-link:focus-visible{outline:2px solid var(--color-accent,#197c69);outline-offset:2px}
+.fayfort-ad-image{flex:none;width:72px;height:72px;border-radius:var(--radius-sm,8px);object-fit:cover}
+.fayfort-ad-copy{display:grid;flex:1;gap:4px;min-width:0}
+.fayfort-ad-copy strong{font-size:var(--text-md,15px);line-height:1.25}
+.fayfort-ad-copy span{color:var(--ad-muted);font-size:var(--text-sm,13px);line-height:1.45}
+.fayfort-ad-cta{flex:none;padding:8px 14px;border-radius:var(--radius-pill,999px);background:var(--ad-cta);color:var(--ad-cta-text);font-size:var(--text-sm,13px);font-weight:700;white-space:nowrap}
+
+.fayfort-ad-custom.tone-brand{--ad-bg:color-mix(in srgb,var(--color-accent,#197c69) 9%,var(--color-bg,#fff));--ad-text:var(--color-text,#101828);--ad-muted:var(--color-muted,#667085);--ad-cta:var(--color-accent,#197c69);--ad-cta-text:var(--color-accent-text,#fff)}
+.fayfort-ad-custom.tone-light{--ad-bg:var(--color-surface,#f5f6f7);--ad-text:var(--color-text,#101828);--ad-muted:var(--color-muted,#667085);--ad-cta:var(--color-text,#101828);--ad-cta-text:var(--color-bg,#fff)}
+.fayfort-ad-custom.tone-dark{--ad-bg:#14181f;--ad-text:#f5f6f7;--ad-muted:#b8bfca;--ad-cta:#f5f6f7;--ad-cta-text:#14181f}
+.fayfort-ad-custom.tone-accent{--ad-bg:var(--color-accent,#197c69);--ad-text:var(--color-accent-text,#fff);--ad-muted:color-mix(in srgb,var(--color-accent-text,#fff) 82%,transparent);--ad-cta:var(--color-accent-text,#fff);--ad-cta-text:var(--color-accent,#197c69)}
+.fayfort-ad-custom.tone-dark .fayfort-ad-link,.fayfort-ad-custom.tone-accent .fayfort-ad-link{border-color:transparent}
+
+/* Feed and square ads stack like a product card. */
+.fayfort-ad-custom.shape-feed .fayfort-ad-link,
+.fayfort-ad-custom.shape-square .fayfort-ad-link{flex-direction:column;align-items:stretch;justify-content:space-between;padding-top:30px}
+.fayfort-ad-custom.shape-feed .fayfort-ad-image,
+.fayfort-ad-custom.shape-square .fayfort-ad-image{width:100%;height:auto;aspect-ratio:4/3}
+.fayfort-ad-custom.shape-feed .fayfort-ad-cta,
+.fayfort-ad-custom.shape-square .fayfort-ad-cta{align-self:flex-start}
+.fayfort-ad-custom.shape-square .fayfort-ad-copy span{font-size:var(--text-xs,12px)}
+
+@media (max-width:560px){
+  .fayfort-ad-custom.shape-banner .fayfort-ad-link{flex-wrap:wrap;gap:10px}
+  .fayfort-ad-custom.shape-banner .fayfort-ad-image{width:56px;height:56px}
+  .fayfort-ad-custom.shape-banner .fayfort-ad-copy{flex-basis:calc(100% - 70px)}
+}
+@media (max-height:760px){.mapp-sidebar .fayfort-ad-square{display:none}}

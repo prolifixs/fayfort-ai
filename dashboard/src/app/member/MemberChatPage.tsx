@@ -26,6 +26,7 @@ import { DirectoryPanel } from "./MemberPerks";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 import { MEMBER_TOUR, MemberTour, ProfileMeter, type ProfileCompletion, type TourStep } from "./accountExtras";
 import { SavedPanel } from "./ShopPanels";
+import { AdSlot, AdsProvider } from "./ads";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
@@ -650,6 +651,7 @@ export function MemberChatPage() {
     setAccountDialog(kind);
   }
   const closeAccountDialog = useCallback(() => setAccountDialog(null), []);
+  const openPlans = useCallback(() => setAccountDialog("tier"), []);
   // Back from Stripe Checkout: thank the member and show their plan once the webhook has updated it.
   useEffect(() => {
     if (!verified || !token) return;
@@ -723,6 +725,7 @@ export function MemberChatPage() {
     );
   }
   return (
+    <AdsProvider accessToken={verified ? token : null} planKey={memberPlan?.tier} onUpgrade={openPlans}>
     <div className={sidebarOpen && !isDesktop ? "mapp sidebar-open" : "mapp"}>
       <aside
         id="member-sidebar"
@@ -824,6 +827,7 @@ export function MemberChatPage() {
             ))
           )}
         </section>
+        {isDesktop && <AdSlot placement="sidebar" />}
         <div className="mapp-account" ref={accountRef} data-tour="account">
           {accountOpen && (
             <div className="member-account-dropdown" role="menu" aria-label="Account">
@@ -1082,6 +1086,7 @@ export function MemberChatPage() {
                                 busyId={shopBusyId}
                               />
                             )}
+                            <AdSlot placement="chat_welcome" />
                           </div>
                         )}
                         {messages.map((message) => (
@@ -1613,6 +1618,7 @@ export function MemberChatPage() {
         </div>
       </div>
     </div>
+    </AdsProvider>
   );
 }
 

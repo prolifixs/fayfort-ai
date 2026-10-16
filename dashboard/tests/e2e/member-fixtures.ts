@@ -99,6 +99,18 @@ const fixtures: Record<string, unknown> = {
   },
   "/members/subscription": { available: true, plan: null, status: "none", paused: false, current_period_end: null, cancel_at_period_end: false, continuous_since: null, months: 0, has_customer: false, prices: { standard: { monthly: 19, currency: "usd" }, pro: { monthly: 49, currency: "usd" } }, max_pause_months: 3 },
   "/members/consultations": { consultations: [], quote: { price: 100 } },
+  "/members/ads": {
+    show: true,
+    max_per_screen: 3,
+    google: null,
+    placements: [
+      { key: "browse_top", shape: "banner", priority: 10, google: null, creatives: [{ id: "a1", advertiser: "FayFort", headline: "Go ad-free with Standard", body: "Lower sourcing deposits, cheaper consultations and no ads. $19 a month, cancel any time.", cta_label: "See plans", target_url: "action:plans", tone: "brand", weight: 1 }] },
+      { key: "browse_feed", shape: "feed", priority: 20, google: null, creatives: [{ id: "a3", advertiser: "FayFort", headline: "Find verified suppliers", body: "Markets, factories and service providers in China.", cta_label: "Open the directory", target_url: "/member/chat?panel=directory", tone: "light", weight: 1 }] },
+      { key: "directory_feed", shape: "feed", priority: 25, google: null, creatives: [{ id: "a2", advertiser: "FayFort", headline: "Talk to the FayFort team", body: "Book a consultation about sourcing or doing business in China.", cta_label: "Book a consultation", target_url: "action:plans", tone: "accent", weight: 1 }] },
+      { key: "chat_welcome", shape: "banner", priority: 30, google: null, creatives: [{ id: "a2", advertiser: "FayFort", headline: "Talk to the FayFort team", body: "Book a consultation about sourcing or doing business in China.", cta_label: "Book a consultation", target_url: "action:plans", tone: "accent", weight: 1 }] },
+      { key: "sidebar", shape: "square", priority: 60, google: null, creatives: [{ id: "a3", advertiser: "FayFort", headline: "Find verified suppliers", body: "Markets, factories and service providers in China.", cta_label: "Open the directory", target_url: "/member/chat?panel=directory", tone: "light", weight: 1 }] },
+    ],
+  },
   "/members/directory": {
     results: [
       { id: "d1", record_type: "market", title: "Guangzhou International Hair Market", verified: true, free: false, unlocked: false, public: { city: "Guangzhou", district: "Liwan", categories: ["Wigs", "Hair extensions"] } },
@@ -107,6 +119,9 @@ const fixtures: Record<string, unknown> = {
     contacts,
   },
 };
+
+/** Twelve products, so the Browse grid has room for an in-feed ad. */
+export const manyProducts = Array.from({ length: 12 }, (_, i) => ({ ...products[i % products.length], id: `m${i}` }));
 
 export async function signedInMember(page: Page, options: { newMember?: boolean } = {}) {
   await page.addInitScript(([session]) => {

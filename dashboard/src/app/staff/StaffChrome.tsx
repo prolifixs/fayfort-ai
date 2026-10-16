@@ -22,6 +22,7 @@ const ICONS: Record<string, string> = {
   "FayFort Workers": "M7 4h10v17H7zM10 4v2.5h4V4M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm-3 4.5a3 3 0 0 1 6 0",
   Shop: "M5 8h14l-1 12.5H6zM9 8V6.5a3 3 0 0 1 6 0V8",
   Emails: "M4 6h16v12H4zM4 7l8 6 8-6",
+  Ads: "M4 9.5h3l8-4.5v14l-8-4.5H4zM7 14.5l1.5 5h2.5L10 15M18.5 9.5a3 3 0 0 1 0 5",
   "Theme Studio": "M12 4a8 8 0 1 0 0 16c1.2 0 1.6-.9 1.2-1.8-.5-1 .2-2.2 1.3-2.2H17a3 3 0 0 0 3-3c0-5-3.6-9-8-9ZM7.5 11h.01M10 7.5h.01M14.5 7.5h.01",
   Infrastructure: "M4 5h16v5H4zM4 14h16v5H4zM7.5 7.5h.01M7.5 16.5h.01",
   "My account": "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0",

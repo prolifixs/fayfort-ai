@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
+import { AdSlot } from "./ads";
 import { ApiRequestError, apiRequest } from "../../lib/api";
 import {
   type Consultation,
@@ -372,8 +373,10 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
         </p>
       ) : (
         <ul className="member-directory-list">
-          {results.map((record) => (
-            <li key={`${record.record_type}-${record.id}`} className={record.unlocked ? "unlocked" : undefined}>
+          {results.map((record, index) => (
+            <Fragment key={`${record.record_type}-${record.id}`}>
+            {index === 5 && <AdSlot placement="directory_feed" as="li" />}
+            <li className={record.unlocked ? "unlocked" : undefined}>
               <div className="member-directory-title">
                 <strong>{record.title}</strong>
                 {record.verified && <small className="member-directory-badge">Verified</small>}
@@ -399,6 +402,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
                 </div>
               ) : null}
             </li>
+            </Fragment>
           ))}
         </ul>
       )}
