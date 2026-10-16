@@ -85,7 +85,7 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
         </p>
       )}
       {loading ? (
-        <p role="status">Loading directory tools and conversations�</p>
+        <p role="status">Loading directory tools and conversations…</p>
       ) : (
         <>
           {!tools.length ? (
@@ -99,7 +99,7 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
                 <select required value={toolId} onChange={(e) => setToolId(e.target.value)}>
                   {tools.map((item) => (
                     <option key={item.tool_id} value={item.tool_id}>
-                      {item.tool_id} � {item.family}
+                      {item.tool_id} · {item.family}
                     </option>
                   ))}
                 </select>
@@ -109,8 +109,8 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
                 <select required value={conversationId} onChange={(e) => setConversationId(e.target.value)}>
                   {conversations.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.customer_name || item.customer_external_id || "Customer"} �{" "}
-                      {item.channel || item.platform || "channel"} � {item.id}
+                      {item.customer_name || item.customer_external_id || "Customer"} ·{" "}
+                      {item.channel || item.platform || "channel"} · {item.id}
                     </option>
                   ))}
                 </select>
@@ -127,7 +127,7 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
                 />
               </label>
               <button className="primary-button" disabled={busy || !toolId || !conversationId}>
-                {busy ? "Checking access�" : "Search directory"}
+                {busy ? "Checking access…" : "Search directory"}
               </button>
             </form>
           )}
@@ -137,7 +137,7 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
                 <div className="record" key={item.tool_id}>
                   <div>
                     <strong>
-                      {item.tool_id} � {item.family}
+                      {item.tool_id} · {item.family}
                     </strong>
                     <small>{item.description}</small>
                     <small>Verification policy: {item.verification_policy}</small>
@@ -396,7 +396,7 @@ export function DirectoryProductsPanel({ accessToken, businessId }: { accessToke
         <div>
           <h3>Products</h3>
           <p>
-            Sixth Directory &amp; Tools list. Catalog media can be a direct URL, Instagram post/Reel, or staff upload.
+            Products in this directory. Media can be a direct URL, an Instagram post or Reel, or an upload.
           </p>
         </div>
         <button
@@ -705,14 +705,14 @@ export function EntitlementsPage({ accessToken, businessId }: { accessToken: str
             <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
           </label>
           <button className="primary-button" disabled={busy || !toolId}>
-            {busy ? "Saving�" : "Grant access"}
+            {busy ? "Saving…" : "Grant access"}
           </button>
         </form>
       ) : (
         <p className="quiet-note">Only a FayFort platform administrator can manage access grants.</p>
       )}
       {loading ? (
-        <p>Loading grants�</p>
+        <p>Loading grants…</p>
       ) : rows.length === 0 ? (
         <p className="empty-copy">No access grants are recorded for this business.</p>
       ) : (
@@ -721,10 +721,10 @@ export function EntitlementsPage({ accessToken, businessId }: { accessToken: str
             <div className="record" key={row.id}>
               <div>
                 <strong>
-                  {row.tool_id} � {row.access_level} � {row.status}
+                  {row.tool_id} · {row.access_level} · {row.status}
                 </strong>
                 <small>
-                  Source: {row.entitlement_source || "�"} � Starts: {row.starts_at || "�"} � Expires:{" "}
+                  Source: {row.entitlement_source || "—"} · Starts: {row.starts_at || "—"} · Expires:{" "}
                   {row.expires_at || "Never"}
                 </small>
                 {row.source_reference && <small>Reason: {row.source_reference}</small>}

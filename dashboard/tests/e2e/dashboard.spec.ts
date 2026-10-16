@@ -38,7 +38,7 @@ test("operator signs in, selects a workspace, and creates a safe connection setu
   await expect(page.getByLabel("Business workspace")).toContainText("FayFort Test Workspace");
   expect(apiAuthorization).toBe("Bearer test-access-token");
 
-  await page.getByRole("button", { name: "C Connections", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^Connections/ }).click();
   await page.getByLabel("Display name").fill("Support channel");
   await page.getByRole("button", { name: "Add setup record" }).click();
   await expect(page.getByText("Support channel", { exact: true })).toBeVisible();

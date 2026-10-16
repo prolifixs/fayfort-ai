@@ -590,9 +590,9 @@ describe("authenticated dashboard workspace",()=>{
   sockets[0].onmessage?.({data:JSON.stringify({type:"event",event:{id:12,event_type:"handoff.requested",entity_type:"handoff",entity_id:"handoff-12",payload:{},created_at:"2026-10-09T00:00:00Z"}})});
   sockets[0].onmessage?.({data:JSON.stringify({type:"event",event:{id:12,event_type:"handoff.requested",entity_type:"handoff",entity_id:"handoff-12",payload:{},created_at:"2026-10-09T00:00:00Z"}})});
   sockets[0].onmessage?.({data:JSON.stringify({type:"event",event:{id:11,event_type:"old.event",entity_type:"test",entity_id:"old",payload:{},created_at:"2026-10-09T00:00:00Z"}})});
-  expect(await screen.findByText("handoff.requested")).toBeInTheDocument();
-  expect(screen.getAllByText("handoff.requested")).toHaveLength(1);
-  expect(screen.queryByText("old.event")).not.toBeInTheDocument();
+  expect(await screen.findByText("Handoff requested")).toBeInTheDocument();
+  expect(screen.getAllByText("Handoff requested")).toHaveLength(1);
+  expect(screen.queryByText("Old event")).not.toBeInTheDocument();
   expect(window.sessionStorage.getItem("fayfort.eventCursor.business-1")).toBe("12");
   fireEvent.change(screen.getByRole("combobox",{name:"Client account"}),{target:{value:"business-2"}});
   await waitFor(()=>expect(sockets).toHaveLength(2));sockets[1].onopen?.();

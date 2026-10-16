@@ -1,3 +1,4 @@
+import { StaffChatThread, fromBusinessMessage, fromMemberMessage } from "../staff/StaffChatThread";
 import { statusLabel } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
 
@@ -13,43 +14,30 @@ export function MemberConversationPanel({
   const { canManage, userId, memberReply, setMemberReply, busy, sendMemberReply } = ops;
   return (
     <section className="operations-detail-section operations-request-context">
-      <h3>Member conversation</h3>
+      <h3>Member chat</h3>
       <strong>{memberConversationContext.title}</strong>
       {memberConversationContext.linked_request_id && (
         <p>This conversation is linked to a sourcing request. Use the request timeline for fulfillment progress.</p>
       )}
-      <ol className="operations-conversation-messages">
-        {memberConversationContext.messages.map((message) => (
-          <li key={message.id} className={`is-${message.sender_type}`}>
-            <strong>
-              {message.sender_type === "member"
-                ? "Member"
-                : message.sender_type === "worker"
-                  ? "FayFort staff"
-                  : "FayFort assistant"}
-            </strong>
-            <p>{message.content}</p>
-            <small>{new Date(message.created_at).toLocaleString()}</small>
-          </li>
-        ))}
-      </ol>
-      {!memberConversationContext.linked_request_id && (canManage || selected.assigned_worker_id === userId) && (
-        <form className="operations-member-reply" onSubmit={sendMemberReply}>
-          <label htmlFor="operations-member-reply">Reply to member</label>
-          <textarea
-            id="operations-member-reply"
-            maxLength={4000}
-            rows={3}
-            value={memberReply}
-            onChange={(event) => setMemberReply(event.target.value)}
-            placeholder="Write a staff reply…"
-          />
-          <button className="primary-button" disabled={busy || !memberReply.trim()}>
-            {busy ? "Sending…" : "Send reply and wait for member"}
-          </button>
-          <small>This reply is saved in the member chat and audited in work history.</small>
-        </form>
-      )}
+      <StaffChatThread
+        label="Member conversation messages"
+        messages={memberConversationContext.messages.map(fromMemberMessage)}
+        composer={
+          !memberConversationContext.linked_request_id && (canManage || selected.assigned_worker_id === userId)
+            ? {
+                id: "operations-member-reply",
+                label: "Reply to member",
+                value: memberReply,
+                onChange: setMemberReply,
+                onSubmit: sendMemberReply,
+                busy,
+                placeholder: "Write a staff reply…",
+                sendLabel: "Send reply and wait for member",
+                note: "Saved in the member's chat and in the work history. The item then waits for the member.",
+              }
+            : null
+        }
+      />
     </section>
   );
 }
@@ -91,51 +79,45 @@ export function BusinessConversationPanel({
   businessConversationContext: NonNullable<OperationsState["businessConversationContext"]>;
 }) {
   const { userId, canManage, handoffContext, businessReply, setBusinessReply, busy, sendBusinessReply, returnToAutomation } = ops;
+  const canReply =
+    selected.assigned_worker_id === userId && selected.status === "claimed" && handoffContext?.status === "active";
   return (
     <section className="operations-detail-section operations-request-context">
-      <h3>Business conversation · {statusLabel(businessConversationContext.channel)}</h3>
+      <h3>Customer chat · {statusLabel(businessConversationContext.channel)}</h3>
       {businessConversationContext.summary && <p>{businessConversationContext.summary}</p>}
-      <ol className="operations-conversation-messages">
-        {businessConversationContext.messages.map((message) => (
-          <li key={message.id} className={message.sender_type === "agent" ? "is-assistant" : "is-member"}>
-            <strong>{statusLabel(message.sender_type)}</strong>
-            <p>{message.content}</p>
-            <small>{new Date(message.created_at).toLocaleString()}</small>
-          </li>
-        ))}
-      </ol>
-      {selected.assigned_worker_id === userId &&
-      selected.status === "claimed" &&
-      handoffContext?.status === "active" ? (
-        <>
-          <form className="operations-member-reply" onSubmit={sendBusinessReply}>
-            <label htmlFor="operations-business-reply">Reply to customer</label>
-            <textarea
-              id="operations-business-reply"
-              maxLength={4000}
-              rows={3}
-              value={businessReply}
-              onChange={(event) => setBusinessReply(event.target.value)}
-              placeholder="Write a business-channel reply…"
-            />
-            <button className="primary-button" disabled={busy || !businessReply.trim()}>
-              {busy ? "Sending…" : "Send reply"}
-            </button>
-            <small>
-              Saved to the business conversation and audited. Provider delivery status is reported after save.
-            </small>
-          </form>
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => void returnToAutomation()}>
-            Return to automation
-          </button>
-        </>
-      ) : (
-        <small>
-          {canManage
-            ? "Replies and Return to automation belong to the FayFort worker who claims this handoff. Sign in with a worker account to claim it from Available."
-            : "Claim this handoff to reply or return it to automation."}
-        </small>
-      )}
+      <StaffChatThread
+        label="Business conversation messages"
+        messages={businessConversationContext.messages.map((message) => fromBusinessMessage(message))}
+        composer={
+          canReply
+            ? {
+                id: "operations-business-reply",
+                label: "Reply to customer",
+                value: businessReply,
+                onChange: setBusinessReply,
+                onSubmit: sendBusinessReply,
+                busy,
+                placeholder: "Write a reply to the customer…",
+                note: "Saved to the conversation and audited. Delivery status is reported after it's sent.",
+              }
+            : null
+        }
+        footer={
+          canReply ? (
+            <div className="staff-thread-footer">
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => void returnToAutomation()}>
+                Return to automation
+              </button>
+            </div>
+          ) : (
+            <p className="staff-thread-footer">
+              {canManage
+                ? "Replies and Return to automation belong to the FayFort worker who claims this handoff. Sign in with a worker account to claim it from Available."
+                : "Claim this handoff to reply or return it to automation."}
+            </p>
+          )
+        }
+      />
     </section>
   );
 }

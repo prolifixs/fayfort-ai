@@ -1,5 +1,7 @@
 import { apiRequest } from "../../lib/api";
 import { useCallback, useEffect, useState } from "react";
+import { StaffChatThread, fromBusinessMessage } from "../staff/StaffChatThread";
+import { ShortId, readable } from "../staff/StaffChrome";
 import type {
   ConversationDetail,
   ConversationRow,
@@ -55,6 +57,8 @@ export function WorkspaceDataPage({
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
   const [clockNow, setClockNow] = useState(Date.now());
   const [handoffBusy, setHandoffBusy] = useState(false);
+  const [reply, setReply] = useState("");
+  const [replyBusy, setReplyBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
@@ -143,6 +147,7 @@ export function WorkspaceDataPage({
       ),
   );
   async function openConversation(item: ConversationRow) {
+    if (item.id !== selected?.id) setReply("");
     setSelected(item);
     setDetailLoading(true);
     setDetailError("");
@@ -221,6 +226,24 @@ export function WorkspaceDataPage({
       setRetryBusy("");
     }
   }
+  /** Staff replies go through the active handoff, the same route the Human Agents queue uses. */
+  async function sendReply() {
+    if (!selected || !handoff || handoff.status !== "active" || !reply.trim()) return;
+    setReplyBusy(true);
+    setDetailError("");
+    try {
+      await apiRequest(`/businesses/${businessId}/handoffs/${handoff.id}/messages`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({ content: reply.trim() }),
+      });
+      setReply("");
+      await openConversation(selected);
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : "Your reply could not be sent.");
+    } finally {
+      setReplyBusy(false);
+    }
+  }
   async function requestHumanHandoff() {
     if (!selected) return;
     setHandoffBusy(true);
@@ -247,10 +270,15 @@ export function WorkspaceDataPage({
   const seconds = handoff ? Math.max(0, Math.floor((timerEnd - Date.parse(handoff.requested_at)) / 1000)) : 0;
   const timer = `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   return (
-    <section className="control-panel" aria-label={`${module} workspace`}>
+    <section
+      className={
+        module === "Conversations" && selected ? "control-panel conversation-workspace has-selection" : "control-panel conversation-workspace"
+      }
+      aria-label={`${module} workspace`}
+    >
       <div className="panel-heading">
         <div>
-          <h2>{module}</h2>
+          <h2 className="sr-only">{module}</h2>
           <p>
             {module === "Conversations"
               ? "Business conversations and their recorded message history."
@@ -335,8 +363,8 @@ export function WorkspaceDataPage({
         conversations.length === 0 ? (
           <p className="empty-copy">No conversations on this page. Try another filter or page.</p>
         ) : (
-          <div className="workspace-split">
-            <div className="record-list">
+          <div className={selected ? "workspace-split inbox has-selection" : "workspace-split inbox"}>
+            <div className="record-list inbox-list" aria-label="Conversation list">
               {visibleConversations.length === 0 ? (
                 <p className="empty-copy">No conversations on this page match that search.</p>
               ) : (
@@ -346,18 +374,26 @@ export function WorkspaceDataPage({
                     key={item.id}
                     onClick={() => void openConversation(item)}
                   >
-                    <span>
-                      <strong>{item.customer_name || item.customer_external_id || "Customer"}</strong>
-                      <small>
-                        {item.channel || item.platform || "Unknown channel"} · {item.status} ·{" "}
-                        {new Date(item.last_message_at || item.created_at).toLocaleString()}
+                    <span className="inbox-row">
+                      <span className="inbox-row-top">
+                        <strong>{item.customer_name || item.customer_external_id || "Customer"}</strong>
+                        <time dateTime={item.last_message_at || item.created_at}>
+                          {shortWhen(item.last_message_at || item.created_at)}
+                        </time>
+                      </span>
+                      <small className="inbox-row-meta">
+                        {readable(item.channel || item.platform || "Unknown channel")}
+                        {item.customer_username ? ` · ${item.customer_username}` : ""}
+                        <span className={item.status === "open" ? "status-pill is-good" : "status-pill"}>
+                          {readable(item.status)}
+                        </span>
                       </small>
-                      {item.summary && <small>{item.summary}</small>}
+                      {item.summary && <small className="inbox-row-preview">{item.summary}</small>}
                     </span>
                   </button>
                 ))
               )}
-              <div className="record-actions">
+              <div className="record-actions inbox-pager">
                 <button
                   disabled={conversationOffset === 0 || loading}
                   onClick={() => setConversationOffset(Math.max(0, conversationOffset - 50))}
@@ -365,8 +401,8 @@ export function WorkspaceDataPage({
                   Previous page
                 </button>
                 <small>
-                  Showing {conversationOffset + 1}�{conversationOffset + conversations.length}
-                  {conversationHasMore ? "+" : ""} conversations
+                  {conversationOffset + 1}–{conversationOffset + conversations.length}
+                  {conversationHasMore ? "+" : ""}
                 </small>
                 <button
                   disabled={!conversationHasMore || loading}
@@ -376,37 +412,47 @@ export function WorkspaceDataPage({
                 </button>
               </div>
             </div>
-            <div className="message-panel">
+            <div className="message-panel conversation-detail">
               {!selected ? (
                 <p className="empty-copy">Select a conversation to view its messages.</p>
               ) : (
                 <>
-                  <h3>Conversation messages</h3>
-                  <p className="quiet-note">{selected.customer_name || selected.customer_external_id || selected.id}</p>
-                  <div className="record-actions conversation-related">
+                  <button type="button" className="inbox-back" onClick={() => setSelected(null)}>
+                    ← All conversations
+                  </button>
+                  <div className="conversation-detail-head">
+                    <div>
+                      <h3>{selected.customer_name || selected.customer_external_id || "Customer"}</h3>
+                      <p>
+                        {readable(selected.channel || selected.platform || "Unknown channel")}
+                        {selected.customer_username ? ` · ${selected.customer_username}` : ""}
+                      </p>
+                    </div>
+                    <span className={selected.status === "open" ? "status-pill is-good" : "status-pill"}>
+                      {readable(selected.status)}
+                    </span>
+                  </div>
+                  <div className="conversation-body">
+                  <aside className="conversation-side" aria-label="Conversation context">
+                  <div className="conversation-context">
                     {relatedCustomer ? (
-                      <>
-                        <span>
-                          Customer profile linked:{" "}
-                          {String(
-                            relatedCustomer.profile?.name ||
-                              relatedCustomer.profile?.full_name ||
-                              relatedCustomer.external_customer_id,
-                          )}
-                        </span>
-                        <button type="button" onClick={() => setActive("Customers")}>
-                          Open Customers
-                        </button>
-                      </>
+                      <button type="button" onClick={() => setActive("Customers")}>
+                        Customer profile ·{" "}
+                        {String(
+                          relatedCustomer.profile?.name ||
+                            relatedCustomer.profile?.full_name ||
+                            relatedCustomer.external_customer_id,
+                        )}
+                      </button>
                     ) : (
-                      <span>No customer profile is linked to this conversation.</span>
+                      <span className="quiet-note">No customer profile is linked to this conversation.</span>
                     )}
                     {relatedRequests.length > 0 ? (
                       <button type="button" onClick={() => setActive("Requests")}>
                         Open {relatedRequests.length} related request{relatedRequests.length === 1 ? "" : "s"}
                       </button>
                     ) : (
-                      <span>No related requests.</span>
+                      <span className="quiet-note">No related requests.</span>
                     )}
                     {handoff && (
                       <button type="button" onClick={() => setActive("Human Agents")}>
@@ -417,16 +463,17 @@ export function WorkspaceDataPage({
                   {relatedRequests.length > 0 && (
                     <div className="related-requests" aria-label="Related requests">
                       {relatedRequests.map((request) => (
-                        <article className="message-item" key={request.id}>
-                          <strong>
-                            {request.request_type} · {request.status}
-                          </strong>
-                          <small>Request {request.id}</small>
+                        <div className="related-request" key={request.id}>
+                          <strong>{readable(request.request_type)}</strong>
+                          <span className="status-pill is-warn">{readable(request.status)}</span>
                           <small>
                             Missing:{" "}
-                            {request.missing_information?.length ? request.missing_information.join(", ") : "None"}
+                            {request.missing_information?.length
+                              ? request.missing_information.map(readable).join(", ")
+                              : "nothing"}
                           </small>
-                        </article>
+                          <ShortId id={request.id} label="Request" />
+                        </div>
                       ))}
                     </div>
                   )}
@@ -439,62 +486,84 @@ export function WorkspaceDataPage({
                     <div className={handoff ? "handoff-status" : "handoff-start"}>
                       {handoff ? (
                         <>
-                          <strong>Human handoff � {handoff.status.replaceAll("_", " ")}</strong>
+                          <strong>
+                            Human handoff <span className="status-pill is-info">{readable(handoff.status)}</span>
+                          </strong>
                           <span>
-                            {handoff.status === "active" ? "Wait to takeover " : "Waiting "}
+                            {handoff.status === "active" ? "Waited " : "Waiting "}
                             {timer}
-                            {position ? ` � FIFO position ${position}` : ""}
-                            {handoff.assigned_to ? ` � assigned to ${handoff.assigned_to}` : ""}
+                            {position ? ` · queue position ${position}` : ""}
+                            {handoff.assigned_to ? ` · assigned to ${handoff.assigned_to}` : ""}
                           </span>
-                          <small>
-                            Timer shows elapsed wait. A response-time estimate needs agent availability and
-                            handling-time data.
-                          </small>
                         </>
                       ) : (
                         <>
                           <span>No human takeover requested.</span>
                           <button disabled={handoffBusy} onClick={() => void requestHumanHandoff()}>
-                            {handoffBusy ? "Requesting�" : "Request human takeover"}
+                            {handoffBusy ? "Requesting…" : "Request human takeover"}
                           </button>
                         </>
                       )}
                     </div>
                   )}
+                  </aside>
                   {detailLoading ? (
                     <p role="status">Loading messages…</p>
-                  ) : messages.length === 0 ? (
-                    <p className="empty-copy">No messages recorded in this conversation.</p>
                   ) : (
-                    <div className="message-list">
-                      {messages.map((message) => (
-                        <article className="message-item" key={message.id}>
-                          <strong>{message.sender_type}</strong>
-                          <p>{message.content}</p>
-                          <small>{new Date(message.created_at).toLocaleString()}</small>
-                          {canManage &&
+                    <StaffChatThread
+                      label="Conversation messages"
+                      emptyText="No messages recorded in this conversation."
+                      messages={messages.map((message) =>
+                        fromBusinessMessage(message, {
+                          meta: message.delivery ? (
+                            <span className={message.delivery.status === "rejected" ? "is-bad" : undefined}>
+                              {readable(message.delivery.status)}
+                              {message.delivery.safe_error_code ? ` · ${readable(message.delivery.safe_error_code)}` : ""}
+                            </span>
+                          ) : undefined,
+                          action:
+                            canManage &&
                             message.delivery?.status === "rejected" &&
-                            message.delivery.safe_error_code !== "response_window_expired" && (
+                            message.delivery.safe_error_code !== "response_window_expired" ? (
                               <button
                                 type="button"
                                 disabled={retryBusy === message.id}
                                 onClick={() => void retryDelivery(message)}
                               >
-                                {retryBusy === message.id ? "Retrying..." : "Retry rejected delivery"}
+                                {retryBusy === message.id ? "Retrying…" : "Retry rejected delivery"}
                               </button>
-                            )}
-                          {message.delivery && (
-                            <small>
-                              Delivery: {message.delivery.status.replaceAll("_", " ")}
-                              {message.delivery.safe_error_code
-                                ? ` � ${message.delivery.safe_error_code.replaceAll("_", " ")}`
-                                : ""}
-                            </small>
-                          )}
-                        </article>
-                      ))}
-                    </div>
+                            ) : undefined,
+                        }),
+                      )}
+                      composer={
+                        handoff?.status === "active"
+                          ? {
+                              id: "conversation-reply",
+                              label: "Reply to customer",
+                              value: reply,
+                              onChange: setReply,
+                              onSubmit: (event) => {
+                                event.preventDefault();
+                                void sendReply();
+                              },
+                              busy: replyBusy,
+                              placeholder: `Reply to ${selected.customer_name || "the customer"}…`,
+                              note: "Sent through the connected channel. Delivery status shows under your message.",
+                            }
+                          : null
+                      }
+                      footer={
+                        handoff?.status === "active" ? null : (
+                          <p className="staff-thread-footer">
+                            {handoff
+                              ? "You can reply here once this handoff is taken over."
+                              : "The AI is handling this conversation. Request a human takeover to reply yourself."}
+                          </p>
+                        )
+                      }
+                    />
                   )}
+                  </div>
                 </>
               )}
             </div>
@@ -522,6 +591,23 @@ export function WorkspaceDataPage({
       )}
     </section>
   );
+}
+
+function statusTone(status: string) {
+  if (["completed", "open", "active"].includes(status)) return "status-pill is-good";
+  if (["awaiting_customer", "requested", "pending"].includes(status)) return "status-pill is-warn";
+  if (["cancelled", "failed", "rejected"].includes(status)) return "status-pill is-bad";
+  return "status-pill";
+}
+
+/** "4:12 PM" today, "Tue" this week, otherwise "Oct 3". */
+function shortWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (now.getTime() - date.getTime() < 6 * 86_400_000) return date.toLocaleDateString(undefined, { weekday: "short" });
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export function RequestWorkspace({
@@ -626,20 +712,29 @@ export function RequestManagementCard({
     }
   }
   return (
-    <article className={focused ? "record selected-record" : "record"}>
+    <article className={focused ? "record request-card selected-record" : "record request-card"}>
       <div>
-        <strong>
-          {item.request_type} · {item.status}
-        </strong>
-        <small>
-          Request {item.id} · Conversation {item.conversation_id}
-        </small>
-        <small>Missing: {item.missing_information.length ? item.missing_information.join(", ") : "None"}</small>
-        <small>Details: {JSON.stringify(item.details || {})}</small>
-        <small>
-          {item.related_request_id ? `Related to request ${item.related_request_id}` : "No related request"} · Layer 5
-          continuation updates the existing request record.
-        </small>
+        <span className="request-card-title">
+          <strong>{readable(item.request_type)}</strong>
+          <span className={statusTone(item.status)}>{readable(item.status)}</span>
+        </span>
+        <dl className="request-fields">
+          {Object.entries(item.details || {}).map(([key, value]) => (
+            <div key={key}>
+              <dt>{readable(key)}</dt>
+              <dd>{typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)}</dd>
+            </div>
+          ))}
+          <div>
+            <dt>Still missing</dt>
+            <dd>{item.missing_information.length ? item.missing_information.map(readable).join(", ") : "Nothing"}</dd>
+          </div>
+        </dl>
+        <span className="request-card-refs">
+          <ShortId id={item.id} label="Request" />
+          <ShortId id={item.conversation_id} label="Chat" />
+          {item.related_request_id && <ShortId id={item.related_request_id} label="Related" />}
+        </span>
         <div className="record-actions">
           <select
             aria-label={`Next status for request ${item.id}`}
@@ -657,7 +752,7 @@ export function RequestManagementCard({
                 : []
             ).map((status) => (
               <option key={status} value={status}>
-                {status.replaceAll("_", " ")}
+                {readable(status)}
               </option>
             ))}
           </select>
@@ -672,7 +767,7 @@ export function RequestManagementCard({
               .filter((other) => other.customer_id === item.customer_id && other.id !== item.id)
               .map((other) => (
                 <option key={other.id} value={other.id}>
-                  {other.request_type} · {other.status} · {other.id}
+                  {readable(other.request_type)} · {readable(other.status)} · {other.id.slice(0, 8)}
                 </option>
               ))}
           </select>
@@ -776,11 +871,13 @@ export function CustomerWorkspace({
               key={item.id}
               onClick={() => void selectCustomer(item)}
             >
-              <span>
-                <strong>{String(item.profile?.name || item.profile?.full_name || item.external_customer_id)}</strong>
-                <small>
-                  {item.channel} · Customer ID {item.external_customer_id} · Updated{" "}
-                  {new Date(item.updated_at).toLocaleString()}
+              <span className="inbox-row">
+                <span className="inbox-row-top">
+                  <strong>{String(item.profile?.name || item.profile?.full_name || item.external_customer_id)}</strong>
+                  <time dateTime={item.updated_at}>{shortWhen(item.updated_at)}</time>
+                </span>
+                <small className="inbox-row-meta">
+                  {readable(item.channel)} · ID {item.external_customer_id}
                 </small>
               </span>
             </button>
@@ -792,10 +889,14 @@ export function CustomerWorkspace({
           <p className="empty-copy">Select a customer to view their profile and history.</p>
         ) : (
           <>
-            <h3>Customer profile</h3>
-            <p className="quiet-note">
-              {selected.channel} · Customer ID {selected.external_customer_id}
-            </p>
+            <div className="conversation-detail-head">
+              <div>
+                <h3>{String(selected.profile?.name || selected.profile?.full_name || "Customer profile")}</h3>
+                <p>
+                  {readable(selected.channel)} · Customer ID {selected.external_customer_id}
+                </p>
+              </div>
+            </div>
             {error && (
               <p className="form-error" role="alert">
                 {error}
@@ -810,7 +911,7 @@ export function CustomerWorkspace({
                     <dl className="customer-profile">
                       {profile.map(([key, value]) => (
                         <div key={key}>
-                          <dt>{key.replaceAll("_", " ")}</dt>
+                          <dt>{readable(key)}</dt>
                           <dd>{typeof value === "string" ? value : JSON.stringify(value)}</dd>
                         </div>
                       ))}
@@ -836,11 +937,10 @@ export function CustomerWorkspace({
                         {detail.conversations.map((conversation) => (
                           <article className="message-item" key={conversation.id}>
                             <strong>
-                              {conversation.channel || conversation.platform || "Unknown channel"} ·{" "}
-                              {conversation.status}
+                              {readable(conversation.channel || conversation.platform || "Unknown channel")}{" "}
+                              <span className={statusTone(conversation.status)}>{readable(conversation.status)}</span>
                             </strong>
                             <small>
-                              Conversation {conversation.id} ·{" "}
                               {new Date(conversation.last_message_at || conversation.created_at).toLocaleString()}
                             </small>
                             {conversation.summary && <p>{conversation.summary}</p>}
@@ -866,12 +966,14 @@ export function CustomerWorkspace({
                         {detail.requests.map((request) => (
                           <article className="message-item" key={request.id}>
                             <strong>
-                              {request.request_type} · {request.status}
+                              {readable(request.request_type)}{" "}
+                              <span className={statusTone(request.status)}>{readable(request.status)}</span>
                             </strong>
-                            <small>Request {request.id}</small>
                             <small>
-                              Missing:{" "}
-                              {request.missing_information?.length ? request.missing_information.join(", ") : "None"}
+                              Still missing:{" "}
+                              {request.missing_information?.length
+                                ? request.missing_information.map(readable).join(", ")
+                                : "nothing"}
                             </small>
                             <button type="button" onClick={() => openRequest(request.id)}>
                               Open request

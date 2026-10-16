@@ -85,7 +85,7 @@ export function SettingsPage({
         </p>
       )}
       {loading ? (
-        <p>Loading workspace details�</p>
+        <p>Loading workspace details…</p>
       ) : (
         <>
           <form className="settings-form" onSubmit={save}>
@@ -112,7 +112,7 @@ export function SettingsPage({
             </label>
             {canManage ? (
               <button className="primary-button" disabled={busy}>
-                {busy ? "Saving�" : "Save settings"}
+                {busy ? "Saving…" : "Save settings"}
               </button>
             ) : (
               <p className="quiet-note">Only a business owner or admin can edit workspace settings.</p>

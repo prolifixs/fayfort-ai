@@ -87,8 +87,11 @@ describe("Operations Center", () => {
   it("shows admin workforce, reports, and the queue, then loads the selected request's working context", async () => {
     routeApi({ user_id: "admin-1", departments: [], can_manage: true });
     render(<OperationsCenterPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Team" }));
     expect(await screen.findByRole("region", { name: "Workforce overview" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Reports" }));
     expect(await screen.findByRole("region", { name: "Operations reports and reconciliation" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Queue" }));
     const queue = screen.getByRole("region", { name: "Operations work items" });
     expect(within(queue).getByText("2 shown")).toBeInTheDocument();
     fireEvent.click(within(queue).getByRole("button", { name: /Desk lamp sourcing/ }));

@@ -78,7 +78,7 @@ export function VerificationPage({ accessToken, businessId }: { accessToken: str
         </p>
       )}
       {loading ? (
-        <p>Loading review queue�</p>
+        <p>Loading review queue…</p>
       ) : queue.length === 0 ? (
         <p className="empty-copy">No unverified or conflicting directory records are waiting for review.</p>
       ) : (
@@ -88,7 +88,7 @@ export function VerificationPage({ accessToken, businessId }: { accessToken: str
               <div>
                 <strong>{item.label || item.record_id}</strong>
                 <small>
-                  {item.tool_id} � {item.source_type.replaceAll("_", " ")} � Current status: {item.verification_status}
+                  {item.tool_id} · {item.source_type.replaceAll("_", " ")} · Current status: {item.verification_status}
                 </small>
                 {canManage && (
                   <div className="record-actions">
@@ -114,7 +114,7 @@ export function VerificationPage({ accessToken, businessId }: { accessToken: str
                       disabled={busy === item.record_id || (reasons[item.record_id] || "").trim().length < 8}
                       onClick={() => void review(item)}
                     >
-                      {busy === item.record_id ? "Saving�" : "Save review"}
+                      {busy === item.record_id ? "Saving…" : "Save review"}
                     </button>
                   </div>
                 )}
@@ -132,10 +132,10 @@ export function VerificationPage({ accessToken, businessId }: { accessToken: str
             <div className="record" key={item.id}>
               <div>
                 <strong>
-                  {item.tool_id} � {item.previous_status} � {item.verification_status}
+                  {item.tool_id} · {item.previous_status} · {item.verification_status}
                 </strong>
                 <small>
-                  {item.source_table} � {item.record_id} � Reviewer {item.reviewer_user_id} �{" "}
+                  {item.source_table} · {item.record_id} · Reviewer {item.reviewer_user_id} ·{" "}
                   {new Date(item.created_at).toLocaleString()}
                 </small>
                 <small>{item.reason}</small>
@@ -153,10 +153,10 @@ export function VerificationPage({ accessToken, businessId }: { accessToken: str
             <div className="record" key={item.id}>
               <div>
                 <strong>
-                  {item.tool_id} � {item.outcome}
+                  {item.tool_id} · {item.outcome}
                 </strong>
                 <small>
-                  Verification: {item.verification_state || "not required"} � {item.reason_code || "�"} �{" "}
+                  Verification: {item.verification_state || "not required"} · {item.reason_code || "—"} ·{" "}
                   {new Date(item.created_at).toLocaleString()}
                 </small>
               </div>

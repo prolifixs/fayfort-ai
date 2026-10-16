@@ -46,16 +46,16 @@ export function OperationalModulePage({
     <section className="control-panel" aria-label={`${module} workspace`}>
       <div className="panel-heading">
         <div>
-          <h2>{module}</h2>
+          <h2>{module === "Channels" ? "Inbound activity" : module}</h2>
           <p>
             {module === "Directory & Tools"
-              ? "Available Layer 6 tools and their access rules."
+              ? "Available directory tools and their access rules."
               : module === "Channels"
-                ? "Recorded inbound channel event health. Provider setup and outbound delivery are not available here yet."
+                ? "What each connected channel has received recently, so you can spot a channel that has gone quiet."
                 : module === "Entitlements"
                   ? "Business-level access grants. No subscription tiers or prices are inferred."
                   : module === "Verification"
-                    ? "Layer 6 access decisions and verification outcomes recorded for this business."
+                    ? "Directory access decisions and verification outcomes recorded for this business."
                     : module === "Analytics"
                       ? "Counts and recent activity derived from saved business events."
                       : "Workspace identity and configuration status."}

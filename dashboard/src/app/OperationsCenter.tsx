@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { OperationsNotifications } from "./OperationsNotifications";
 import { departmentLabel, statusLabel } from "./operations/types";
+import { ShortId, readable } from "./staff/StaffChrome";
 import { useOperationsCenter } from "./operations/useOperationsCenter";
 import {
   WorkforcePanel,
@@ -22,6 +24,14 @@ import { WorkActionForm, TransferForm, WorkHistory, ChecklistPanel, NotesPanel }
 
 export function OperationsCenterPage() {
   const ops = useOperationsCenter();
+  const [view, setView] = useState<"queue" | "team" | "reports">("queue");
+  const detailRef = useRef<HTMLElement>(null);
+  const selectedId = ops.selected?.id;
+  // On phones and tablets the detail sits under the queue, so bring it into view when an item opens.
+  useEffect(() => {
+    if (!selectedId || window.innerWidth >= 1024) return;
+    detailRef.current?.scrollIntoView?.({ block: "start" });
+  }, [selectedId]);
   const {
     token,
     authLoading,
@@ -97,9 +107,33 @@ export function OperationsCenterPage() {
         </section>
       ) : (
         <>
-          {canManage && <WorkforcePanel ops={ops} />}
-          {canManage && <ReportsPanel ops={ops} />}
-          {canManage && <AutomationActivity ops={ops} />}
+          {canManage && (
+            <div className="operations-tabs" role="tablist" aria-label="Operations views">
+              {(
+                [
+                  ["queue", "Queue"],
+                  ["team", "Team"],
+                  ["reports", "Reports"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === id}
+                  className={view === id ? "operations-tab active" : "operations-tab"}
+                  onClick={() => setView(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {canManage && view === "team" && <WorkforcePanel ops={ops} />}
+          {canManage && view === "reports" && <ReportsPanel ops={ops} />}
+          {canManage && view === "reports" && <AutomationActivity ops={ops} />}
+          {(!canManage || view === "queue") && (
+          <>
           <QueueFilters ops={ops} />
           {(error || notice) && (
             <p className={error ? "form-error" : "operations-notice"} role={error ? "alert" : "status"}>
@@ -119,7 +153,7 @@ export function OperationsCenterPage() {
           )}
           <div className="operations-center-grid">
             <WorkList ops={ops} />
-            <section className="operations-work-detail" aria-label="Selected work details">
+            <section className="operations-work-detail" aria-label="Selected work details" ref={detailRef}>
               {!selected ? (
                 <div className="operations-empty">
                   <h2>Select a work item</h2>
@@ -127,10 +161,13 @@ export function OperationsCenterPage() {
                 </div>
               ) : (
                 <>
+                  <button type="button" className="operations-back-to-queue" onClick={() => ops.setSelected(null)}>
+                    ← Back to the queue
+                  </button>
                   <div className="operations-section-title">
                     <div>
                       <small>
-                        {departmentLabel[selected.department]} · {selected.work_type.replaceAll("_", " ")}
+                        {departmentLabel[selected.department]} · {readable(selected.work_type)}
                       </small>
                       <h2>{selected.summary}</h2>
                     </div>
@@ -139,17 +176,27 @@ export function OperationsCenterPage() {
                     </span>
                   </div>
                   <p className="operations-source">
-                    {selected.member_request_id
-                      ? `Member request ${selected.member_request_id}`
-                      : selected.work_type === "dispute_case"
-                        ? "Dispute case linked to a member request"
-                        : selected.member_conversation_id
-                          ? `Member conversation ${selected.member_conversation_id}`
-                          : selected.handoff_id
-                            ? `Human handoff ${selected.handoff_id}`
-                            : selected.business_conversation_id
-                              ? `Business conversation ${selected.business_conversation_id}`
-                              : "Source record"}
+                    {selected.member_request_id ? (
+                      <>
+                        From a member request <ShortId id={selected.member_request_id} label="Request" />
+                      </>
+                    ) : selected.work_type === "dispute_case" ? (
+                      "Dispute case linked to a member request"
+                    ) : selected.member_conversation_id ? (
+                      <>
+                        From a member chat <ShortId id={selected.member_conversation_id} label="Chat" />
+                      </>
+                    ) : selected.handoff_id ? (
+                      <>
+                        From a customer handoff <ShortId id={selected.handoff_id} label="Handoff" />
+                      </>
+                    ) : selected.business_conversation_id ? (
+                      <>
+                        From a customer chat <ShortId id={selected.business_conversation_id} label="Chat" />
+                      </>
+                    ) : (
+                      "Source record"
+                    )}
                   </p>
                   {requestContext && (
                     <RequestContextPanel ops={ops} selected={selected} requestContext={requestContext} />
@@ -227,6 +274,8 @@ export function OperationsCenterPage() {
               )}
             </section>
           </div>
+          </>
+          )}
         </>
       )}
     </main>

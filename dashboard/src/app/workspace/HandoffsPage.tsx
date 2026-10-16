@@ -1,6 +1,8 @@
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type { ConversationRow, Handoff, HandoffAgent, HandoffEvent } from "./types";
+import type { ConversationRow, Handoff, HandoffAgent, HandoffEvent, MessageRow } from "./types";
+import { StaffChatThread, fromBusinessMessage } from "../staff/StaffChatThread";
+import { readable } from "../staff/StaffChrome";
 
 export function AgentAvailabilityPanel({ accessToken, businessId }: { accessToken: string; businessId: string }) {
   const [availability, setAvailability] = useState<"available" | "away" | "offline">("offline");
@@ -132,6 +134,8 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
   const [reason, setReason] = useState("customer_requested");
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<Record<string, string>>({});
+  const [chatOpen, setChatOpen] = useState<Record<string, boolean>>({});
+  const [chatMessages, setChatMessages] = useState<Record<string, MessageRow[]>>({});
   const [sourceFilter, setSourceFilter] = useState("all");
   const [history, setHistory] = useState<Record<string, HandoffEvent[]>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
@@ -205,6 +209,29 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
     if (!agentId) return;
     await action(item, "assign", { agent_id: agentId });
   }
+  async function loadChat(item: Handoff) {
+    try {
+      const data = await apiRequest<{ messages: MessageRow[] }>(
+        `/businesses/${businessId}/conversations/${item.conversation_id}/messages`,
+        accessToken,
+      );
+      setChatMessages((previous) => ({ ...previous, [item.id]: Array.isArray(data.messages) ? data.messages : [] }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The conversation could not be loaded.");
+    }
+  }
+  async function toggleChat(item: Handoff) {
+    const open = !chatOpen[item.id];
+    setChatOpen((previous) => ({ ...previous, [item.id]: open }));
+    if (open) await loadChat(item);
+  }
+  async function sendHandoffReply(item: Handoff) {
+    const content = (reply[item.id] || "").trim();
+    if (!content) return;
+    await action(item, "messages", { content });
+    setReply((previous) => ({ ...previous, [item.id]: "" }));
+    await loadChat(item);
+  }
   async function toggleHistory(item: Handoff) {
     const open = !historyOpen[item.id];
     setHistoryOpen((previous) => ({ ...previous, [item.id]: open }));
@@ -251,8 +278,8 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
             <option value="">Choose a conversation</option>
             {conversations.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.customer_name || c.customer_external_id || "Customer"} �{" "}
-                {c.channel || c.platform || "Unknown source"} �{" "}
+                {c.customer_name || c.customer_external_id || "Customer"} ·{" "}
+                {c.channel || c.platform || "Unknown source"} ·{" "}
                 {new Date(c.last_message_at || c.created_at).toLocaleString()}
               </option>
             ))}
@@ -294,7 +321,7 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
         </select>
       </label>
       {loading ? (
-        <p>Loading handoffs�</p>
+        <p>Loading handoffs…</p>
       ) : visible.length === 0 ? (
         <p className="empty-copy">{items.length ? "No handoffs match this source filter." : "No handoffs recorded."}</p>
       ) : (
@@ -302,21 +329,26 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
           {visible.map((item) => (
             <div className="record handoff-record" key={item.id}>
               <div>
-                <strong>
-                  {item.status} � {item.reason}
-                </strong>
+                <span className="handoff-title">
+                  <strong>
+                    {byId.get(item.conversation_id)?.customer_name ||
+                      byId.get(item.conversation_id)?.customer_external_id ||
+                      "Customer"}
+                  </strong>
+                  <span className={item.status === "active" ? "status-pill is-good" : item.status === "returned" ? "status-pill" : "status-pill is-warn"}>
+                    {readable(item.status)}
+                  </span>
+                </span>
+                <small className="handoff-reason">{item.reason.replaceAll("_", " ")}</small>
                 <small>
-                  {byId.get(item.conversation_id)?.customer_name ||
-                    byId.get(item.conversation_id)?.customer_external_id ||
-                    "Customer"}{" "}
-                  � {source(item)} � Requested {new Date(item.requested_at).toLocaleString()}
+                  {readable(source(item))} · Requested {new Date(item.requested_at).toLocaleString()}
                 </small>
                 {item.queue_position && (
                   <small>
-                    FIFO position {item.queue_position} ·{" "}
+                    Queue position {item.queue_position} ·{" "}
                     {item.wait_estimate?.status === "estimated"
                       ? `Estimated first response: ${item.wait_estimate.lower_minutes}–${item.wait_estimate.upper_minutes} min (${item.wait_estimate.sample_size} samples)`
-                      : item.wait_estimate?.reason || "Wait estimate unavailable."}
+                      : "No wait estimate yet"}
                   </small>
                 )}
                 <div className="record-actions">
@@ -353,21 +385,39 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
                       <button disabled={busy} onClick={() => void action(item, "return-to-automation")}>
                         Return to automation
                       </button>
-                      <input
-                        aria-label={`Reply for ${item.id}`}
-                        value={reply[item.id] || ""}
-                        onChange={(e) => setReply((p) => ({ ...p, [item.id]: e.target.value }))}
-                        placeholder="Human reply"
-                      />
-                      <button
-                        disabled={busy || !reply[item.id]?.trim()}
-                        onClick={() => void action(item, "messages", { content: reply[item.id] })}
-                      >
-                        Send reply
+                      <button type="button" onClick={() => void toggleChat(item)}>
+                        {chatOpen[item.id] ? "Hide chat" : "Open chat and reply"}
                       </button>
                     </>
                   )}
                 </div>
+                {chatOpen[item.id] && (
+                  <StaffChatThread
+                    label={`Chat with ${byId.get(item.conversation_id)?.customer_name || "customer"}`}
+                    emptyText={chatMessages[item.id] ? "No messages in this conversation yet." : "Loading messages…"}
+                    messages={(chatMessages[item.id] || []).map((message) =>
+                      fromBusinessMessage(message, {
+                        meta: message.delivery ? <span>{readable(message.delivery.status)}</span> : undefined,
+                      }),
+                    )}
+                    composer={
+                      item.status === "active"
+                        ? {
+                            id: `handoff-reply-${item.id}`,
+                            label: `Reply for ${item.id}`,
+                            value: reply[item.id] || "",
+                            onChange: (value) => setReply((p) => ({ ...p, [item.id]: value })),
+                            onSubmit: (event) => {
+                              event.preventDefault();
+                              void sendHandoffReply(item);
+                            },
+                            busy,
+                            placeholder: "Write a reply to the customer…",
+                          }
+                        : null
+                    }
+                  />
+                )}
                 <button type="button" className="handoff-history-toggle" onClick={() => void toggleHistory(item)}>
                   {historyOpen[item.id] ? "Hide history" : "View history"}
                 </button>
