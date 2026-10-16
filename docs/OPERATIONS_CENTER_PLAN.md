@@ -12,9 +12,17 @@ Status: approved 2026-10-16 and built. Decisions: archive shows 30 days by defau
 - Worker Member Requests page and /worker/member-reviews now point to the Operations Center. The admin assignment view stays.
 - Migration: supabase/migrations/20261017100000_operations_flow.sql.
 
+## Deadlines, delivery estimates and cancelling (added 2026-10-16)
+
+- Every task has a deadline: 24 hours from when it opens unless one is set. Queue cards start green and turn amber then red as the deadline nears; past it they are red with the time overdue ("Overdue 3h 20m"). Each department's list puts the closest deadline first.
+- A member request must be reviewed within 24 hours and needs a delivery estimate (ETA) before it can move to Sourcing. The ETA becomes the task deadline and shows on the member's request.
+- Changing an ETA or any deadline needs a reason. The member sees the new date and the reason; every change is kept in the task history and the request's ETA history.
+- Members can cancel a request until it is paid (submitted, under review, sourcing, needs input, options sent). Unpaid invoices are cancelled and their Shopify draft orders deleted. If Shopify refuses, staff get a "Delete a cancelled invoice" task. If an old link is paid anyway, staff get an urgent "Refund" task.
+- Migration: supabase/migrations/20261017110000_deadlines_eta_and_cancel.sql (existing live tasks with no deadline get created time + 24 hours, or the request's ETA).
+
 ## Known gaps (not code)
 
-- Members cannot cancel a request themselves yet (waiting for a decision).
+- A member who already paid a deposit cannot cancel from the dashboard; they are told to message us in chat.
 - Directory contacts: none loaded yet.
 
 ## 1. What happens today

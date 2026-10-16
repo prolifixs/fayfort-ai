@@ -88,6 +88,13 @@ function sourcingSteps(input: PlaybookInput): Step[] {
       target: "ops-request",
     },
     {
+      id: "eta",
+      title: "Set the delivery estimate",
+      how: "Within 24 hours of the request, set the ETA: your honest estimate of when the member will have the item. The member sees the date on their request. You can't move to Sourcing without it. If it changes later, change it with a reason; the member sees the reason too.",
+      done: Boolean(request?.eta_at) || reached(request, ["options_sent", ...AFTER_PAYMENT]),
+      target: "ops-deadline",
+    },
+    {
       id: "research",
       title: "Find options",
       how: "Move the request to Sourcing, then add at least one research candidate: product link, price, supplier and what you checked. Suppliers and notes stay staff-only.",
@@ -325,6 +332,23 @@ function billingSteps(input: PlaybookInput): Step[] {
   ];
 }
 
+function invoiceVoidSteps(input: PlaybookInput): Step[] {
+  return [
+    claimStep(input),
+    { id: "delete", title: "Delete it in Shopify", how: "Open the draft order with the button below and delete it. While it exists, the member could still pay the old link.", done: FINISHED.includes(input.item.status), target: "ops-flow" },
+    finishStep(input, "Mark it completed once the draft order is deleted."),
+  ];
+}
+
+function refundSteps(input: PlaybookInput): Step[] {
+  return [
+    claimStep(input),
+    { id: "refund", title: "Refund in Shopify", how: "The member paid an invoice after cancelling the request. Find the order in Shopify and refund it in full.", done: FINISHED.includes(input.item.status), target: "ops-flow" },
+    { id: "tell", title: "Tell the member", how: "Message the member below: the refund is on its way and how long their bank usually takes.", done: FINISHED.includes(input.item.status), target: "ops-flow" },
+    finishStep(input, "Mark it completed once the refund is done and the member knows."),
+  ];
+}
+
 function invoiceFailedSteps(input: PlaybookInput): Step[] {
   return [
     claimStep(input),
@@ -360,6 +384,10 @@ export function playbookSteps(input: PlaybookInput): Step[] {
       return billingSteps(input);
     case "invoice_failed":
       return invoiceFailedSteps(input);
+    case "invoice_void":
+      return invoiceVoidSteps(input);
+    case "refund_after_cancel":
+      return refundSteps(input);
     default:
       return [
         claimStep(input),
@@ -416,6 +444,7 @@ const sample = (fn: (input: PlaybookInput) => Step[], item: Partial<WorkItem> = 
   }).map(({ title, how }) => ({ title, how }));
 
 const COMMON_SCREEN = [
+  { name: "Deadline / ETA", meaning: "When this must be done. Cards start green and turn amber, then red, as the time runs out; past it they show how long they're overdue. On a member request this is the delivery estimate the member sees. Changing it needs a reason." },
   { name: "Steps bar", meaning: "Where the work is. Green ticks are done, the highlighted step is yours now, three dots (…) mean someone else has the next move." },
   { name: "Do now", meaning: "The one thing to do next, with a button that takes you to the right place on the page." },
   { name: "Update status", meaning: "Change the status by hand: Waiting (say on whom), Blocked (needs help) or Completed." },
@@ -536,6 +565,28 @@ export const GUIDES: Record<string, Guide> = {
     screen: [{ name: "Invoice", meaning: "What it was for, the amount and the error." }, ...COMMON_SCREEN],
     finishes: "Mark it completed when the invoice has been sent.",
   },
+  invoice_void: {
+    title: "Deleting a cancelled invoice",
+    department: "member_support",
+    what: "A member cancelled a request, but Shopify didn't delete its unpaid invoice.",
+    why: "The old payment link still works until the draft order is deleted.",
+    appears: "Only when deleting the invoice automatically fails after a member cancels.",
+    steps: sample(invoiceVoidSteps, { work_type: "invoice_void", department: "member_support" }),
+    screen: [{ name: "Draft order", meaning: "A button that opens the draft order in Shopify." }, ...COMMON_SCREEN],
+    finishes: "Mark it completed when the draft order is deleted.",
+    outside: "Shopify admin, to delete the draft order.",
+  },
+  refund_after_cancel: {
+    title: "Refunding a payment after a cancellation",
+    department: "member_support",
+    what: "A member paid an invoice for a request they had already cancelled.",
+    why: "They shouldn't pay for something we aren't getting them.",
+    appears: "When Shopify reports a payment for a cancelled request. It's marked urgent.",
+    steps: sample(refundSteps, { work_type: "refund_after_cancel", department: "member_support" }),
+    screen: [{ name: "Payment", meaning: "What was paid and how much." }, { name: "Chat", meaning: "Message the member." }, ...COMMON_SCREEN],
+    finishes: "Mark it completed when the refund is done and the member knows.",
+    outside: "Shopify admin, to refund the order.",
+  },
   member_conversation: {
     title: "Supporting a member in chat",
     department: "conversation_intake",
@@ -584,6 +635,8 @@ export const DEPARTMENT_GUIDES: Record<Department, string> = {
 };
 
 export const GLOSSARY: { term: string; meaning: string }[] = [
+  { term: "ETA (delivery estimate)", meaning: "When we expect the member to have their item. Required before Sourcing, shown to the member, and changed only with a reason they can read." },
+  { term: "Deadline colours", meaning: "Every task has a deadline (24 hours unless set). Green means plenty of time, amber is getting close, red is nearly due. A red card with 'Overdue' has passed its deadline: deal with it first." },
   { term: "Claim", meaning: "Take a work item so nobody else works on it at the same time. Lasts 15 minutes and renews while you work." },
   { term: "Open", meaning: "Nobody has it yet." },
   { term: "Claimed", meaning: "Someone is working on it." },

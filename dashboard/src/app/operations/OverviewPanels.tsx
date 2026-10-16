@@ -1,6 +1,7 @@
 import { departments, departmentLabel, statuses, statusLabel } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
 import { GUIDES, guideKeyFor, queueStepLabel } from "./playbooks";
+import { useNow, workClock } from "./clock";
 
 export function WorkforcePanel({ ops }: { ops: OperationsState }) {
   const {
@@ -553,8 +554,14 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     listView,
   } = ops;
   const archive = listView === "archive";
+  const now = useNow();
+  // Live work: the closest deadline first, so overdue and nearly-due work sits at the top of each department.
+  const dueTime = (item: (typeof items)[number]) => (item.due_at ? new Date(item.due_at).getTime() : Number.MAX_SAFE_INTEGER);
   const groups = departments
-    .map((department) => ({ department, rows: items.filter((item) => item.department === department) }))
+    .map((department) => {
+      const rows = items.filter((item) => item.department === department);
+      return { department, rows: archive ? rows : [...rows].sort((a, b) => dueTime(a) - dueTime(b)) };
+    })
     .filter((group) => group.rows.length > 0);
   const heading = archive
     ? "Finished work"
@@ -586,10 +593,14 @@ export function WorkList({ ops }: { ops: OperationsState }) {
             {group.rows.map((item) => {
               const inBatch = sourcingBatches.some((batch) => batch.items.some((member) => member.work_item_id === item.id));
               const guide = GUIDES[guideKeyFor(item)];
-              const overdue = !archive && item.due_at && new Date(item.due_at).getTime() < Date.now();
+              const clock = archive ? null : workClock(item, now);
+              const timed = clock && clock.state !== "none";
               return (
                 <article
-                  className={`operations-work-card priority-${item.priority}${selected?.id === item.id ? " is-selected" : ""}`}
+                  className={`operations-work-card priority-${item.priority}${selected?.id === item.id ? " is-selected" : ""}${
+                    timed ? ` has-clock clock-${clock.tone}` : ""
+                  }`}
+                  style={timed ? ({ "--clock-hue": String(clock.hue) } as import("react").CSSProperties) : undefined}
                   key={item.id}
                 >
                   {!archive && item.department === "sourcing" && item.work_type === "member_request" && (
@@ -618,13 +629,25 @@ export function WorkList({ ops }: { ops: OperationsState }) {
                       {item.priority === "urgent" || item.priority === "high" ? ` · ${item.priority} priority` : ""}
                     </small>
                     <span className="ops-card-step">{queueStepLabel(item, userId, canManage)}</span>
-                    <small className={overdue ? "ops-overdue" : undefined}>
-                      {archive && item.completed_at
-                        ? `Finished ${new Date(item.completed_at).toLocaleString()}`
-                        : item.due_at
-                          ? `${overdue ? "Overdue · was due" : "Due"} ${new Date(item.due_at).toLocaleString()}`
+                    {timed ? (
+                      <span className="ops-clock" title={`Due ${clock.dueLabel}`}>
+                        <span className="ops-clock-bar" aria-hidden="true">
+                          <span style={{ width: `${Math.round(clock.progress * 100)}%` }} />
+                        </span>
+                        <span className="ops-clock-text">
+                          <strong>{clock.label}</strong>
+                          <small>
+                            {clock.state === "overdue" ? "was due" : "due"} {clock.dueLabel}
+                          </small>
+                        </span>
+                      </span>
+                    ) : (
+                      <small>
+                        {archive && item.completed_at
+                          ? `Finished ${new Date(item.completed_at).toLocaleString()}`
                           : `Created ${new Date(item.created_at).toLocaleString()}`}
-                    </small>
+                      </small>
+                    )}
                   </button>
                   {!archive &&
                     !canManage &&

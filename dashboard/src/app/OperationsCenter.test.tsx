@@ -139,6 +139,51 @@ describe("Operations Center", () => {
     );
   });
 
+  it("asks for the delivery estimate before a request can move to Sourcing", async () => {
+    const reviewing = { ...requestContext, eta_at: null, events: requestContext.events.slice(0, 1).concat([{ ...requestContext.events[0], id: "e9", sequence_no: 2, stage: "under_review" }]) };
+    const mine = { ...sourcingItem, assigned_worker_id: "worker-1" };
+    routeApi({ user_id: "worker-1", departments: ["sourcing"], can_manage: false }, [mine]);
+    const base = mocks.apiRequest.getMockImplementation()!;
+    mocks.apiRequest.mockImplementation(async (path: string, token: string, init?: RequestInit) =>
+      path.endsWith("/source-context") ? { source_type: "member_request", request: reviewing } : base(path, token, init),
+    );
+    render(<OperationsCenterPage />);
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Operations work items" })).findByRole("button", { name: /Desk lamp sourcing/ }));
+    expect(await screen.findByRole("region", { name: "Delivery estimate (ETA)" })).toBeInTheDocument();
+    fireEvent.change(await screen.findByRole("combobox", { name: "Next request stage" }), { target: { value: "sourcing" } });
+    fireEvent.change(screen.getByLabelText("Estimated delivery date", { selector: "input[aria-label]" }), { target: { value: "2030-01-05T12:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update stage" }));
+    await waitFor(() =>
+      expect(mocks.apiRequest).toHaveBeenCalledWith("/workers/requests/request-1/events", "staff-token", expect.anything()),
+    );
+    const calls = mocks.apiRequest.mock.calls.map(([path]) => path);
+    expect(calls.indexOf("/operations/work-items/work-1/due")).toBeGreaterThan(-1);
+    expect(calls.indexOf("/operations/work-items/work-1/due")).toBeLessThan(calls.indexOf("/workers/requests/request-1/events"));
+  });
+
+  it("needs a reason to change an existing ETA", async () => {
+    const withEta = { ...requestContext, eta_at: "2030-01-05T12:00:00Z", eta_updated_at: now, eta_changes: [] };
+    const mine = { ...sourcingItem, assigned_worker_id: "worker-1", due_at: "2030-01-05T12:00:00Z" };
+    routeApi({ user_id: "worker-1", departments: ["sourcing"], can_manage: false }, [mine]);
+    const base = mocks.apiRequest.getMockImplementation()!;
+    mocks.apiRequest.mockImplementation(async (path: string, token: string, init?: RequestInit) =>
+      path.endsWith("/source-context") ? { source_type: "member_request", request: withEta } : base(path, token, init),
+    );
+    render(<OperationsCenterPage />);
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Operations work items" })).findByRole("button", { name: /Desk lamp sourcing/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change the ETA" }));
+    const form = screen.getByRole("form", { name: /Change the delivery estimate/ });
+    fireEvent.change(within(form).getByLabelText("New date"), { target: { value: "2030-01-09T12:00" } });
+    expect(within(form).getByRole("button", { name: "Save new date" })).toBeDisabled();
+    fireEvent.change(within(form).getByRole("textbox", { name: /Reason for the change/ }), { target: { value: "Supplier restocks Friday" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save new date" }));
+    await waitFor(() =>
+      expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/work-items/work-1/due", "staff-token", {
+        method: "POST", body: JSON.stringify({ due_at: new Date("2030-01-09T12:00").toISOString(), reason: "Supplier restocks Friday" }),
+      }),
+    );
+  });
+
   it("lists finished work in the Archive and lets an admin reopen it with a reason", async () => {
     const done = { ...sourcingItem, id: "work-9", status: "completed", summary: "[SYNTHETIC] Packed order 1001",
       assigned_worker_id: null, claimed_until: null, completed_at: now };

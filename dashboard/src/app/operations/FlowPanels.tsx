@@ -4,6 +4,7 @@ import { MemberPhotoReviewQueue } from "../staff/MemberPhotoReview";
 import { currentStepIndex, DEPARTMENT_GUIDES, GLOSSARY, GUIDES, type Guide, type Step } from "./playbooks";
 import { departmentLabel, departments, requestNextStages, statusLabel, type FlowContext, type WorkItem } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
+import { formatSpan, shortDate, toLocalInput, useNow, workClock } from "./clock";
 
 type Selected = NonNullable<OperationsState["selected"]>;
 
@@ -200,6 +201,127 @@ export function PlaybookPanel({
 }
 
 // ---------------------------------------------------------------------------------------------
+// Deadline and delivery estimate
+// ---------------------------------------------------------------------------------------------
+/** Every piece of work has a deadline. On a member request it is the delivery estimate (ETA) the member sees. */
+export function DeadlinePanel({ ops, selected, onHelp }: { ops: OperationsState; selected: Selected; onHelp?: () => void }) {
+  const now = useNow();
+  const request = selected.member_request_id ? ops.requestContext : null;
+  const isRequest = Boolean(selected.member_request_id);
+  const eta = request?.eta_at || null;
+  const finished = ["completed", "cancelled"].includes(selected.status);
+  const clock = workClock(selected, now);
+  const [when, setWhen] = useState("");
+  const [reason, setReason] = useState("");
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    setWhen("");
+    setReason("");
+    setEditing(false);
+  }, [selected.id]);
+  const firstEstimate = isRequest && !eta;
+  const needsReason = !firstEstimate;
+  const act = canActOn(ops, selected) && !finished;
+  const title = isRequest ? "Delivery estimate (ETA)" : "Deadline";
+  const changes = request?.eta_changes || [];
+  return (
+    <OpsSection id="ops-deadline" title={title} onHelp={onHelp}>
+      <div className="ops-deadline">
+        <div className="ops-deadline-now" style={{ ["--clock-hue" as string]: String(clock.hue) }}>
+          {isRequest && !eta ? (
+            <>
+              <strong>Not set yet</strong>
+              <small>
+                Review is due {selected.due_at ? shortDate(selected.due_at) : "within 24 hours"}. Set the ETA before moving the request to
+                Sourcing.
+              </small>
+            </>
+          ) : (
+            <>
+              <strong>{shortDate((isRequest ? eta : selected.due_at) || "") || "No deadline"}</strong>
+              {isRequest && <small>The member sees this date.</small>}
+            </>
+          )}
+          {clock.state !== "none" && (
+            <span className={`ops-deadline-badge${clock.state === "overdue" ? " is-overdue" : ""}`}>{clock.label}</span>
+          )}
+        </div>
+        {isRequest && request?.eta_reason && (
+          <p className="operations-muted">Last change: {request.eta_reason}</p>
+        )}
+        {changes.length > 1 && (
+          <ol className="ops-deadline-history" aria-label="Delivery estimate history">
+            {changes.map((change) => (
+              <li key={change.id}>
+                {shortDate(change.created_at)}: {change.previous_eta_at ? `${shortDate(change.previous_eta_at)} → ` : "set to "}
+                {shortDate(change.eta_at)}
+                {change.reason ? ` · ${change.reason}` : ""}
+                {change.previous_eta_at &&
+                  new Date(change.eta_at).getTime() > new Date(change.previous_eta_at).getTime() &&
+                  ` (+${formatSpan(new Date(change.eta_at).getTime() - new Date(change.previous_eta_at).getTime())})`}
+              </li>
+            ))}
+          </ol>
+        )}
+        {act &&
+          (editing || firstEstimate ? (
+            <form
+              aria-label={firstEstimate ? "Set the delivery estimate" : `Change the ${title.toLowerCase()}`}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!when || (needsReason && reason.trim().length < 3)) return;
+                void ops.setDeadline(when, reason).then(() => {
+                  setEditing(false);
+                  setReason("");
+                });
+              }}
+            >
+              <label>
+                {firstEstimate ? "Estimated delivery date" : "New date"}
+                <input
+                  type="datetime-local"
+                  required
+                  min={toLocalInput(new Date(now + 60_000).toISOString())}
+                  value={when}
+                  onChange={(event) => setWhen(event.target.value)}
+                />
+              </label>
+              {needsReason && (
+                <label>
+                  Reason for the change (required{isRequest ? ", the member sees it" : ""})
+                  <input
+                    required
+                    minLength={3}
+                    maxLength={500}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder={isRequest ? "For example: the supplier restocks on Friday" : "Why this needs more time"}
+                  />
+                </label>
+              )}
+              <div className="member-request-cancel-actions">
+                <button className="primary-button" disabled={ops.busy || !when || (needsReason && reason.trim().length < 3)}>
+                  {firstEstimate ? "Set ETA" : "Save new date"}
+                </button>
+                {!firstEstimate && (
+                  <button type="button" className="secondary-button" onClick={() => setEditing(false)}>
+                    Keep the current date
+                  </button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <button type="button" className="secondary-button" onClick={() => setEditing(true)}>
+              {isRequest ? "Change the ETA" : "Change the deadline"}
+            </button>
+          ))}
+        {!act && !finished && <p className="operations-muted">Claim this work to set or change the date.</p>}
+      </div>
+    </OpsSection>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sourcing: request stage and payments
 // ---------------------------------------------------------------------------------------------
 export function RequestStagePanel({ ops, selected }: { ops: OperationsState; selected: Selected }) {
@@ -229,6 +351,18 @@ export function RequestStagePanel({ ops, selected }: { ops: OperationsState; sel
           ))}
         </select>
       </label>
+      {["sourcing", "options_sent"].includes(requestStage) && !requestContext?.eta_at && (
+        <label className="ops-eta-needed">
+          Estimated delivery date (required before Sourcing; the member sees it)
+          <input
+            type="datetime-local"
+            aria-label="Estimated delivery date"
+            required
+            value={ops.requestEta}
+            onChange={(event) => ops.setRequestEta(event.target.value)}
+          />
+        </label>
+      )}
       {requestStage && (
         <label>
           {requestStage === "needs_member_input" ? "Your question for the member (required)" : "Note for the member (optional)"}
@@ -564,6 +698,32 @@ export function FlowPanel({ ops, selected }: { ops: OperationsState; selected: S
               ? "Fix the cause, then open the member's sourcing request in the queue and use its Send the invoice step."
               : "Fix the cause, then send the invoice again from Shop → Invoices."}
           </p>
+          <FlowChat ops={ops} selected={selected} />
+        </div>
+      );
+    case "invoice_void":
+      return (
+        <div className="ops-flow">
+          <p>The member cancelled this request. Delete the unpaid draft order so its payment link stops working.</p>
+          {typeof meta.error === "string" && <p className="form-error">Shopify said: {meta.error}</p>}
+          {typeof meta.admin_url === "string" && (
+            <p>
+              <a className="secondary-button" href={meta.admin_url} target="_blank" rel="noreferrer">
+                Open the draft order in Shopify ↗
+              </a>
+            </p>
+          )}
+        </div>
+      );
+    case "paid_after_cancel":
+      return (
+        <div className="ops-flow">
+          <dl className="ops-facts">
+            <div><dt>Paid</dt><dd>{money(meta.amount as string, meta.currency as string)}</dd></div>
+            <div><dt>For</dt><dd>{String(meta.title || "Invoice")}</dd></div>
+            <div><dt>Member</dt><dd>{flow.member_name || "Member"}</dd></div>
+          </dl>
+          <p className="form-error">The member cancelled this request before paying. Refund the payment in Shopify.</p>
           <FlowChat ops={ops} selected={selected} />
         </div>
       );

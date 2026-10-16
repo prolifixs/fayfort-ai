@@ -259,6 +259,11 @@ class RequestMilestone(BaseModel):
     tracking_url: str | None = Field(default=None, max_length=2000)
 
 
+class MemberRequestCancel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class MemberRequestAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=2000)
@@ -748,7 +753,7 @@ def create_accounts_router() -> APIRouter:
         user_id = require_verified_member(authorization)
         try:
             rows = (supabase.table("member_purchase_requests")
-                .select("id,product_id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at")
+                .select("id,product_id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at,eta_at,eta_reason,eta_updated_at")
                 .eq("member_id", user_id).order("created_at", desc=True).limit(100).execute().data or [])
             add_request_source_media(rows)
             events = load_request_events(rows)
@@ -768,7 +773,7 @@ def create_accounts_router() -> APIRouter:
         user_id = require_verified_member(authorization)
         try:
             result = (supabase.table("member_purchase_requests")
-                .select("id,product_id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at")
+                .select("id,product_id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at,eta_at,eta_reason,eta_updated_at")
                 .eq("id", str(request_id)).eq("member_id", user_id).maybe_single().execute())
             row = result.data if result is not None else None
             if not row:
@@ -875,6 +880,29 @@ def create_accounts_router() -> APIRouter:
                 raise HTTPException(status_code=409, detail="This request isn't waiting for your answer any more.") from exc
             logger.exception("Could not save the member's answer")
             raise HTTPException(status_code=503, detail="Your answer could not be sent. Try again.") from exc
+
+    @router.post("/members/requests/{request_id}/cancel")
+    def cancel_member_request(request_id: UUID, payload: MemberRequestCancel,
+                              authorization: str | None = Header(default=None)):
+        """The member cancels a request that isn't paid yet. Unpaid invoices for it are withdrawn."""
+        user_id = require_verified_member(authorization)
+        try:
+            result = supabase.rpc("member_cancel_request", {"p_request_id": str(request_id), "p_member_id": user_id,
+                                                            "p_reason": (payload.reason or "").strip() or None}).execute()
+        except Exception as exc:
+            message = str(exc).casefold()
+            if "request not found" in message:
+                raise HTTPException(status_code=404, detail="Request not found.") from exc
+            if "has a payment" in message:
+                raise HTTPException(status_code=409, detail="You've already paid toward this request, so it can't be cancelled here. Message us in chat and we'll sort it out.") from exc
+            if "can no longer be cancelled" in message:
+                raise HTTPException(status_code=409, detail="This request is already paid, on its way or closed, so it can't be cancelled.") from exc
+            logger.exception("Could not cancel the member request")
+            raise HTTPException(status_code=503, detail="Your request could not be cancelled. Try again.") from exc
+        data = result.data if isinstance(result.data, dict) else {}
+        from app.accounts import operations_flow
+        operations_flow.withdraw_draft_orders(str(request_id), list(data.get("draft_order_ids") or []))
+        return {"request_id": str(request_id), "stage": "cancelled"}
 
     @router.post("/members/requests", status_code=201)
     def create_member_request(payload: MemberPurchaseRequest, authorization: str | None = Header(default=None)):
@@ -1275,6 +1303,8 @@ def create_accounts_router() -> APIRouter:
                 raise HTTPException(status_code=404, detail="This request is not assigned to your worker account.") from exc
             if "invalid request stage transition" in message:
                 raise HTTPException(status_code=409, detail="That milestone cannot follow the current request stage.") from exc
+            if "delivery estimate" in message:
+                raise HTTPException(status_code=409, detail="Set the delivery estimate (ETA) before moving the request to Sourcing.") from exc
             logger.exception("Could not append worker request milestone")
             raise HTTPException(status_code=503, detail="The request milestone could not be saved.") from exc
 

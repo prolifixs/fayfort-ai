@@ -10,6 +10,7 @@ without an owner:
 - photo_review      a member asked a person to look at a photo (Member support)
 - billing_issue     Stripe is retrying a member's subscription payment (Member support)
 - invoice_failed    a Shopify invoice could not be sent (Member support)
+- invoice_void      a member cancelled, but Shopify wouldn't delete the unpaid invoice; staff delete it (Member support)
 
 Each one is keyed by metadata.source_kind + metadata.source_id (unique), opens itself when the event happens and
 closes itself when the outside event finishes (order fulfilled, pool paid, payment recovered...). A background
@@ -267,6 +268,28 @@ def invoice_failed(invoice: dict, error: str) -> None:
                 next_action="Check the Shopify connection and the member's email, then send the invoice again.",
                 priority="high", metadata={"member_id": invoice.get("member_id"), "request_id": invoice.get("request_id"),
                                            "error": error[:300]})
+
+
+def withdraw_draft_orders(request_id: str, draft_order_ids: list[str]) -> None:
+    """After a member cancels: delete the unpaid Shopify invoices so the payment links stop working. If Shopify
+    refuses, staff get a work item to delete it by hand (the link could otherwise still be paid)."""
+    from app.commerce import shopify
+    for draft_id in draft_order_ids:
+        try:
+            shopify.delete_draft_order(draft_id)
+        except Exception as exc:
+            logger.warning("Could not delete Shopify draft order %s: %s", draft_id, exc)
+            numeric = str(draft_id).rsplit("/", 1)[-1]
+            try:
+                domain = shopify.shop_domain()
+            except Exception:
+                domain = ""
+            ensure_item(source_kind="invoice_void", source_id=str(draft_id), department="member_support",
+                        work_type="invoice_void", summary="Delete a cancelled invoice in Shopify",
+                        next_action="The member cancelled. Open the draft order in Shopify and delete it so the link can't be paid.",
+                        priority="high",
+                        metadata={"request_id": request_id, "error": str(exc)[:300],
+                                  "admin_url": f"https://{domain}/admin/draft_orders/{numeric}" if domain and numeric.isdigit() else None})
 
 
 # ---------------------------------------------------------------------------------------------

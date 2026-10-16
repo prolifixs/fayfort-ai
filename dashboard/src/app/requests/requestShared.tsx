@@ -82,6 +82,10 @@ export type MemberSourcingOption = {
 
 export type MemberRequestRow = {
   id: string;
+  /** When FayFort expects the member to have the item; changes carry a reason. */
+  eta_at?: string | null;
+  eta_reason?: string | null;
+  eta_updated_at?: string | null;
   product_id: string | null;
   product_name_snapshot: string | null;
   request_title: string;

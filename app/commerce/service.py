@@ -686,6 +686,15 @@ def _tell_operations_invoice_paid(invoice: dict) -> None:
     try:
         from app.accounts import operations_flow
         amount = f"{invoice.get('amount')} {invoice.get('currency') or ''}".strip()
+        if invoice.get("status") == "cancelled":
+            # The member cancelled, but the old invoice link was paid anyway: staff refund it.
+            operations_flow.ensure_item(
+                source_kind="paid_after_cancel", source_id=str(invoice["id"]), department="member_support",
+                work_type="refund_after_cancel", summary=f"Refund {amount}: paid after the request was cancelled",
+                next_action="Refund the payment in Shopify, then tell the member it's done.", priority="urgent",
+                metadata={"member_id": invoice.get("member_id"), "request_id": invoice.get("request_id"),
+                          "amount": invoice.get("amount"), "currency": invoice.get("currency"), "title": invoice.get("title")})
+            return
         if invoice.get("kind") == "deposit" and invoice.get("request_id"):
             operations_flow.note_on_request_item(
                 str(invoice["request_id"]), f"Deposit of {amount} paid. Continue sourcing; it counts toward the final invoice.",

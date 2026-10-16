@@ -342,6 +342,28 @@ describe("authenticated dashboard workspace",()=>{
   await waitFor(()=>expect(screen.queryByRole("form",{name:"Answer FayFort about Source a wig"})).not.toBeInTheDocument());
  });
 
+ it("shows the delivery estimate and lets a member cancel an unpaid request",async()=>{
+  let cancelled:Record<string,unknown>|null=null;
+  const events=[{id:"e1",sequence_no:1,stage:"submitted",member_note:null,created_at:"2026-10-10T00:00:00Z"},{id:"e2",sequence_no:2,stage:"sourcing",member_note:null,created_at:"2026-10-10T00:05:00Z"}];
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=String(input);
+   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
+   if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[],saved_product_ids:[],categories:[]}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/requests/request-1/cancel")&&init?.method==="POST"){cancelled=JSON.parse(String(init.body));return {ok:true,status:200,json:async()=>({request_id:"request-1",stage:"cancelled"}),headers:new Headers()} as Response;}
+   if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source a wig",request_description:null,eta_at:"2026-10-24T18:00:00Z",eta_reason:"Supplier restocks Friday",events:cancelled?[...events,{id:"e3",sequence_no:3,stage:"cancelled",member_note:"You cancelled this request.",created_at:"2026-10-10T00:09:00Z"}]:events}]}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  window.history.replaceState({},"","/member/products");render(<App/>);
+  const eta=await screen.findByLabelText("Estimated delivery for Source a wig");
+  expect(within(eta).getByText(/Supplier restocks Friday/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"Cancel request"}));
+  const confirm=screen.getByRole("group",{name:"Cancel Source a wig"});
+  fireEvent.change(within(confirm).getByRole("textbox",{name:/Reason/}),{target:{value:"Found it elsewhere"}});
+  fireEvent.click(within(confirm).getByRole("button",{name:"Yes, cancel request"}));
+  await waitFor(()=>expect(cancelled).toEqual({reason:"Found it elsewhere"}));
+  await waitFor(()=>expect(screen.queryByRole("button",{name:"Cancel request"})).not.toBeInTheDocument());
+ });
+
  it("creates a recurring request schedule only after the member approves the no-automatic-order terms",async()=>{
   const requestPosts:unknown[]=[];
   fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{

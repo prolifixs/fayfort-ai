@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal
 from urllib.parse import urljoin, urlsplit
 from uuid import UUID
@@ -310,6 +310,18 @@ class WorkGroupPrice(BaseModel):
     @classmethod
     def upper_currency(cls, value: str) -> str:
         return value.upper()
+
+
+class WorkDeadline(BaseModel):
+    """Set or change a work item's deadline. For a member request this is the delivery estimate the member sees."""
+    model_config = ConfigDict(extra="forbid")
+    due_at: datetime
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value else None
 
 
 class WorkDepositInvoice(BaseModel):
@@ -913,11 +925,19 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         try:
             if request_id:
                 result = (supabase.table("member_purchase_requests")
-                    .select("id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at")
+                    .select("id,product_name_snapshot,request_title,request_description,source_type,source_url,created_at,updated_at,eta_at,eta_reason,eta_updated_at")
                     .eq("id", str(request_id)).maybe_single().execute())
                 request = result.data if result is not None else None
                 if not request:
                     raise HTTPException(status_code=404, detail="The linked member request is no longer available.")
+                request["eta_changes"] = []
+                if request.get("eta_updated_at"):
+                    try:
+                        request["eta_changes"] = (supabase.table("member_request_eta_changes")
+                            .select("id,previous_eta_at,eta_at,reason,created_at")
+                            .eq("request_id", str(request_id)).order("created_at").limit(50).execute().data or [])
+                    except Exception:
+                        logger.exception("Could not load delivery estimate history")
                 events = (supabase.table("member_request_events")
                     .select("id,sequence_no,stage,member_note,details,created_at")
                     .eq("request_id", str(request_id)).order("sequence_no").limit(100).execute().data or [])
@@ -1425,6 +1445,36 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             return operations_flow.request_payments(str(item["member_request_id"]))
         except Exception as exc:
             raise flow_failure(exc, "Payments for this request could not be loaded.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/due")
+    def set_work_deadline(work_item_id: UUID, payload: WorkDeadline, authorization: str | None = Header(default=None)):
+        """Set a delivery estimate (member requests) or change any deadline. Changing one needs a reason."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        due_at = payload.due_at if payload.due_at.tzinfo else payload.due_at.replace(tzinfo=timezone.utc)
+        try:
+            result = supabase.rpc("set_operations_work_due", {
+                "p_work_item_id": str(work_item_id), "p_actor_id": staff["user_id"],
+                "p_actor_type": "platform_admin" if staff.get("role") == "platform_admin" else "worker",
+                "p_due_at": due_at.isoformat(), "p_reason": payload.reason,
+            }).execute()
+            updated = result.data
+            if isinstance(updated, list):
+                updated = updated[0] if updated else None
+            return {"work_item": updated}
+        except Exception as exc:
+            message = str(exc).casefold()
+            if "reason is required" in message:
+                raise HTTPException(status_code=422, detail="Say why the date is changing. The member sees this reason for a delivery estimate.") from exc
+            if "in the future" in message:
+                raise HTTPException(status_code=422, detail="Pick a date and time in the future.") from exc
+            if "too far" in message:
+                raise HTTPException(status_code=422, detail="Pick a date within the next year.") from exc
+            if "finished" in message:
+                raise HTTPException(status_code=409, detail="This work is finished. Reopen it first.") from exc
+            logger.exception("Could not set the work deadline")
+            raise HTTPException(status_code=503, detail="The date could not be saved. Try again.") from exc
 
     @router.post("/operations/work-items/{work_item_id}/deposit-invoice", status_code=201)
     def send_work_deposit(work_item_id: UUID, payload: WorkDepositInvoice, authorization: str | None = Header(default=None)):

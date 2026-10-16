@@ -50,6 +50,11 @@ export type RequestContext = {
   source_url: string | null;
   created_at: string;
   updated_at: string;
+  /** Delivery estimate the member sees; required before Sourcing. */
+  eta_at?: string | null;
+  eta_reason?: string | null;
+  eta_updated_at?: string | null;
+  eta_changes?: { id: string; previous_eta_at: string | null; eta_at: string; reason: string | null; created_at: string }[];
   events: {
     id: string;
     sequence_no: number;

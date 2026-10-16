@@ -23,6 +23,7 @@ import { MemberConversationPanel, HandoffPanel, BusinessConversationPanel } from
 import { WorkActionForm, TransferForm, WorkHistory, ChecklistPanel, NotesPanel } from "./operations/WorkPanels";
 import {
   ArchiveControls,
+  DeadlinePanel,
   FlowPanel,
   GuideTab,
   HelpSheet,
@@ -45,6 +46,8 @@ const SOURCE_LABEL: Record<string, string> = {
   photo_review: "From a member's photo",
   subscription_past_due: "From a failed subscription payment",
   invoice: "From an invoice that didn't send",
+  invoice_void: "From a cancelled request's invoice",
+  paid_after_cancel: "From a payment after a cancellation",
 };
 
 export function OperationsCenterPage() {
@@ -293,6 +296,7 @@ export function OperationsCenterPage() {
                       </p>
                       <PlaybookPanel ops={ops} selected={selected} steps={steps} firstWeek={firstWeek} onHelp={openHelp} />
                       {finished && canManage && <ReopenForm ops={ops} />}
+                      {!finished && <DeadlinePanel ops={ops} selected={selected} onHelp={openHelp} />}
 
                       {/* 1. The work itself */}
                       {requestContext && (

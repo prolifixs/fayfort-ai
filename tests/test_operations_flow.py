@@ -187,6 +187,24 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(set(summary), {"giveaways", "billing", "group_buys"})
         self.assertEqual(self.db.rpc_calls, [])
 
+    def test_cancel_deletes_unpaid_shopify_invoices_and_falls_back_to_staff(self):
+        with patch("app.commerce.shopify.delete_draft_order") as delete:
+            flow.withdraw_draft_orders(REQUEST, ["gid://shopify/DraftOrder/1"])
+        delete.assert_called_once_with("gid://shopify/DraftOrder/1")
+        self.assertEqual(self.items(), [])
+        with patch("app.commerce.shopify.delete_draft_order", side_effect=RuntimeError("shop offline")), \
+             patch("app.commerce.shopify.shop_domain", return_value="fayfort.myshopify.com"):
+            flow.withdraw_draft_orders(REQUEST, ["gid://shopify/DraftOrder/77"])
+        [item] = self.items("invoice_void")
+        self.assertEqual(item["metadata"]["admin_url"], "https://fayfort.myshopify.com/admin/draft_orders/77")
+
+    def test_invoice_paid_after_cancellation_becomes_an_urgent_refund(self):
+        from app.commerce import service
+        service._tell_operations_invoice_paid({"id": "inv-1", "status": "cancelled", "amount": 40, "currency": "USD",
+                                               "member_id": MEMBER, "request_id": REQUEST, "kind": "order"})
+        [item] = self.items("refund_after_cancel")
+        self.assertEqual(item["priority"], "urgent")
+
 
 class FlowApiTests(unittest.TestCase):
     @property
@@ -290,6 +308,55 @@ class FlowApiTests(unittest.TestCase):
         response = self.client.post(f"/members/requests/{REQUEST}/answer", json={"message": "Black"},
                                     headers={"Authorization": "Bearer member"})
         self.assertEqual(response.status_code, 409)
+
+    def _item_query(self, table, item):
+        query = MagicMock()
+        query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = item
+        table.return_value = query
+
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
+    @patch("app.accounts.operations.supabase.rpc")
+    @patch("app.accounts.operations.supabase.table")
+    def test_deadline_needs_a_claim_and_explains_a_missing_reason(self, table, rpc, identity):
+        # An expired claim (status back to open) is not enough to change the date.
+        item = {"id": "w1", "department": "sourcing", "status": "open", "assigned_worker_id": WORKER, "member_request_id": REQUEST}
+        self._item_query(table, item)
+        body = {"due_at": "2030-01-05T12:00:00Z"}
+        self.assertEqual(self.client.post(f"/operations/work-items/{REQUEST}/due", json=body).status_code, 403)
+        self._item_query(table, {**item, "status": "claimed", "assigned_worker_id": WORKER})
+        rpc.return_value.execute.side_effect = Exception("a reason is required to change the deadline")
+        response = self.client.post(f"/operations/work-items/{REQUEST}/due", json=body)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("member sees this reason", response.json()["detail"])
+        rpc.return_value.execute.side_effect = None
+        rpc.return_value.execute.return_value.data = {"id": REQUEST, "due_at": body["due_at"]}
+        response = self.client.post(f"/operations/work-items/{REQUEST}/due", json={**body, "reason": "  Supplier delay  "})
+        self.assertEqual(response.status_code, 200)
+        name, params = rpc.call_args[0]
+        self.assertEqual((name, params["p_reason"], params["p_actor_type"]), ("set_operations_work_due", "Supplier delay", "worker"))
+
+    @patch("app.accounts.operations_flow.withdraw_draft_orders")
+    @patch("app.accounts.router.supabase.rpc")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="verified")))
+    @patch("app.accounts.router.trusted_user_id", return_value=MEMBER)
+    def test_member_cancels_and_unpaid_invoices_are_withdrawn(self, identity, get_user, rpc, withdraw):
+        rpc.return_value.execute.return_value.data = {"sequence_no": 4, "draft_order_ids": ["gid://shopify/DraftOrder/9"]}
+        response = self.client.post(f"/members/requests/{REQUEST}/cancel", json={"reason": "Found it locally"},
+                                    headers={"Authorization": "Bearer member"})
+        self.assertEqual(response.status_code, 200)
+        rpc.assert_called_with("member_cancel_request", {"p_request_id": REQUEST, "p_member_id": MEMBER, "p_reason": "Found it locally"})
+        withdraw.assert_called_once_with(REQUEST, ["gid://shopify/DraftOrder/9"])
+
+    @patch("app.accounts.router.supabase.rpc")
+    @patch("app.accounts.router.supabase.auth.get_user", return_value=SimpleNamespace(user=SimpleNamespace(email_confirmed_at="verified")))
+    @patch("app.accounts.router.trusted_user_id", return_value=MEMBER)
+    def test_member_cannot_cancel_a_paid_request(self, identity, get_user, rpc):
+        rpc.return_value.execute.side_effect = Exception("request has a payment")
+        response = self.client.post(f"/members/requests/{REQUEST}/cancel", json={},
+                                    headers={"Authorization": "Bearer member"})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Message us in chat", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

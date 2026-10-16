@@ -55,6 +55,7 @@ export function useOperationsCenter() {
   const [listView, setListView] = useState<"active" | "archive">("active");
   const [archiveQuery, setArchiveQuery] = useState("");
   const [archiveDays, setArchiveDays] = useState<30 | 90 | 0>(30);
+  const [requestEta, setRequestEta] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [flowContext, setFlowContext] = useState<FlowContext | null>(null);
   const [payments, setPayments] = useState<RequestPayments | null>(null);
@@ -739,7 +740,19 @@ export function useOperationsCenter() {
       setError("Write the question for the member. They answer it from their dashboard.");
       return;
     }
+    const needsEta = ["sourcing", "options_sent"].includes(stage) && !requestContext?.eta_at;
+    if (needsEta && !requestEta) {
+      setError("Set the delivery estimate (ETA) first. The member sees it on their request.");
+      return;
+    }
     await run(async () => {
+      if (needsEta) {
+        await apiRequest(`/operations/work-items/${selected.id}/due`, token, {
+          method: "POST",
+          body: JSON.stringify({ due_at: new Date(requestEta).toISOString() }),
+        });
+        setRequestEta("");
+      }
       await apiRequest(`/workers/requests/${selected.member_request_id}/events`, token, {
         method: "POST",
         body: JSON.stringify({ stage, member_note: requestStageNote.trim() || null }),
@@ -748,6 +761,18 @@ export function useOperationsCenter() {
       setRequestStageNote("");
       await loadDetails(token, selected);
     }, stage === "needs_member_input" ? "Question sent. The member answers from their dashboard." : "Request stage updated. The member sees it on their timeline.");
+  }
+  /** Set or change the deadline. On a member request this is the delivery estimate the member sees. */
+  async function setDeadline(dueLocal: string, reason: string) {
+    if (!token || !selected || !dueLocal) return;
+    const isRequest = Boolean(selected.member_request_id);
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/due`, token, {
+        method: "POST",
+        body: JSON.stringify({ due_at: new Date(dueLocal).toISOString(), reason: reason.trim() || null }),
+      });
+      await loadDetails(token, selected);
+    }, isRequest ? "Delivery estimate saved. The member sees the new date and your reason." : "Deadline saved.");
   }
   async function sendDeposit(expectedTotal: number, currency: string) {
     if (!token || !selected) return;
@@ -875,6 +900,9 @@ export function useOperationsCenter() {
     requestStageNote,
     setRequestStageNote,
     recordRequestStage,
+    requestEta,
+    setRequestEta,
+    setDeadline,
     sendDeposit,
     sendInvoice,
     setGroupPrice,

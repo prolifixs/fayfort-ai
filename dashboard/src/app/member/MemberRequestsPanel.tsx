@@ -13,6 +13,9 @@ import {
 import type { MemberCatalog, MemberCatalogProduct } from "./memberShared";
 import { depositNote, useMemberPlan } from "./membershipApi";
 
+/** Stages before payment: the member can still cancel. */
+const CANCELLABLE = ["submitted", "under_review", "sourcing", "needs_member_input", "options_sent"];
+
 export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
   const [requests, setRequests] = useState<MemberRequestRow[]>([]);
   const [title, setTitle] = useState("");
@@ -204,6 +207,28 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
       setError(e instanceof Error ? e.message : "The option could not be selected.");
     } finally {
       setOptionBusy("");
+    }
+  }
+  const [cancelling, setCancelling] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  /** The member cancels a request that isn't paid yet. Any unpaid invoice for it stops working. */
+  async function cancelRequest(requestId: string) {
+    setCancelBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/members/requests/${requestId}/cancel`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({ reason: cancelReason.trim() || null }),
+      });
+      setCancelling("");
+      setCancelReason("");
+      setNotice("Your request was cancelled. Any unpaid invoice for it no longer works.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Your request could not be cancelled.");
+    } finally {
+      setCancelBusy(false);
     }
   }
   /** "Your input is needed": the member answers here and sourcing carries on. */
@@ -545,6 +570,21 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
                       : `Submitted ${new Date(request.created_at).toLocaleString()}`}
                   </p>
                 </div>
+                {stage !== "cancelled" && stage !== "delivered" && (
+                  <div className="member-request-eta" aria-label={`Estimated delivery for ${request.request_title}`}>
+                    {request.eta_at ? (
+                      <>
+                        <small>Estimated delivery</small>
+                        <strong>
+                          {new Date(request.eta_at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                        </strong>
+                        {request.eta_reason && <small>Updated: {request.eta_reason}</small>}
+                      </>
+                    ) : (
+                      <small>We'll give you an estimated delivery date once we've reviewed your request (within 24 hours).</small>
+                    )}
+                  </div>
+                )}
                 <ol className="member-request-progress" aria-label={`Progress for ${request.request_title}`}>
                   {requestProgressStages.map((step, index) => (
                     <li
@@ -596,6 +636,41 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
                     </button>
                   </form>
                 )}
+                {CANCELLABLE.includes(stage) &&
+                  (cancelling === request.id ? (
+                    <div className="member-request-cancel" role="group" aria-label={`Cancel ${request.request_title}`}>
+                      <strong>Cancel this request?</strong>
+                      <p>We'll stop sourcing it. Any invoice you haven't paid yet stops working. This can't be undone.</p>
+                      <label>
+                        Reason (optional)
+                        <input
+                          maxLength={500}
+                          value={cancelReason}
+                          onChange={(event) => setCancelReason(event.target.value)}
+                          placeholder="For example: I found it elsewhere"
+                        />
+                      </label>
+                      <div className="member-request-cancel-actions">
+                        <button type="button" className="danger-button" disabled={cancelBusy} onClick={() => void cancelRequest(request.id)}>
+                          {cancelBusy ? "Cancelling…" : "Yes, cancel request"}
+                        </button>
+                        <button type="button" className="secondary-button" disabled={cancelBusy} onClick={() => setCancelling("")}>
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="link-danger"
+                      onClick={() => {
+                        setCancelling(request.id);
+                        setCancelReason("");
+                      }}
+                    >
+                      Cancel request
+                    </button>
+                  ))}
                 {stage === "purchase_confirmed" && (
                   <p className="member-request-paid-note">
                     Payment is confirmed. The next request milestone will show warehouse receipt.
