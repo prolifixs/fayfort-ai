@@ -19,7 +19,7 @@ from app.services.action_handler import prepare_action
 from app.services.faq_matching import match_approved_faq
 from app.services.intent_engine import analyze_intent
 from app.services.rag import build_business_context
-from app.handoffs.automatic import customer_asked_for_human
+from app.handoffs.automatic import customer_asked_for_human, soften_unrequested_handoff
 from app.config.settings import settings
 from app.directory.response import format_directory_response
 from app.directory.service import lookup_for_message
@@ -60,12 +60,19 @@ def run(business_id: str, only: set[str] | None) -> None:
             continue
         history: list[dict] = []
         transcript = []
+        known: dict = {}  # stands in for the customer-state memory the live chat keeps between turns
         for text in turns:
             history.append({"sender_type": "customer", "content": text})
             started = time.time()
             try:
                 intent = analyze_intent(customer_message=text, conversation_history=history, knowledge_context=knowledge,
                                         business_id=business_id)
+                intent = soften_unrequested_handoff(intent, text)
+                known.update({k: v for k, v in (intent.known_information or {}).items() if v not in (None, "", [])})
+                intent = intent.model_copy(update={
+                    "known_information": dict(known),
+                    "missing_information": [m for m in intent.missing_information if m not in known],
+                })
                 decision = prepare_action(intent)
                 try:
                     directory = lookup_for_message(message=text, intent=str(intent.intent),

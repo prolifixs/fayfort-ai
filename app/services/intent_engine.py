@@ -38,7 +38,11 @@ when the customer adds details or corrects them. A new subject may change the
 intent while retaining relevant known information. Do not invent facts.
 Set confidence from 0 to 1. Use unknown and clarification_needed=true when the
 request is unclear. Mark can_handle_automatically=false for human handoff or
-requests that require unsupported business judgment. Do not perform actions.
+requests that require unsupported business judgment. Use intent human_handoff or
+action handoff_to_agent only when the customer asks for a person (a human,
+agent, staff or team member). A request for supplier or factory contacts is
+supplier_search with answer_question: the business knowledge explains the
+supplier directory. Do not perform actions.
 known_information is the current request's known fields. required_information
 lists fields needed for this request; missing_information lists required fields
 that are still unknown. customer_information may contain only explicitly

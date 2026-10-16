@@ -108,6 +108,15 @@ Voice:
 - Do not claim to be a person or to be Fayfay. If asked whether you are a person or a bot, say you are the FayFort
   team's assistant and that a person can join the chat if they want.
 - No robotic phrases such as "As an AI" or "I am unable to assist with that".
+- Plain text only: replies are read in Instagram, Messenger and chat apps. No markdown, no asterisks or bold, no
+  headings. For a short list use one item per line starting with "• ".
+- Before asking anything, read the conversation: never ask again for something the customer already told you
+  (product, style, quantity, destination country, budget). Quantity is useful but optional; don't ask for it twice.
+- Once you know what they want, where it ships and their budget (or they decline to share it), stop asking and give
+  the next step: sign up free in the FayFort member dashboard and send a sourcing request there, or ask for a person
+  from the team for a bigger order.
+- If the customer is upset: apologise once, stay calm, ask the one detail you need, and offer a person from the
+  FayFort team in the same reply.
 
 Rules:
 - Use the provided business knowledge when answering.
@@ -153,6 +162,32 @@ _REFUND_POLICY_EVIDENCE = re.compile(
     r"\b(?:qualif\w*|eligib\w*|refund\b.{0,30}\b(?:window|within|before|after|requires|must))\b",
     re.IGNORECASE,
 )
+_NEGATION = re.compile(r"\b(?:no|not|never|isn['’]t|aren['’]t|don['’]t|doesn['’]t|there['’]s no|there is no)\b", re.IGNORECASE)
+_PROCESS_MARKER = re.compile(r"\b(?:when|once|after|before|if|then|each time|whenever)\b", re.IGNORECASE)
+_MARKDOWN_BOLD = re.compile(r"(\*\*|__)(.+?)\1")
+_MARKDOWN_BULLET = re.compile(r"^[ \t]*[-*+][ \t]+", re.MULTILINE)
+_MARKDOWN_HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.MULTILINE)
+
+
+def plain_text(answer: str) -> str:
+    """Chat apps show markdown literally: drop bold markers and headings, use "• " for list items."""
+    text = _MARKDOWN_BOLD.sub(r"\2", answer)
+    text = _MARKDOWN_HEADING.sub("", text)
+    text = _MARKDOWN_BULLET.sub("• ", text)
+    text = re.sub(r"(?<![*\w])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![*\w])", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _promises_unexecuted_action(answer: str) -> bool:
+    """A future or past action the assistant can't do. Describing the process ("once you choose, we'll send an
+    invoice") is allowed; a bare promise ("I'll forward this to the team") is not."""
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+        if _UNEXECUTED_ACTION_PROMISE.search(sentence) and not _PROCESS_MARKER.search(sentence):
+            return True
+    return False
+
+
 _PRICE_QUERY = re.compile(r"\b(?:how much|price|pricing|cost|rate|fee)\b", re.IGNORECASE)
 _PRICE_EVIDENCE = re.compile(
     r"(?:[$£€]\s*(\d+(?:[.,]\d+)?)|\b(\d+(?:[.,]\d+)?)\s*(?:USD|dollars?|euros?|pounds?)\b)",
@@ -235,7 +270,7 @@ def _guard_response_grounding(
             knowledge_context=knowledge_context,
             action_decision=action_decision,
         )
-    has_unexecuted_promise = _UNEXECUTED_ACTION_PROMISE.search(answer) is not None
+    has_unexecuted_promise = _promises_unexecuted_action(answer)
     asks_refund_outcome = (
         re.search(r"\b(?:refund|reimburse|chargeback)\b", customer_message, re.IGNORECASE)
         and re.search(r"\b(?:will i|can i|do i|would i|am i|eligible|qualify|get a)\b", customer_message, re.IGNORECASE)
@@ -248,6 +283,9 @@ def _guard_response_grounding(
     price_query = _PRICE_QUERY.search(customer_message) is not None
     knowledge_prices = _price_amounts(knowledge_context)
     answer_prices = _price_amounts(answer)
+    # Repeating the customer's own figure to deny it ("there is no $40 fee") isn't inventing a price.
+    if _NEGATION.search(answer):
+        knowledge_prices = knowledge_prices | _price_amounts(customer_message)
     unsupported_price = price_query and (
         not knowledge_prices or bool(answer_prices - knowledge_prices)
     )
@@ -512,7 +550,7 @@ def generate_ai_response(
 
     if isinstance(content, str) and content.strip():
         return _guard_response_grounding(
-            answer=content.strip(),
+            answer=plain_text(content),
             customer_message=customer_message,
             knowledge_context=knowledge_context,
             action_decision=action_decision,

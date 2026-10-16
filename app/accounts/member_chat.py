@@ -18,7 +18,7 @@ from app.services.ai_budget import (
     fetch_pinned_provider_prices,
 )
 from app.services.ai_usage import normalize_provider_usage
-from app.services.ai_responder import _guard_response_grounding
+from app.services.ai_responder import _guard_response_grounding, plain_text
 
 logger = logging.getLogger(__name__)
 MAX_OUTPUT_TOKENS = 500
@@ -373,7 +373,7 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             messages.extend({"role": "user" if item["sender_type"] == "member" else "assistant",
                 "content": item["content"]} for item in history)
             answer, _, _, _, _ = _invoke_member_model(member_id=member_id, messages=messages)
-            answer = _guard_response_grounding(answer=answer, customer_message=payload.content,
+            answer = _guard_response_grounding(answer=plain_text(answer or ""), customer_message=payload.content,
                 knowledge_context="\n".join(part for part in (business_facts, catalog_facts) if part), action_decision=None)
             assistant_values = {"conversation_id": str(conversation_id), "sender_type": "assistant", "content": answer,
                 "related_product_ids": [item["id"] for item in matches]}

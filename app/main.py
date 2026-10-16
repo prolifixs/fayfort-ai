@@ -30,7 +30,7 @@ from app.database.conversations import (
     update_conversation_summary,
 )
 from app.database.handoffs import active_handoff_for_conversation
-from app.handoffs.automatic import HANDOFF_REQUESTED_REPLY, customer_asked_for_human, request_customer_handoff
+from app.handoffs.automatic import HANDOFF_REQUESTED_REPLY, customer_asked_for_human, request_customer_handoff, soften_unrequested_handoff
 from app.handoffs import window as handoff_window
 from app.database.messages import (
     list_messages,
@@ -610,6 +610,8 @@ def _send_message_core(
             "required_information": customer_state.request.required_information,
             "missing_information": customer_state.request.missing_information,
         })
+
+    response_intent = soften_unrequested_handoff(response_intent, content)
 
     directory_result = lookup_for_message(
         message=content,

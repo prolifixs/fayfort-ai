@@ -91,6 +91,8 @@ A request can be cancelled from the dashboard until it's paid. After paying, mes
   group price and send everyone an invoice.
 - **Giveaways**: enter from Browse. Winners are drawn when a giveaway ends and get a prize code or are contacted.
 - **Saved products**: tap the heart on any product to keep it in Saved products.
+- **What's trending**: in the member dashboard, Browse opens with "What's moving": trending items, flash sales and the
+  group buys you can join right now. The chat can't show a live list; point people to Browse (sign up free first).
 
 ## 8. Payment, delivery and addresses
 

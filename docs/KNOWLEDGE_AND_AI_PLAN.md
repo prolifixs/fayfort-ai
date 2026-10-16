@@ -1,6 +1,6 @@
 # Knowledge base and AI replies: handbook vs site, findings and plan
 
-Status: decisions taken 2026-10-16 (section 5); fixes built, waiting for push, knowledge load and the scored test run (section 6). The site is the source of truth; the Employee Handbook
+Status: fixes live and knowledge loaded into FayFort Test Business on 2026-10-16; first scored run in section 7, with a short list of fixes left. The site is the source of truth; the Employee Handbook
 (Oct 2025) was used as background and for tone. Draft knowledge: docs/KNOWLEDGE_BASE_DRAFT.md.
 
 ## 1. Where the handbook and the site differ
@@ -87,6 +87,45 @@ have no screen; they can only be added through the API.
 - **Member chat** answers FayFort questions (plans, deposit, consultations, contacts) from the same knowledge.
 - **Test script** scripts/ai_eval.py: 22 scripted conversations through the live pipeline without saving anything.
 
-## 7. Test results
+## 7. Test results (2026-10-16, real model, 22 conversations, FayFort Test Business)
 
-To be filled after the knowledge load and the run on the server.
+Run with scripts/ai_eval.py on the server, outside working hours (Saturday 01:30 China time).
+
+**Good (16 of 22).** Services (a clear list instead of "I don't have enough information"), plan prices, consultation
+prices and the refund rule, commission ("built into the invoice", no commitment fee), deposit refund (kept for the
+sourcing work), hours, asking for a person (warm reply naming the next opening time, "today at 9:30 China time"),
+"Fayfay or a bot?" ("the FayFort team's chat assistant"), group buys, cancelling a request, card numbers in chat
+(refused, points to checkout), shipping cost (varies, asks which item), delivery guarantee (won't promise), budget
+explanation in the handbook's words.
+
+**Needs fixing (6).**
+1. *Correct answers replaced by "I can't confirm that".* "Is there a $40 commitment fee?" should get "No"; the price
+   guard rejects the reply because $40 isn't in the knowledge (the customer said it). "Do I have to pay anything before
+   you source?" should explain the deposit; the action guard reads "we'll send you an invoice" as a promise of an action
+   already done, and the odd line "I haven't sent or forwarded anything yet." is added.
+2. *Markdown in replies* (`**bold**`, bullet lists). Instagram and Messenger show the asterisks. Replies should be plain
+   text with short lines.
+3. *New enquiry loops on quantity.* After "Lagos, Nigeria" and "Around 2000 dollars" it asks "How many units?" again and
+   never points to the next step (sign up and send a request). Part of this is the test script (it skips the
+   customer-state memory the live chat uses), so it needs one live Instagram check before changing the prompt.
+4. *Supplier contact request goes straight to a person.* "Contact of a wig factory in Guangzhou?" should explain the
+   supplier directory ($15 a contact, unlock in the dashboard) and offer a person, not open a handoff.
+5. *Upset customer:* apologises and asks which order, but doesn't offer a person (the guide says to).
+6. *"Trending products?"* offers to "show what's trending" it can't show on Instagram; it should point to Browse →
+   What's moving in the member dashboard.
+
+Greeting is fine but plain ("Hi! How can we help you today?"); the guide's "dear" shows in fallbacks more than in
+normal replies.
+
+**Fixes built (2026-10-16, second batch).**
+1. Guard: a reply may repeat the customer's own figure to deny it ("there is no $40 fee"); describing the process
+   ("once you choose, we'll send an invoice") is no longer read as a promise. Invented prices and bare promises are
+   still blocked.
+2. Replies are plain text: the prompt forbids markdown and `plain_text()` strips bold and headings and turns list
+   markers into "• " (customer channels and the member chat).
+3. Prompt: never re-ask what the customer already gave; quantity is optional; once what, where and budget are known,
+   give the next step (sign up and send a sourcing request, or ask for a person).
+4. A handoff opens only when the customer asks for a person (English wording, or 人工/客服; other languages trust the
+   classifier). The classifier is told supplier or factory contacts are supplier_search answered from the knowledge.
+5. Upset customers: apologise once, ask the one detail needed, offer a person in the same reply.
+6. Knowledge: "What's trending" points to Browse → What's moving. scripts/load_knowledge.py updates changed documents.
