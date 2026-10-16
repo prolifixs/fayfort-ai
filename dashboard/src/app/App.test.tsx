@@ -569,6 +569,34 @@ describe("authenticated dashboard workspace",()=>{
   view.unmount();
   expect(document.documentElement.dataset.theme).toBeUndefined();
  });
+ it("shows what the AI knows and lets staff add, edit and remove knowledge",async()=>{
+  const docs=[{id:"d1",title:"Membership plans",content:"Standard costs $19 a month.",source_type:"manual",created_at:"2026-10-16T00:00:00Z"},{id:"d2",title:"Tone",content:"Warm, one question at a time.",source_type:"guide",created_at:"2026-10-16T00:00:00Z"}];
+  const calls:{url:string;method:string;body?:string}[]=[];
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=String(input);const method=init?.method||"GET";
+   if(url.includes("/knowledge"))calls.push({url,method,body:init?.body?String(init.body):undefined});
+   if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[{business_id:"business-1",name:"FayFort Test Business",role:"owner"}]}),headers:new Headers()} as Response;
+   if(url.endsWith("/business-1/knowledge")&&method==="GET")return {ok:true,status:200,json:async()=>({documents:docs}),headers:new Headers()} as Response;
+   if(url.includes("/knowledge"))return {ok:true,status:200,json:async()=>({document:{}}),headers:new Headers()} as Response;
+   if(url.endsWith("/faqs"))return {ok:true,status:200,json:async()=>({faqs:[]}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  renderWorkspace();
+  fireEvent.click(await screen.findByRole("button",{name:/Knowledge/}));
+  const panel=await screen.findByRole("region",{name:"What the AI knows"});
+  expect(await within(panel).findByText("Membership plans")).toBeInTheDocument();
+  expect(within(panel).getByRole("heading",{name:/Conversation guide/})).toBeInTheDocument();
+  fireEvent.click(within(panel).getByRole("button",{name:"Add knowledge"}));
+  const form=within(panel).getByRole("form",{name:"New knowledge"});
+  fireEvent.change(within(form).getByLabelText("Title"),{target:{value:"Hours"}});
+  fireEvent.change(within(form).getByLabelText("Type"),{target:{value:"guide"}});
+  fireEvent.change(within(form).getByLabelText("Content"),{target:{value:"Monday to Saturday."}});
+  fireEvent.click(within(form).getByRole("button",{name:"Save"}));
+  await waitFor(()=>expect(calls.find(c=>c.method==="POST")?.body).toBe(JSON.stringify({title:"Hours",content:"Monday to Saturday.",source_type:"guide"})));
+  fireEvent.click((await within(panel).findAllByRole("button",{name:"Remove"}))[0]);
+  fireEvent.click(within(panel).getByRole("button",{name:"Yes, remove"}));
+  await waitFor(()=>expect(calls.some(c=>c.method==="DELETE"&&c.url.endsWith("/knowledge/d1"))).toBe(true));
+ });
  it("loads the Knowledge page and saves new FAQ content only as a draft",async()=>{
   renderWorkspace();
   fireEvent.click(await screen.findByRole("button",{name:/Knowledge/}));

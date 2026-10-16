@@ -15,7 +15,154 @@ type Faq = {
 };
 type FaqEvent = { id: number; event_type: string; actor_id: string; created_at: string };
 
-export function KnowledgePage({ accessToken, businessId, canManage }: {
+type KnowledgeDoc = {
+  id: string;
+  title: string;
+  content: string;
+  source_type: "manual" | "guide" | string;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+/** The documents the AI answers from (facts) and the conversation guide (how it talks). */
+export function KnowledgeDocuments({ accessToken, businessId, canManage }: {
+  accessToken: string;
+  businessId: string;
+  canManage: boolean;
+}) {
+  const [docs, setDocs] = useState<KnowledgeDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<string | "new" | null>(null);
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<"manual" | "guide">("manual");
+  const [content, setContent] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await apiRequest<{ documents: KnowledgeDoc[] }>(`/businesses/${businessId}/knowledge`, accessToken);
+      setDocs(result.documents || []);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Knowledge could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, businessId]);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  function open(doc: KnowledgeDoc | null) {
+    setEditing(doc ? doc.id : "new");
+    setTitle(doc?.title || "");
+    setKind(doc?.source_type === "guide" ? "guide" : "manual");
+    setContent(doc?.content || "");
+    setNotice("");
+    setError("");
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const body = JSON.stringify({ title: title.trim(), content: content.trim(), source_type: kind });
+      const result = await apiRequest<{ error?: string }>(
+        editing === "new" ? `/businesses/${businessId}/knowledge` : `/knowledge/${editing}`,
+        accessToken,
+        { method: editing === "new" ? "POST" : "PUT", body },
+      );
+      if (result?.error) throw new Error(result.error);
+      setEditing(null);
+      setNotice("Saved. The assistant uses it from the next message.");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Knowledge could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(doc: KnowledgeDoc) {
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/knowledge/${doc.id}`, accessToken, { method: "DELETE" });
+      setConfirmRemove("");
+      setNotice(`Removed "${doc.title}". The assistant no longer uses it.`);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Knowledge could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const groups: { key: "manual" | "guide"; title: string; help: string }[] = [
+    { key: "manual", title: "Business facts", help: "What the assistant may tell customers: services, prices, plans, policies. It never states anything that isn't here." },
+    { key: "guide", title: "Conversation guide", help: "How the assistant talks: tone, greetings, which questions to ask first. Not facts; never overrides the safety rules." },
+  ];
+  const form = canManage && editing && (
+    <form className="inline-form knowledge-form" onSubmit={event => void save(event)} aria-label={editing === "new" ? "New knowledge" : "Edit knowledge"}>
+      <div className="knowledge-form-row">
+        <label>Title<input required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} placeholder="Membership plans" /></label>
+        <label>Type<select value={kind} onChange={event => setKind(event.target.value as "manual" | "guide")}>
+          <option value="manual">Business facts</option>
+          <option value="guide">Conversation guide</option>
+        </select></label>
+      </div>
+      <label>Content<textarea required rows={12} maxLength={40000} value={content} onChange={event => setContent(event.target.value)} placeholder="Write plainly, one fact per line. Prices with currency." /></label>
+      <div className="record-actions">
+        <button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+      </div>
+    </form>
+  );
+  return <section className="control-panel" aria-label="What the AI knows">
+    <div className="panel-heading">
+      <div><h2>What the AI knows</h2><p>The assistant on Instagram, Messenger and the member chat answers only from these documents and the approved FAQs below. Changes apply to the next message.</p></div>
+      <div className="record-actions">
+        {canManage && editing === null && <button type="button" className="primary-button" onClick={() => open(null)}>Add knowledge</button>}
+        <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button>
+      </div>
+    </div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {notice && <p className="quiet-note" role="status">{notice}</p>}
+    {editing === "new" && form}
+    {loading ? <p role="status">Loading knowledge…</p> : groups.map(group => {
+      const rows = docs.filter(doc => (doc.source_type === "guide" ? "guide" : "manual") === group.key);
+      return <div className="knowledge-group" key={group.key}>
+        <h3>{group.title} <span className="status-pill">{rows.length}</span></h3>
+        <p className="quiet-note">{group.help}</p>
+        {rows.length === 0 ? <p className="empty-copy">Nothing here yet.</p> : <div className="record-list">{rows.map(doc => editing === doc.id ? <div key={doc.id}>{form}</div> : <div className="record knowledge-doc" key={doc.id}>
+          <div>
+            <strong>{doc.title}</strong>
+            <small>{doc.content.length.toLocaleString()} characters · updated {new Date(doc.updated_at || doc.created_at).toLocaleString()}</small>
+            <details><summary>Show content</summary><pre className="knowledge-content">{doc.content}</pre></details>
+          </div>
+          {canManage && <div className="record-actions">
+            <button type="button" disabled={busy || editing !== null} onClick={() => open(doc)}>Edit</button>
+            {confirmRemove === doc.id
+              ? <><button type="button" className="danger-button" disabled={busy} onClick={() => void remove(doc)}>Yes, remove</button><button type="button" onClick={() => setConfirmRemove("")}>Keep</button></>
+              : <button type="button" disabled={busy} onClick={() => setConfirmRemove(doc.id)}>Remove</button>}
+          </div>}
+        </div>)}</div>}
+      </div>;
+    })}
+  </section>;
+}
+
+export function KnowledgePage(props: { accessToken: string; businessId: string; canManage: boolean }) {
+  return <div className="knowledge-page">
+    <KnowledgeDocuments {...props} />
+    <FaqPanel {...props} />
+  </div>;
+}
+
+function FaqPanel({ accessToken, businessId, canManage }: {
   accessToken: string;
   businessId: string;
   canManage: boolean;
@@ -115,7 +262,7 @@ export function KnowledgePage({ accessToken, businessId, canManage }: {
   }
 
   return <section className="control-panel" aria-label="Approved business FAQs">
-    <div className="panel-heading"><div><h2>Approved FAQ answers</h2><p>Drafts never answer customers. Approval publishes an exact question match after case, punctuation, and whitespace normalization; there is no fuzzy or semantic matching. A revision remains a draft while the current approved version stays live.</p></div><button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button></div>
+    <div className="panel-heading"><div><h2>Approved FAQ answers</h2><p>Drafts never answer customers. An approved answer is sent word for word when a customer asks that exact question, and the assistant also reads every approved answer as a fact. A revision stays a draft while the approved version stays live.</p></div><button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button></div>
     {error && <p className="form-error" role="alert">{error}</p>}
     {notice && <p className="quiet-note" role="status">{notice}</p>}
     {canManage && <form className="inline-form faq-form" onSubmit={event => void saveDraft(event)}>

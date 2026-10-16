@@ -42,24 +42,27 @@ FIELD_LABELS = {
 }
 
 
+# The field that names a record, best first; the rest follow as short "label: value" details.
+NAME_FIELDS = ("place_name", "company", "hotel_name", "restaurant", "service", "product_type", "category")
+
+
 def format_directory_response(result: DirectoryToolResult) -> str:
-    """Render only gateway-approved fields; never ask the model to fill gaps."""
+    """Render only gateway-approved fields; never ask the model to fill gaps. One readable line per record."""
     if result.outcome != DirectoryOutcome.ALLOW or not result.records:
         return result.message
 
-    heading = (
-        "Verified directory information:"
-        if result.verification_state is not None
-        and result.verification_state.value == "verified"
-        else "Directory information:"
-    )
-    lines = [heading]
-    for index, record in enumerate(result.records, start=1):
-        lines.extend(("", f"{index}.") )
-        for field in result.allowed_fields:
-            value = record.get(field)
-            if value is None or value == "":
-                continue
-            label = FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-            lines.append(f"- {label}: {value}")
+    verified = result.verification_state is not None and result.verification_state.value == "verified"
+    lines = ["Here's what I found in the FayFort directory, dear" + (" (verified):" if verified else ":")]
+    for record in result.records:
+        shown = [field for field in result.allowed_fields if record.get(field) not in (None, "")]
+        name_field = next((field for field in NAME_FIELDS if field in shown), shown[0] if shown else None)
+        if name_field is None:
+            continue
+        details = [
+            f"{FIELD_LABELS.get(field, field.replace('_', ' ').capitalize()).lower()} {record[field]}"
+            if field not in ("category", "group_name", "city", "district", "province") else str(record[field])
+            for field in shown if field != name_field
+        ]
+        lines.append(f"• {record[name_field]}" + (f" ({', '.join(details)})" if details else ""))
+    lines.append("Would you like help with any of these?")
     return "\n".join(lines)

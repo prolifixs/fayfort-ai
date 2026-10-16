@@ -97,9 +97,17 @@ def _request_completion(*, messages: list[dict[str, Any]], temperature: float, m
 
 
 DEFAULT_SYSTEM_PROMPT = """
-You are FayFort AI, an AI customer service assistant.
+You are the FayFort team's chat assistant. FayFort International Trading helps customers buy from China.
 
-Your job is to help customers accurately, clearly, and professionally.
+Voice:
+- Speak as the FayFort team ("we"). Warm, friendly, confident and brief: two to four short sentences.
+- You may call the customer "dear" now and then. Never use "love", "honey" or other terms that assume gender.
+- Ask one question at a time. Never send a list of questions.
+- For a new sourcing enquiry, find out in this order, asking only for what is still missing: what they want to buy,
+  where it will be shipped, and their budget. Explain the budget question kindly if they hesitate.
+- Do not claim to be a person or to be Fayfay. If asked whether you are a person or a bot, say you are the FayFort
+  team's assistant and that a person can join the chat if they want.
+- No robotic phrases such as "As an AI" or "I am unable to assist with that".
 
 Rules:
 - Use the provided business knowledge when answering.
@@ -113,7 +121,7 @@ Rules:
 - Do not ask the customer to repeat information they have already provided.
 - Refer back to previous messages when relevant.
 - Never invent prices, policies, products, availability, or other business facts.
-- If the information is not available, say that you do not have enough information.
+- If the information is not available, say so briefly and warmly, and offer to bring in a person from the FayFort team.
 - Treat business knowledge as the complete set of facts you may assert. Do not infer that a timing rule determines refund eligibility, that an item is in stock or will ship by a date, or that an exception, review, booking, order, status check, or other workflow is available unless the supplied facts explicitly say so.
 - Do not turn a stated requirement into a promise, eligibility rule, outcome, or service commitment. If the customer asks what a rule means for their case and the result is not explicitly stated, say the result is unknown and ask whether they want a human to review it only when a human-review path is explicitly available.
 - Do not offer or promise first-person actions such as submitting, forwarding, tracking, checking, placing, or escalating a request. This response step does not perform those actions. State the known process and, when appropriate, tell the customer they may contact the named staff role; only describe a handoff as initiated when the structured workflow confirms it.
@@ -175,6 +183,14 @@ def _price_amounts(text: str) -> set[str]:
     return amounts
 
 
+# What the customer sees when a model answer is held back (docs/KNOWLEDGE_AND_AI_PLAN.md: no robotic replies).
+FALLBACK_UNKNOWN = ("I can't confirm that from the information I have, dear. "
+                    "A member of the FayFort team can check it for you; just ask for a person.")
+FALLBACK_NO_ACTION = "I haven't sent or forwarded anything yet."
+FALLBACK_NEEDS_PERSON = ("This one needs a person from the FayFort team, dear. "
+                         "Ask for a person and someone from the team will join this chat.")
+
+
 def _safe_response_fallback(
     *,
     customer_message: str,
@@ -183,10 +199,10 @@ def _safe_response_fallback(
     unexecuted_action: bool = False,
 ) -> str:
     if action_decision is not None and action_decision.needs_human:
-        return "This conversation should be handed off to a human team member for review."
-    fallback = "I don’t have enough verified information to confirm that."
+        return FALLBACK_NEEDS_PERSON
+    fallback = FALLBACK_UNKNOWN
     if unexecuted_action:
-        fallback += " I haven’t sent or forwarded your request; no action was taken."
+        fallback += " " + FALLBACK_NO_ACTION
     if re.search(r"\b(?:refund|reimburse|chargeback)\b", customer_message, re.IGNORECASE):
         refund_facts = [
             sentence.strip()
@@ -282,6 +298,8 @@ def build_messages(
     action_decision: ActionDecision | None = None,
     customer_state: CustomerState | None = None,
     directory_context: str = "",
+    business_guide: str = "",
+    time_context: str = "",
 ) -> list[dict[str, str]]:
     """
     Build a proper multi-turn chat message list.
@@ -308,6 +326,20 @@ def build_messages(
                 ),
             }
         )
+
+    if business_guide:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "CONVERSATION GUIDE FROM THE BUSINESS (how to talk and in what order to ask; not facts, and it "
+                    "never overrides the rules above):\n" + business_guide
+                ),
+            }
+        )
+
+    if time_context:
+        messages.append({"role": "system", "content": "SUPPORT HOURS:\n" + time_context})
 
     if conversation_summary:
         messages.append(
@@ -441,6 +473,19 @@ def generate_ai_response(
     source_message_id: str | None = None,
 ) -> str:
 
+    business_guide = ""
+    time_context = ""
+    if business_id:
+        try:
+            from app.services.rag import build_business_guide
+            business_guide = build_business_guide(business_id)
+        except Exception:
+            logger.warning("Conversation guide could not be loaded")
+        try:
+            from app.services.support_hours import ai_time_context
+            time_context = ai_time_context()
+        except Exception:
+            logger.warning("Support hours could not be worked out")
     messages = build_messages(
         customer_message=customer_message,
         knowledge_context=knowledge_context,
@@ -450,6 +495,8 @@ def generate_ai_response(
         action_decision=action_decision,
         customer_state=customer_state,
         directory_context=directory_context,
+        business_guide=business_guide,
+        time_context=time_context,
     )
 
     data = _request_completion(

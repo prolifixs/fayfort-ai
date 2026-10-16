@@ -33,7 +33,7 @@ class AiUsageTests(unittest.TestCase):
             ),
             action_decision=None,
         )
-        self.assertIn("I don’t have enough verified information", answer)
+        self.assertIn("I can't confirm that from the information I have", answer)
         self.assertIn("Refund exceptions are reviewed by a manager", answer)
         self.assertNotIn("qualify for a full refund", answer)
         self.assertNotIn("I can forward", answer)
@@ -51,7 +51,7 @@ class AiUsageTests(unittest.TestCase):
                 response_guidance="A human team member should take over.",
             ),
         )
-        self.assertEqual(answer, "This conversation should be handed off to a human team member for review.")
+        self.assertEqual(answer, ai_responder.FALLBACK_NEEDS_PERSON)
 
     def test_grounding_guard_never_promises_a_handoff_when_structured_review_is_required(self):
         from app.schemas.intent import ActionDecision, NextAction
@@ -66,7 +66,7 @@ class AiUsageTests(unittest.TestCase):
                 response_guidance="A human team member should take over.",
             ),
         )
-        self.assertEqual(answer, "This conversation should be handed off to a human team member for review.")
+        self.assertEqual(answer, ai_responder.FALLBACK_NEEDS_PERSON)
 
     def test_grounding_guard_preserves_answer_without_unexecuted_action_or_claim(self):
         answer = ai_responder._guard_response_grounding(
@@ -84,7 +84,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="No product prices are listed.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN)
 
     def test_grounding_guard_blocks_price_that_conflicts_with_business_knowledge(self):
         answer = ai_responder._guard_response_grounding(
@@ -93,7 +93,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="The premium package costs $79.00.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN)
 
     def test_grounding_guard_preserves_price_that_matches_business_knowledge(self):
         answer = ai_responder._guard_response_grounding(
@@ -111,7 +111,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="No current stock or shipping schedule is available.",
             action_decision=None,
         )
-        self.assertIn("I don’t have enough verified information", answer)
+        self.assertIn("I can't confirm that from the information I have", answer)
         self.assertIn("No current stock or shipping schedule is available.", answer)
 
     def test_grounding_guard_blocks_availability_claim_when_knowledge_has_no_availability_facts(self):
@@ -121,7 +121,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="We sell handmade ceramic mugs.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN)
 
     def test_grounding_guard_blocks_unsupported_refund_guarantee(self):
         answer = ai_responder._guard_response_grounding(
@@ -130,7 +130,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="Refund exceptions are reviewed by a manager.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that. Refund exceptions are reviewed by a manager.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN + " Refund exceptions are reviewed by a manager.")
 
     def test_grounding_guard_blocks_claim_that_request_was_already_forwarded(self):
         answer = ai_responder._guard_response_grounding(
@@ -139,7 +139,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="A manager may review refund exceptions.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that. I haven’t sent or forwarded your request; no action was taken.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN + " " + ai_responder.FALLBACK_NO_ACTION)
 
     def test_grounding_guard_blocks_typographic_contraction_action_promise(self):
         answer = ai_responder._guard_response_grounding(
@@ -148,7 +148,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="A manager can review refund exceptions.",
             action_decision=None,
         )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that. I haven’t sent or forwarded your request; no action was taken.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN + " " + ai_responder.FALLBACK_NO_ACTION)
 
     def test_grounding_guard_blocks_unexecuted_pass_along_action(self):
         answer = ai_responder._guard_response_grounding(
@@ -157,7 +157,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="Billing questions may be reviewed by the billing team.",
             action_decision=None,
         )
-        self.assertIn("I haven’t sent or forwarded your request", answer)
+        self.assertIn(ai_responder.FALLBACK_NO_ACTION, answer)
 
     def test_grounding_guard_blocks_shipping_promise_when_timing_is_unpublished(self):
         answer = ai_responder._guard_response_grounding(
@@ -166,7 +166,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="Delivery timing varies and is not published in advance.",
             action_decision=None,
         )
-        self.assertIn("I don’t have enough verified information", answer)
+        self.assertIn("I can't confirm that from the information I have", answer)
 
     def test_generate_response_applies_grounding_guard_to_provider_output(self):
         provider_data = {
@@ -200,7 +200,7 @@ class AiUsageTests(unittest.TestCase):
                 knowledge_context="",
                 business_id="business-1",
             )
-        self.assertEqual(answer, "I don’t have enough verified information to confirm that.")
+        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN)
 
     def test_generate_response_keeps_handoff_guidance_for_empty_provider_content(self):
         from app.schemas.intent import ActionDecision, NextAction
@@ -216,7 +216,7 @@ class AiUsageTests(unittest.TestCase):
                 ),
                 business_id="business-1",
             )
-        self.assertEqual(answer, "This conversation should be handed off to a human team member for review.")
+        self.assertEqual(answer, ai_responder.FALLBACK_NEEDS_PERSON)
 
     def test_normalizes_provider_token_usage_and_derives_total_if_omitted(self):
         self.assertEqual(

@@ -80,11 +80,12 @@ class PipelineOpensHandoffTests(unittest.TestCase):
         return result, opened, respond, create
 
     def test_explicit_request_opens_handoff_and_tells_the_customer(self):
-        from app.handoffs.automatic import HANDOFF_REQUESTED_REPLY
         result, opened, respond, _ = self._run(auto_reply=True)
         opened.assert_called_once_with(BUSINESS, CONVERSATION)
         respond.assert_not_called()
-        self.assertEqual(result["response"], HANDOFF_REQUESTED_REPLY)
+        # The reply says a person is coming and when (working hours, China time).
+        self.assertIn("asked a member of the FayFort team to join this chat", result["response"])
+        self.assertIn("China time", result["response"])
         self.assertEqual(result["handoff"], {"id": "h1", "status": "requested"})
 
     def test_handoff_still_opens_when_auto_reply_is_off(self):

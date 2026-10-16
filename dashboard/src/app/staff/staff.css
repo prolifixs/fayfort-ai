@@ -835,3 +835,15 @@
 :root[data-theme="dark"] .status-waiting { color: var(--color-warning); background: var(--color-warning-soft); }
 :root[data-theme="dark"] .status-blocked { color: var(--color-danger); }
 :root[data-theme="dark"] .status-completed { color: var(--color-success); }
+
+/* Knowledge page: what the AI knows */
+.knowledge-page { display: grid; gap: var(--space-4); }
+.knowledge-group { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+.knowledge-group h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-md); }
+.knowledge-group > .quiet-note { margin: 0; }
+.knowledge-form { display: grid; gap: var(--space-3); margin-top: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.knowledge-form-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-3); }
+.knowledge-form textarea { width: 100%; font-family: inherit; }
+.knowledge-doc details summary { cursor: pointer; color: var(--accent); font-size: var(--text-sm); margin-top: var(--space-1); }
+.knowledge-content { max-height: 360px; overflow: auto; margin: var(--space-2) 0 0; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-2); white-space: pre-wrap; font: inherit; font-size: var(--text-sm); }
+@media (max-width: 640px) { .knowledge-form-row { grid-template-columns: 1fr; } }

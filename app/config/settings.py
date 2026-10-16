@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     HANDOFF_WAIT_MINUTES: int = 15        # nobody replied after a person was asked for -> AI resumes
     HANDOFF_IDLE_MINUTES: int = 30        # the person stopped replying -> AI resumes
     HANDOFF_HOLDING_INTERVAL_MINUTES: int = 5  # at most one holding reply per this many minutes
+    # FayFort working hours (app/services/support_hours.py): told to customers who ask for a person.
+    SUPPORT_TIMEZONE: str = "Asia/Shanghai"
+    SUPPORT_DAYS: str = "mon,tue,wed,thu,fri,sat"
+    SUPPORT_OPEN: str = "09:30"
+    SUPPORT_CLOSE: str = "18:30"
+    SUPPORT_REPLY_MINUTES: int = 30
+    # The business whose knowledge the member dashboard chat reads (plans, fees, how sourcing works).
+    MEMBER_KNOWLEDGE_BUSINESS_ID: str = "b16f5070-322f-4e86-a18d-243fa54e75c4"
     # Database keep-alive (app/infrastructure/keepalive.py): a small read and write every few hours so
     # the Supabase Free project is never paused for inactivity while real traffic is low.
     DATABASE_KEEPALIVE_ENABLED: bool = True

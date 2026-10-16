@@ -19,6 +19,7 @@ from app.database.knowledge import (
     create_knowledge_document,
     update_knowledge_document,
     delete_knowledge_chunks,
+    delete_knowledge_document,
 )
 from app.knowledge.router import create_business_faq_router
 from app.database.conversations import (
@@ -364,7 +365,8 @@ def add_knowledge(
     _authorize_knowledge_access(business_id, authorization, manage=True)
     title = payload.get("title", "")
     content = payload.get("content", "")
-    source_type = payload.get("source_type", "manual")
+    # "manual": facts the AI may state. "guide": how the AI should talk (tone, order of questions), never facts.
+    source_type = payload.get("source_type") if payload.get("source_type") in ("manual", "guide") else "manual"
 
     if not title:
         return {
@@ -680,7 +682,8 @@ def _send_message_core(
             "Skipping AI response generation because provider auto-reply is disabled"
         )
     elif customer_handoff:
-        ai_response = HANDOFF_REQUESTED_REPLY
+        from app.services.support_hours import handoff_reply
+        ai_response = handoff_reply()
     elif approved_reply:
         ai_response = approved_reply["response_text"]
     elif directory_result:
@@ -883,6 +886,18 @@ def ai_respond(payload: AiRespondPayload, authorization: str | None = Header(def
         "response": response
     }
 
+@app.delete("/knowledge/{document_id}")
+def remove_knowledge(document_id: str, authorization: str | None = Header(default=None)):
+    """Remove a knowledge document and its chunks; the AI stops using it straight away."""
+    document = get_knowledge_document(document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Knowledge document not found.")
+    _authorize_knowledge_access(document["business_id"], authorization, manage=True)
+    delete_knowledge_chunks(document_id)
+    delete_knowledge_document(document_id)
+    return {"deleted": document_id}
+
+
 @app.put("/knowledge/{document_id}")
 def update_knowledge(
     document_id: str,
@@ -896,7 +911,7 @@ def update_knowledge(
 
     title = payload.get("title")
     content = payload.get("content")
-    source_type = payload.get("source_type", "manual")
+    source_type = payload.get("source_type") if payload.get("source_type") in ("manual", "guide") else "manual"
 
     if not title:
         return {
