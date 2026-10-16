@@ -101,6 +101,8 @@ export type ConversationRow = {
   summary?: string | null;
   last_message_at?: string | null;
   created_at: string;
+  /** Open human takeover on this chat: requested, assigned or active. */
+  handoff_status?: string | null;
 };
 
 export type CustomerRow = {

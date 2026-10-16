@@ -37,7 +37,21 @@ class ConversationListApiTests(unittest.TestCase):
         self.assertTrue(response.json()["has_more"])
         self.assertEqual(response.json()["next_offset"], 6)
         self.assertNotIn("private_field", response.json()["conversations"][0])
-        list_rows.assert_called_once_with(BUSINESS, "open", "instagram", limit=3, offset=4)
+        list_rows.assert_called_once_with(BUSINESS, "open", "instagram", limit=3, offset=4, only_ids=None)
+
+    @patch("app.dashboard.modules.supabase.table")
+    @patch("app.dashboard.modules.list_conversations")
+    @patch("app.dashboard.modules.trusted_business_member", return_value={"user_id": "member-1", "role": "admin"})
+    def test_needs_person_lists_only_chats_with_an_open_takeover(self, _member, list_rows, table):
+        handoffs = table.return_value.select.return_value.eq.return_value.in_.return_value.limit.return_value
+        handoffs.execute.return_value.data = [{"conversation_id": "c2", "status": "requested"}]
+        list_rows.return_value = [{"id": "c2", "business_id": BUSINESS, "channel": "instagram", "status": "open"}]
+        response = self.client.get(f"/businesses/{BUSINESS}/conversations", headers={"Authorization": "Bearer signed-in-member"},
+                                   params={"needs_person": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["conversations"][0]["handoff_status"], "requested")
+        table.return_value.select.return_value.eq.return_value.in_.assert_called_once_with("status", ["requested", "assigned", "active"])
+        self.assertEqual(list_rows.call_args.kwargs["only_ids"], ["c2"])
 
     @patch("app.dashboard.modules.list_conversations")
     @patch("app.dashboard.modules.trusted_business_member", return_value={"user_id": "member-1", "role": "admin"})

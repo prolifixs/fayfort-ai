@@ -784,3 +784,7 @@
 @media (max-width: 640px) {
   .operations-center-page .operations-notifications-popover { position: fixed; left: var(--space-4); right: var(--space-4); top: 120px; width: auto; }
 }
+
+/* Operations Center menu badge: green while work is pending, red once any of it is overdue. */
+.queue-badge.is-pending { background: var(--accent); }
+.queue-badge.is-overdue { background: var(--color-danger); }

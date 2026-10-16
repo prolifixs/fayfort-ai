@@ -18,8 +18,8 @@ const jwt = [b64({ alg: "HS256", typ: "JWT" }), b64({
 
 const businessId = "biz-1";
 const conversations = [
-  { id: "bc1", customer_name: "Amaka Obi", customer_username: "@amaka.styles", channel: "instagram", status: "open", summary: "Asking for the price of 30 inch bone straight bundles and delivery to Lagos", last_message_at: iso(4), created_at: iso(300) },
-  { id: "bc2", customer_name: "Grace Mensah", channel: "messenger", status: "open", summary: "Wants a refund for a wig that arrived tangled", last_message_at: iso(25), created_at: iso(600) },
+  { id: "bc1", handoff_status: "active", customer_name: "Amaka Obi", customer_username: "@amaka.styles", channel: "instagram", status: "open", summary: "Asking for the price of 30 inch bone straight bundles and delivery to Lagos", last_message_at: iso(4), created_at: iso(300) },
+  { id: "bc2", handoff_status: "requested", customer_name: "Grace Mensah", channel: "messenger", status: "open", summary: "Wants a refund for a wig that arrived tangled", last_message_at: iso(25), created_at: iso(600) },
   { id: "bc3", customer_external_id: "1784410022", channel: "instagram", status: "closed", summary: null, last_message_at: iso(900), created_at: iso(1400) },
   { id: "bc4", customer_name: "Tolu Adeyemi", channel: "whatsapp", status: "open", summary: "Bulk order of 50 closures for a salon", last_message_at: iso(60), created_at: iso(2000) },
 ];
@@ -75,6 +75,7 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path === `${b}/requests`) return { requests: [request, { ...request, id: "rq2", conversation_id: "bc4", request_type: "bulk_order", status: "active", details: { product: "5x5 closures", quantity: 50 }, missing_information: [] }] };
   if (path === `${b}/handoffs`) return { handoffs, total: 2, has_more: false };
   if (path === `${b}/handoffs/agents`) return { agents: [{ user_id: "staff-1", status: "active", role: "agent", handoff_availability: "available", handoff_max_active: 3 }, { user_id: "staff-2", status: "active", role: "agent", handoff_availability: "away" }] };
+  if (path === "/operations/pending-count") return { pending: 14, overdue: 3 };
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"], can_manage: true };
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };
   if (path === "/operations/work-items") return { work_items: workItems };

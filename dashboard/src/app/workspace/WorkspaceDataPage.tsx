@@ -71,7 +71,8 @@ export function WorkspaceDataPage({
     setError("");
     try {
       if (module === "Conversations") {
-        const params = new URLSearchParams({ limit: "50", offset: String(conversationOffset) });
+        // Only chats that need a person; every chat's full history is on its customer's page.
+        const params = new URLSearchParams({ limit: "50", offset: String(conversationOffset), needs_person: "true" });
         if (conversationStatus) params.set("status", conversationStatus);
         if (conversationChannel.trim()) params.set("channel", conversationChannel.trim());
         const data = await apiRequest<{ conversations: ConversationRow[]; has_more: boolean }>(
@@ -281,7 +282,7 @@ export function WorkspaceDataPage({
           <h2 className="sr-only">{module}</h2>
           <p>
             {module === "Conversations"
-              ? "Business conversations and their recorded message history."
+              ? "Only chats that need a person are listed here."
               : module === "Customers"
                 ? "Customer profiles and channels seen by this business."
                 : "Structured customer requests, missing information, and current status."}
@@ -361,7 +362,11 @@ export function WorkspaceDataPage({
         <p role="status">Loading {module.toLowerCase()}…</p>
       ) : module === "Conversations" ? (
         conversations.length === 0 ? (
-          <p className="empty-copy">No conversations on this page. Try another filter or page.</p>
+          <p className="empty-copy">
+            {conversationOffset > 0 || conversationStatus || conversationChannel.trim()
+              ? "No chats needing a person match these filters."
+              : "No chats need a person right now. The AI is handling them; open Customers to read any chat's history."}
+          </p>
         ) : (
           <div className={selected ? "workspace-split inbox has-selection" : "workspace-split inbox"}>
             <div className="record-list inbox-list" aria-label="Conversation list">
@@ -384,9 +389,13 @@ export function WorkspaceDataPage({
                       <small className="inbox-row-meta">
                         {readable(item.channel || item.platform || "Unknown channel")}
                         {item.customer_username ? ` · ${item.customer_username}` : ""}
-                        <span className={item.status === "open" ? "status-pill is-good" : "status-pill"}>
-                          {readable(item.status)}
-                        </span>
+                        {item.handoff_status ? (
+                          <span className={item.handoff_status === "requested" ? "status-pill is-warn" : "status-pill is-good"}>
+                            {item.handoff_status === "requested" ? "Waiting for a person" : item.handoff_status === "assigned" ? "Assigned" : "Person replying"}
+                          </span>
+                        ) : (
+                          <span className={item.status === "open" ? "status-pill is-good" : "status-pill"}>{readable(item.status)}</span>
+                        )}
                       </small>
                       {item.summary && <small className="inbox-row-preview">{item.summary}</small>}
                     </span>

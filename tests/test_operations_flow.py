@@ -358,5 +358,16 @@ class FlowApiTests(unittest.TestCase):
         self.assertIn("Message us in chat", response.json()["detail"])
 
 
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": ADMIN, "role": "platform_admin"})
+    @patch("app.accounts.operations.supabase.table")
+    def test_pending_count_for_the_menu_badge(self, table, identity):
+        rows = [{"id": "a", "due_at": "2000-01-01T00:00:00+00:00", "department": "sourcing", "assigned_worker_id": None},
+                {"id": "b", "due_at": "2999-01-01T00:00:00+00:00", "department": "fulfillment", "assigned_worker_id": None},
+                {"id": "c", "due_at": None, "department": "disputes", "assigned_worker_id": None}]
+        table.return_value.select.return_value.in_.return_value.limit.return_value.execute.return_value.data = rows
+        response = self.client.get("/operations/pending-count")
+        self.assertEqual(response.json(), {"pending": 3, "overdue": 1})
+        table.return_value.select.return_value.in_.assert_called_once_with("status", ["open", "claimed", "waiting", "blocked"])
+
 if __name__ == "__main__":
     unittest.main()

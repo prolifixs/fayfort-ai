@@ -396,6 +396,34 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             return {"user_id": staff["user_id"], "departments": ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"], "can_manage": True}
         return {"user_id": staff["user_id"], "departments": departments_for(staff["user_id"]), "can_manage": False}
 
+    @router.get("/operations/pending-count")
+    def operations_pending_count(authorization: str | None = Header(default=None)):
+        """Unfinished work this person can see, for the badge on the Operations Center menu item.
+        Administrators see every department; workers see their own departments plus anything assigned to them."""
+        staff = staff_identity(authorization)
+        live = ["open", "claimed", "waiting", "blocked"]
+        try:
+            query = supabase.table("operations_work_items").select("id,due_at,department,assigned_worker_id").in_("status", live)
+            if staff.get("role") != "platform_admin":
+                departments = departments_for(staff["user_id"])
+                rows = [row for row in (query.limit(2000).execute().data or [])
+                        if row.get("department") in departments or row.get("assigned_worker_id") == staff["user_id"]]
+            else:
+                rows = query.limit(2000).execute().data or []
+            now = datetime.now(timezone.utc)
+
+            def is_overdue(value: object) -> bool:
+                try:
+                    due = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                    return (due if due.tzinfo else due.replace(tzinfo=timezone.utc)) < now
+                except ValueError:
+                    return False
+            overdue = sum(1 for row in rows if row.get("due_at") and is_overdue(row["due_at"]))
+            return {"pending": len(rows), "overdue": overdue}
+        except Exception as exc:
+            logger.exception("Could not count pending operations work")
+            raise HTTPException(status_code=503, detail="Pending work could not be counted.") from exc
+
     @router.get("/operations/work-items/{work_item_id}/mention-options")
     def operations_mention_options(work_item_id: UUID, authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)

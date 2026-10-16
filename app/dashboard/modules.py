@@ -230,16 +230,26 @@ def create_workspace_modules_router() -> APIRouter:
         channel: str | None = Query(default=None, max_length=50),
         limit: int = Query(default=50, ge=1, le=100),
         offset: int = Query(default=0, ge=0, le=1000000),
+        needs_person: bool = Query(default=False),
         authorization: str | None = Header(default=None),
     ):
+        """needs_person=true lists only chats waiting for or handled by a person (an open human takeover).
+        The full history of every chat stays on the customer's page."""
         authorize(business_id, authorization)
         try:
+            handoffs: dict[str, str] = {}
+            if needs_person:
+                for row in (supabase.table("conversation_handoffs").select("conversation_id,status")
+                            .eq("business_id", business_id).in_("status", ["requested", "assigned", "active"])
+                            .limit(1000).execute().data or []):
+                    handoffs[str(row["conversation_id"])] = row["status"]
             rows = list_conversations(
                 business_id,
                 status,
                 channel,
                 limit=limit + 1,
                 offset=offset,
+                only_ids=list(handoffs) if needs_person else None,
             )
             has_more = len(rows) > limit
             safe_rows = [
@@ -250,6 +260,9 @@ def create_workspace_modules_router() -> APIRouter:
                 )}
                 for row in rows[:limit]
             ]
+            if needs_person:
+                for row in safe_rows:
+                    row["handoff_status"] = handoffs.get(str(row["id"]))
             return {
                 "conversations": safe_rows,
                 "limit": limit,

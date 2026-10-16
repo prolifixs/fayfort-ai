@@ -10,6 +10,7 @@ def list_conversations(
     *,
     limit: int = 50,
     offset: int = 0,
+    only_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     query = (
         supabase
@@ -18,6 +19,10 @@ def list_conversations(
         .eq("business_id", business_id)
     )
 
+    if only_ids is not None:
+        if not only_ids:
+            return []
+        query = query.in_("id", only_ids)
     if status:
         query = query.eq("status", status)
     if channel:

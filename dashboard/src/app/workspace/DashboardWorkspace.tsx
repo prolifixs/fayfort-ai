@@ -39,7 +39,7 @@ export const modules = [
 
 export const descriptions: Record<string, string> = {
   Overview: "Today at a glance for this client account.",
-  Conversations: "Review customer conversations with operational context alongside the chat.",
+  Conversations: "Customers waiting for a person, and chats a person is handling. Full chat histories are under Customers.",
   Customers: "Customer profiles with their conversations and requests.",
   Requests: "Structured requests, missing information, and lifecycle status.",
   "Directory & Tools": "Curated supplier directory data and who can use it.",
@@ -86,6 +86,7 @@ export function DashboardWorkspace({
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventStatus, setEventStatus] = useState("Connecting");
   const [waitingHandoffs, setWaitingHandoffs] = useState<number | null>(null);
+  const [pendingWork, setPendingWork] = useState<{ pending: number; overdue: number } | null>(null);
   const [acknowledgedWaiting, setAcknowledgedWaiting] = useState<Record<string, number>>({});
   const eventCursors = useRef<Record<string, number>>({});
   const currentBusiness = businesses.find((item) => item.business_id === businessId);
@@ -304,6 +305,22 @@ export function DashboardWorkspace({
     };
   }, [accessToken, businessId, eventStreaming]);
 
+  // Unfinished Operations work this person can see, for the badge on the Operations Center menu item.
+  useEffect(() => {
+    if (!activeWorker && !platformAdmin) return;
+    let alive = true;
+    const load = () =>
+      apiRequest<{ pending: number; overdue: number }>("/operations/pending-count", accessToken)
+        .then((data) => alive && setPendingWork(data))
+        .catch(() => undefined);
+    void load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [activeWorker, platformAdmin, accessToken]);
+
   const navButton = (label: string, badge?: ReactNode) => (
     <button
       key={label}
@@ -379,6 +396,15 @@ export function DashboardWorkspace({
               <a className="nav-item" href="/operations">
                 <NavIcon name="Operations Center" />
                 <span className="nav-label">Operations Center</span>
+                {pendingWork && pendingWork.pending > 0 && (
+                  <b
+                    className={pendingWork.overdue > 0 ? "queue-badge is-overdue" : "queue-badge is-pending"}
+                    aria-label={`${pendingWork.pending} pending${pendingWork.overdue ? `, ${pendingWork.overdue} overdue` : ""}`}
+                    title={`${pendingWork.pending} pending${pendingWork.overdue ? ` · ${pendingWork.overdue} overdue` : ""}`}
+                  >
+                    {pendingWork.pending > 99 ? "99+" : pendingWork.pending}
+                  </b>
+                )}
               </a>
             </section>
           )}
