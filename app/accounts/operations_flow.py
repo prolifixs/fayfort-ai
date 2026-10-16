@@ -417,8 +417,11 @@ def request_payments(request_id: str) -> dict:
     request = one(db().table("member_purchase_requests").select("id,member_id,expected_total,expected_currency")
                   .eq("id", request_id).limit(1).execute()) or {}
     invoices = rows(db().table("commerce_invoices").select(
-        "id,kind,status,amount,currency,deposit_credit,invoice_url,sent_at,paid_at,error,trend_item_id")
+        "id,kind,status,amount,currency,deposit_credit,invoice_url,sent_at,paid_at,error,trend_item_id,ship_to")
         .eq("request_id", request_id).order("created_at").execute())
+    # Where to deliver: the address the member chose when paying the order invoice (newest first).
+    ship_to = next((row.get("ship_to") for row in reversed(invoices)
+                    if row.get("kind") == "order" and row.get("ship_to") and row.get("status") in ("sent", "paid")), None)
     option = one(db().table("operations_sourcing_member_options").select("id,product_name,price_amount,currency,selected_at")
                  .eq("request_id", request_id).eq("status", "selected").limit(1).execute())
     terms = None
@@ -428,6 +431,6 @@ def request_payments(request_id: str) -> dict:
         except Exception:
             logger.exception("Could not work out deposit terms")
     expected = float(request["expected_total"]) if request.get("expected_total") else None
-    return {"invoices": invoices, "selected_option": option, "deposit_terms": terms,
+    return {"invoices": invoices, "selected_option": option, "deposit_terms": terms, "ship_to": ship_to,
             "expected_total": expected, "expected_currency": request.get("expected_currency") or "USD",
             "suggested_deposit": round(expected * terms["rate"], 2) if expected and terms else None}

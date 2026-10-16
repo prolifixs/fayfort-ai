@@ -24,6 +24,8 @@ import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { RANK_NAMES, depositNote, useMemberPlan } from "./membershipApi";
 import { DirectoryPanel } from "./MemberPerks";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
+import { MEMBER_TOUR, MemberTour, ProfileMeter, type ProfileCompletion, type TourStep } from "./accountExtras";
+import { SavedPanel } from "./ShopPanels";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
@@ -42,11 +44,19 @@ function sharedText(): string {
     .slice(0, 2000);
 }
 
+type MemberMe = {
+  profile: Record<string, unknown>;
+  completion?: ProfileCompletion;
+  onboarding_completed?: boolean;
+};
+
 export function MemberChatPage() {
   const [token, setToken] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [verified, setVerified] = useState(false);
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
+  const [completion, setCompletion] = useState<ProfileCompletion | null>(null);
+  const [tourOpen, setTourOpen] = useState(false);
   const [accountDialog, setAccountDialog] = useState<MemberAccountDialogKind | null>(null);
   const [requestBudget, setRequestBudget] = useState("");
   const { plan: memberPlan, reload: reloadPlan } = useMemberPlan(verified ? token : null);
@@ -338,9 +348,10 @@ export function MemberChatPage() {
       setAuthLoading(false);
       if (!accessToken) return;
       try {
-        const me = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", accessToken);
+        const me = await apiRequest<MemberMe>("/members/me", accessToken);
         if (!mounted) return;
         setProfile(me.profile);
+        applyMe(me);
         setVerified(true);
         const rows = await loadChats(accessToken);
         await loadRequests(accessToken);
@@ -364,10 +375,11 @@ export function MemberChatPage() {
       setProducts([]);
       setRequests([]);
       if (accessToken) {
-        apiRequest<{ profile: Record<string, unknown> }>("/members/me", accessToken)
+        apiRequest<MemberMe>("/members/me", accessToken)
           .then(async (me) => {
             if (!mounted) return;
             setProfile(me.profile);
+            applyMe(me);
             setVerified(true);
             const rows = await loadChats(accessToken);
             await loadRequests(accessToken);
@@ -611,6 +623,27 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  /** Profile completion and the first-visit tour come with the member profile. */
+  function applyMe(me: MemberMe) {
+    if (me.completion) setCompletion(me.completion);
+    if (me.onboarding_completed === false) setTourOpen(true);
+  }
+  function refreshCompletion() {
+    if (!token) return;
+    apiRequest<MemberMe>("/members/me", token)
+      .then((me) => me.completion && setCompletion(me.completion))
+      .catch(() => undefined);
+  }
+  function finishTour() {
+    setTourOpen(false);
+    if (!isDesktop) setSidebarOpen(false);
+    if (token) void apiRequest("/members/me/onboarding", token, { method: "POST" }).catch(() => undefined);
+  }
+  /** On phones the menu is a drawer: open it for menu steps, close it for the top bar. */
+  function prepareTourStep(step: TourStep) {
+    if (isDesktop) return;
+    setSidebarOpen(!["notifications", "cart"].includes(step.target));
+  }
   function openAccountDialog(kind: MemberAccountDialogKind) {
     setAccountOpen(false);
     setSidebarOpen(false);
@@ -628,8 +661,11 @@ export function MemberChatPage() {
     if (billing !== "success") return;
     setNotice("Thanks! Your payment went through. Your plan updates in a few seconds.");
     const timer = window.setTimeout(() => {
-      apiRequest<{ profile: Record<string, unknown> }>("/members/me", token)
-        .then((me) => setProfile(me.profile))
+      apiRequest<MemberMe>("/members/me", token)
+        .then((me) => {
+          setProfile(me.profile);
+          applyMe(me);
+        })
         .catch(() => undefined);
       reloadPlan();
       setAccountDialog("tier");
@@ -708,7 +744,7 @@ export function MemberChatPage() {
             </button>
           )}
         </div>
-        <button type="button" className="mapp-new-chat" onClick={() => void createChat()} disabled={busy}>
+        <button type="button" className="mapp-new-chat" data-tour="new-chat" onClick={() => void createChat()} disabled={busy}>
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
@@ -720,6 +756,7 @@ export function MemberChatPage() {
               key={item.panel}
               type="button"
               className={activePanel === item.panel ? "active" : ""}
+              data-tour={item.panel === "catalog" ? "browse" : item.panel}
               aria-current={activePanel === item.panel ? "page" : undefined}
               onClick={() => selectMemberPanel(item.panel)}
             >
@@ -730,7 +767,7 @@ export function MemberChatPage() {
             </button>
           ))}
         </nav>
-        <section className="mapp-history" aria-label="Your chats">
+        <section className="mapp-history" aria-label="Your chats" data-tour="chats">
           <h2>Chats</h2>
           {chats.length === 0 ? (
             <p className="mapp-history-empty">Your chats will appear here.</p>
@@ -787,7 +824,7 @@ export function MemberChatPage() {
             ))
           )}
         </section>
-        <div className="mapp-account" ref={accountRef}>
+        <div className="mapp-account" ref={accountRef} data-tour="account">
           {accountOpen && (
             <div className="member-account-dropdown" role="menu" aria-label="Account">
               <div className="member-account-dropdown-name">
@@ -804,11 +841,30 @@ export function MemberChatPage() {
                   {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
                 </strong>
               </button>
+              {completion && completion.percent < 100 && (
+                <button type="button" role="menuitem" className="member-account-completion" onClick={() => openAccountDialog("settings")}>
+                  <span>
+                    Profile {completion.percent}% complete
+                    {!completion.address_ready && <small>Add a shipping address</small>}
+                  </span>
+                  <ProfileMeter percent={completion.percent} />
+                </button>
+              )}
               <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
                 Account details
               </button>
               <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
                 Settings
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  setTourOpen(true);
+                }}
+              >
+                Take the tour
               </button>
             </div>
           )}
@@ -834,11 +890,18 @@ export function MemberChatPage() {
               <small>
                 {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
               </small>
+              {completion && completion.percent < 100 && (
+                <span className="mapp-account-meter">
+                  <ProfileMeter percent={completion.percent} />
+                  <small>Profile {completion.percent}%</small>
+                </span>
+              )}
             </span>
           </button>
         </div>
       </aside>
       {!isDesktop && sidebarOpen && <div className="mapp-scrim" aria-hidden="true" />}
+      {tourOpen && <MemberTour steps={MEMBER_TOUR} onFinish={finishTour} beforeStep={prepareTourStep} />}
       <div className="mapp-main">
         <header className="mapp-topbar">
           {!isDesktop && (
@@ -914,8 +977,12 @@ export function MemberChatPage() {
                 )}
               </div>
             )}
-            <MemberNotificationsBar accessToken={token} header />
-            <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
+            <span data-tour="notifications" className="mapp-tour-anchor">
+              <MemberNotificationsBar accessToken={token} header />
+            </span>
+            <span data-tour="cart" className="mapp-tour-anchor">
+              <CartButton accessToken={token} cart={cart} onCartChange={setCart} onOpen={openProduct} />
+            </span>
           </div>
         </header>
         <MemberAccountDialogs
@@ -930,6 +997,7 @@ export function MemberChatPage() {
             <MemberSettingsPanel
               onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
               onOpenPlans={() => setAccountDialog("tier")}
+              onCompletionChange={setCompletion}
             />
           }
         />
@@ -944,9 +1012,9 @@ export function MemberChatPage() {
                   busyId={shopBusyId}
                 />
               )}
-              {activePanel === "requests" && <OrdersPanel accessToken={token} />}
+              {activePanel === "requests" && <OrdersPanel accessToken={token} onAddressChange={refreshCompletion} />}
               {activePanel === "directory" && <DirectoryPanel accessToken={token} onClose={() => selectMemberPanel("chat")} />}
-              {activePanel === "saved" && <MemberWorkspacePanel accessToken={token} mode="saved" />}
+              {activePanel === "saved" && <SavedPanel accessToken={token} onOpen={openProduct} onBrowse={() => selectMemberPanel("catalog")} />}
               {activePanel === "product" && productId && (
                 <ProductPanel
                   accessToken={token}

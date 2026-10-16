@@ -204,15 +204,16 @@ describe("member sign-up", () => {
 });
 
 describe("account security", () => {
-  it("changes the sign-in email through a confirmation link", async () => {
-    render(<AccountSecuritySection audience="member" email="old@example.com" hasPassword />);
-    fireEvent.change(screen.getByLabelText("Change sign-in email"), { target: { value: "new@example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send confirmation" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("old@example.com and new@example.com");
-    expect(auth.updateUser).toHaveBeenCalledWith(
-      { email: "new@example.com" },
-      { emailRedirectTo: `${window.location.origin}/auth/callback?audience=member&type=email_change` },
-    );
+  it("shows the sign-in email but offers no way to change it, for members and staff", () => {
+    for (const audience of ["member", "staff"] as const) {
+      const { unmount } = render(<AccountSecuritySection audience={audience} email="old@example.com" hasPassword />);
+      expect(screen.getByText("old@example.com")).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Change sign-in email/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Send confirmation" })).not.toBeInTheDocument();
+      expect(screen.getByText(/can't be changed here/)).toBeInTheDocument();
+      unmount();
+    }
+    expect(auth.updateUser).not.toHaveBeenCalled();
   });
 
   it("signs out every session for the account", async () => {

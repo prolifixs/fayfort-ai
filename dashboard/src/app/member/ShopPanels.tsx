@@ -5,6 +5,7 @@ import type { Cart, ProductDetail, Rail, ShopCard, TrendCard, Giveaway } from ".
 import { money, shopSessionId, trackIntent } from "./commerceApi";
 import { Countdown, HotRails, PriceLine, ProductTile, TrendTile } from "./ShopComponents";
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
+import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
 
 /** Product page that opens beside the chat (the familiar side panel), so the member can keep asking. */
 export function ProductPanel({
@@ -106,7 +107,10 @@ export function ProductPanel({
               </div>
             )}
           </div>
-          <h2>{detail.product.name}</h2>
+          <div className="shop-product-title">
+            <h2>{detail.product.name}</h2>
+            <SaveProductButton accessToken={accessToken} productId={detail.product.id} initial={detail.product.saved} />
+          </div>
           <PriceLine card={{ ...detail.product, price: variant?.price ?? detail.product.price, sale: detail.product.sale && variant ? { ...detail.product.sale, sale_price: variant.sale_price } : detail.product.sale }} />
           {detail.product.sale ? (
             <p className="shop-sale-note">
@@ -157,7 +161,7 @@ export function ProductPanel({
               <h3>Goes well with</h3>
               <div className="shop-rail-track">
                 {detail.pairs_with.map((card) => (
-                  <ProductTile key={card.id} card={card} onOpen={onOpen} compact />
+                  <ProductTile key={card.id} card={card} onOpen={onOpen} compact accessToken={accessToken} />
                 ))}
               </div>
             </section>
@@ -340,6 +344,9 @@ type MemberInvoice = {
   status: "sent" | "paid";
   sent_at: string | null;
   paid_at: string | null;
+  /** order (goods: needs a delivery address), deposit, consultation, contact_credits */
+  kind?: string;
+  ship_to?: Record<string, string | null> | null;
 };
 type OrdersResponse = { orders: MemberOrder[]; invoices: MemberInvoice[]; wanted: (TrendCard & { joined_at: string })[] };
 
@@ -352,15 +359,51 @@ function orderStatus(order: MemberOrder) {
 }
 
 /** One timeline for everything a member is waiting on: store orders, invoices to pay, items they want sourced, requests. */
-export function OrdersPanel({ accessToken }: { accessToken: string }) {
+export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: string; onAddressChange?: () => void }) {
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => {
+  const [paying, setPaying] = useState<MemberInvoice | null>(null);
+  const [cancelling, setCancelling] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [addressVersion, setAddressVersion] = useState(0);
+  const book = useAddresses(accessToken, addressVersion);
+  const load = useCallback(() => {
     apiRequest<OrdersResponse>("/members/orders", accessToken)
       .then(setData)
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Your orders could not be loaded."));
   }, [accessToken]);
+  useEffect(() => load(), [load]);
   const due = data?.invoices.filter((invoice) => invoice.status === "sent") || [];
+  const needsAddress = due.some((invoice) => invoice.kind === "order") && book.loaded && !book.addresses.length;
+  async function cancelConsultation(invoice: MemberInvoice) {
+    setCancelBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/members/invoices/${invoice.id}/cancel`, accessToken, { method: "POST" });
+      setCancelling("");
+      setNotice("Your consultation was cancelled and its invoice no longer works.");
+      load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your consultation could not be cancelled.");
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+  async function payDirect(invoice: MemberInvoice) {
+    const tab = window.open("", "_blank");
+    try {
+      const result = await apiRequest<{ invoice_url: string }>(`/members/invoices/${invoice.id}/pay`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      if (tab) tab.location.href = result.invoice_url;
+      else window.location.assign(result.invoice_url);
+    } catch (reason) {
+      tab?.close();
+      setError(reason instanceof Error ? reason.message : "Your invoice could not be opened.");
+    }
+  }
   return (
     <section className="member-workspace-panel member-workspace-requests">
       <header>
@@ -373,6 +416,18 @@ export function OrdersPanel({ accessToken }: { accessToken: string }) {
           {error}
         </p>
       )}
+      {notice && <p role="status" className="member-deposit-note">{notice}</p>}
+      {needsAddress && (
+        <div className="member-address-needed" role="note">
+          <div>
+            <strong>Add a shipping address</strong>
+            <span>You'll need one before paying for an order, so we know where to deliver.</span>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => setPaying(due.find((invoice) => invoice.kind === "order") || null)}>
+            Add address
+          </button>
+        </div>
+      )}
       {due.length ? (
         <section className="shop-orders" aria-label="Invoices to pay">
           <h3>Ready to pay</h3>
@@ -384,18 +439,56 @@ export function OrdersPanel({ accessToken }: { accessToken: string }) {
                   {invoice.quantity > 1 ? `${invoice.quantity} × ` : ""}
                   {money(invoice.amount, invoice.currency)}
                 </small>
+                {invoice.kind === "order" && invoice.ship_to && <small>Deliver to: {addressLine(invoice.ship_to)}</small>}
+                {cancelling === invoice.id && (
+                  <div className="member-request-cancel" role="group" aria-label={`Cancel ${invoice.title}`}>
+                    <strong>Cancel this consultation?</strong>
+                    <p>Its invoice stops working. You can book again later.</p>
+                    <div className="member-request-cancel-actions">
+                      <button type="button" className="danger-button" disabled={cancelBusy} onClick={() => void cancelConsultation(invoice)}>
+                        {cancelBusy ? "Cancelling…" : "Yes, cancel"}
+                      </button>
+                      <button type="button" className="secondary-button" disabled={cancelBusy} onClick={() => setCancelling("")}>
+                        Keep it
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              {invoice.invoice_url ? (
-                <a className="primary-button" href={invoice.invoice_url} target="_blank" rel="noreferrer noopener">
-                  Pay invoice
-                </a>
-              ) : (
-                <small>We emailed your invoice.</small>
-              )}
+              <div className="shop-order-actions">
+                {invoice.invoice_url ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => (invoice.kind === "order" ? setPaying(invoice) : void payDirect(invoice))}
+                  >
+                    Pay invoice
+                  </button>
+                ) : (
+                  <small>We emailed your invoice.</small>
+                )}
+                {invoice.kind === "consultation" && cancelling !== invoice.id && (
+                  <button type="button" className="link-danger" onClick={() => setCancelling(invoice.id)}>
+                    Cancel consultation
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </section>
       ) : null}
+      {paying && (
+        <AddressPickerDialog
+          accessToken={accessToken}
+          invoice={paying}
+          onClose={() => {
+            setPaying(null);
+            setAddressVersion((value) => value + 1);
+            load();
+            onAddressChange?.();
+          }}
+        />
+      )}
       {data?.orders.length ? (
         <section className="shop-orders" aria-label="Store orders">
           <h3>Orders</h3>
@@ -524,7 +617,7 @@ export function BrowsePanel({
         <p>What's moving right now, then everything by category.</p>
       </header>
       {!filtering && home ? (
-        <HotRails rails={home.rails} giveaways={home.giveaways} onOpen={onOpen} onWant={onWant} onEnter={onEnter} busyId={busyId} />
+        <HotRails rails={home.rails} giveaways={home.giveaways} onOpen={onOpen} onWant={onWant} onEnter={onEnter} busyId={busyId} accessToken={accessToken} />
       ) : null}
       <form className="member-product-filters member-workspace-filters shop-filters" onSubmit={search}>
         <label>
@@ -607,7 +700,66 @@ export function BrowsePanel({
       ) : (
         <section className="shop-grid" aria-label="Available products">
           {(result?.products || []).map((card) => (
-            <ProductTile key={card.id} card={card} onOpen={onOpen} />
+            <ProductTile key={card.id} card={card} onOpen={onOpen} accessToken={accessToken} />
+          ))}
+        </section>
+      )}
+    </section>
+  );
+}
+
+/** Saved products: the shop products the member hearted, same cards as Browse. */
+export function SavedPanel({
+  accessToken,
+  onOpen,
+  onBrowse,
+}: {
+  accessToken: string;
+  onOpen: (card: ShopCard) => void;
+  onBrowse: () => void;
+}) {
+  const [cards, setCards] = useState<ShopCard[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    apiRequest<BrowseResponse>("/members/shop/products?saved_only=true&sort=newest&limit=100", accessToken)
+      .then((result) => alive && setCards(result.products))
+      .catch((reason) => alive && setError(reason instanceof Error ? reason.message : "Saved products could not be loaded."));
+    return () => {
+      alive = false;
+    };
+  }, [accessToken]);
+  return (
+    <section className="member-workspace-panel" aria-label="Saved products panel">
+      <header>
+        <small>YOUR ACCOUNT</small>
+        <h2>Saved products</h2>
+        <p>Products you saved with the heart. Tap the heart again to remove one.</p>
+      </header>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      {!cards ? (
+        !error && <p role="status">Loading saved products…</p>
+      ) : !cards.length ? (
+        <div className="empty-copy shop-saved-empty">
+          <p>You haven't saved anything yet. Tap the heart on any product to keep it here.</p>
+          <button type="button" className="primary-button" onClick={onBrowse}>
+            Browse products
+          </button>
+        </div>
+      ) : (
+        <section className="shop-grid" aria-label="Saved products">
+          {cards.map((card) => (
+            <ProductTile
+              key={card.id}
+              card={{ ...card, saved: true }}
+              onOpen={onOpen}
+              accessToken={accessToken}
+              onSavedChange={(item, saved) => !saved && setCards((current) => (current || []).filter((row) => row.id !== item.id))}
+            />
           ))}
         </section>
       )}

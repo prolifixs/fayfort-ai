@@ -788,3 +788,50 @@
 /* Operations Center menu badge: green while work is pending, red once any of it is overdue. */
 .queue-badge.is-pending { background: var(--accent); }
 .queue-badge.is-overdue { background: var(--color-danger); }
+
+/* ---------- Control Center dark mode ----------
+   Set by the Light/Dark switch (staffTheme.tsx) on <html data-theme="dark"> only while a staff page is open.
+   Base colours are swapped; the derived ones in tokens.css recompute from them. */
+:root[data-theme="dark"] {
+  --color-bg: #161c23;
+  --color-surface: #0f1419;
+  --color-text: #e4e9ee;
+  --color-muted: #9aa6b2;
+  --color-accent: #5aaee6;
+  --color-accent-text: #08121a;
+  --color-border-strong: #7d8b99;
+  --color-focus: #6fbaf0;
+  --color-success: #4cc4a2;
+  --color-danger: #f0857a;
+  --color-warning: #e3b55a;
+  --color-sale: #f39a62;
+  --staff-accent: #3fb79c;
+  --color-scrim: rgb(0 0 0 / 62%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 6px 20px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 20px 60px rgb(0 0 0 / 55%);
+  --operations-ink: var(--color-text);
+  --operations-muted: var(--color-muted);
+  --operations-line: var(--color-border);
+  --operations-surface: var(--color-bg);
+  --operations-canvas: var(--color-surface);
+  --operations-accent: var(--color-accent);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] body { background: var(--color-surface); color: var(--color-text); }
+
+.staff-theme-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius-pill);
+  background: var(--color-bg); color: var(--color-text);
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer;
+}
+.staff-theme-toggle:hover { background: var(--color-hover); }
+.staff-theme-toggle svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ops-head-button.staff-theme-toggle { min-height: 40px; border-radius: var(--radius-md); }
+:is(.staff-app, .operations-center-page) .staff-theme-toggle[aria-pressed][type] { background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); box-shadow: none; }
+:is(.staff-app, .operations-center-page) .staff-theme-toggle[aria-pressed][type]:hover { background: var(--color-hover); }
+:root[data-theme="dark"] .status-claimed { color: var(--color-accent); }
+:root[data-theme="dark"] .status-waiting { color: var(--color-warning); background: var(--color-warning-soft); }
+:root[data-theme="dark"] .status-blocked { color: var(--color-danger); }
+:root[data-theme="dark"] .status-completed { color: var(--color-success); }

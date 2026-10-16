@@ -403,6 +403,24 @@ def create_invoice(*, invoice_id: str, email: str, title: str, unit_price: float
     return draft_id, str(url or "")
 
 
+def set_draft_shipping_address(draft_order_gid: str, address: dict, *, client: httpx.Client | None = None) -> None:
+    """Put the member's chosen delivery address on an unpaid draft order before they pay."""
+    name = str(address.get("recipient_name") or "").strip()
+    first, _, last = name.partition(" ")
+    shipping = {key: value for key, value in {
+        "firstName": first or None, "lastName": last or None, "phone": address.get("phone"),
+        "address1": address.get("line1"), "address2": address.get("line2"), "city": address.get("city"),
+        "province": address.get("region"), "zip": address.get("postal_code"), "country": address.get("country"),
+    }.items() if value}
+    data = admin_graphql(
+        "mutation Ship($id: ID!, $input: DraftOrderInput!) { draftOrderUpdate(id: $id, input: $input) { "
+        "draftOrder { id } userErrors { field message } } }",
+        {"id": draft_order_gid, "input": {"shippingAddress": shipping}}, client=client)
+    problem = user_errors(data.get("draftOrderUpdate"))
+    if problem:
+        raise ShopifyError(problem)
+
+
 def delete_draft_order(draft_order_gid: str, *, client: httpx.Client | None = None) -> None:
     """Delete an unpaid draft order so its invoice link can no longer be paid."""
     data = admin_graphql(

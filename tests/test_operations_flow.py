@@ -35,6 +35,7 @@ class Query:
     def is_(self, c, v): self.filters.append((c, "is", v)); return self
     def insert(self, values): self.op, self.values = "insert", values; return self
     def update(self, values): self.op, self.values = "update", values; return self
+    def delete(self): self.op = "delete"; return self
 
     @staticmethod
     def _value(row, column):
@@ -63,6 +64,10 @@ class Query:
             if self._limit:
                 found = found[: self._limit]
             return SimpleNamespace(data=(found[0] if found else None) if self.single else found)
+        if self.op == "delete":
+            gone = [r for r in rows if self._match(r)]
+            self.db.rows[self.table] = [r for r in rows if not self._match(r)]
+            return SimpleNamespace(data=[dict(r) for r in gone])
         if self.op == "update":
             changed = [r for r in rows if self._match(r)]
             for r in changed:

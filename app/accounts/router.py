@@ -496,7 +496,7 @@ def create_accounts_router() -> APIRouter:
         try:
             response = (
                 supabase.table("member_profiles")
-                .select("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
+                .select("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,onboarding_completed_at,created_at")
                 .eq("user_id", user_id)
                 .maybe_single()
                 .execute()
@@ -506,7 +506,20 @@ def create_accounts_router() -> APIRouter:
             profile = dict(response.data)
             photo_path = profile.pop("member_photo_path", None)
             profile["profile_photo_url"] = signed_member_photo_url(photo_path) if photo_path else None
-            return {"profile": profile}
+            extras: dict = {}
+            try:
+                from app.accounts.member_addresses import member_extras
+                extras = member_extras(user_id, {**profile, "member_photo_path": photo_path})
+                default = next((a for a in extras["addresses"] if a.get("is_default")), None)
+                if default:
+                    # Older screens read the single profile address; give them the default one.
+                    profile.update({"shipping_phone": default.get("phone"), "shipping_address_line1": default.get("line1"),
+                                    "shipping_address_line2": default.get("line2"), "shipping_city": default.get("city"),
+                                    "shipping_region": default.get("region"), "shipping_postal_code": default.get("postal_code"),
+                                    "shipping_country": default.get("country")})
+            except Exception:
+                logger.exception("Could not load member addresses")
+            return {"profile": profile, **extras}
         except HTTPException:
             raise
         except Exception as exc:

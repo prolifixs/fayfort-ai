@@ -558,6 +558,17 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.queryByRole("button",{name:"Sign out and sign in again"})).not.toBeInTheDocument();
  });
  it("shows permanent module navigation and an explicit disabled-stream status",async()=>{renderWorkspace();expect(await screen.findByRole("heading",{name:"Overview"})).toBeInTheDocument();expect(screen.getByRole("combobox",{name:"Client account"})).toHaveValue("business-1");const nav=screen.getByRole("navigation",{name:"Main navigation"});expect(within(nav).getByRole("button",{name:/Conversations/})).toBeInTheDocument();expect(within(nav).getByRole("button",{name:/Verification/})).toBeInTheDocument();await waitFor(()=>expect(screen.getByText(/Events Disabled/)).toBeInTheDocument());});
+ it("lets staff switch the Control Center to dark mode and back, remembered on this device",async()=>{
+  window.localStorage.removeItem("fayfort.staffTheme");
+  const view=renderWorkspace();
+  fireEvent.click(await screen.findByRole("button",{name:"Switch to dark mode"}));
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(window.localStorage.getItem("fayfort.staffTheme")).toBe("dark");
+  fireEvent.click(screen.getByRole("button",{name:"Switch to light mode"}));
+  expect(document.documentElement.dataset.theme).toBe("light");
+  view.unmount();
+  expect(document.documentElement.dataset.theme).toBeUndefined();
+ });
  it("loads the Knowledge page and saves new FAQ content only as a draft",async()=>{
   renderWorkspace();
   fireEvent.click(await screen.findByRole("button",{name:/Knowledge/}));

@@ -50,7 +50,19 @@ const profile = {
 const contacts = { tier: "free", credits: 0, pro_allowance_left: 0, pro_allowance: 0, packs: [{ id: "single", credits: 1, price: 15, currency: "USD" }, { id: "pack5", credits: 5, price: 50, currency: "USD" }] };
 
 const fixtures: Record<string, unknown> = {
-  "/members/me": { profile },
+  "/members/me": {
+    profile, onboarding_completed: true,
+    completion: { percent: 60, done: 3, total: 5, address_ready: true, items: [
+      { key: "email", label: "Verify your email", done: true },
+      { key: "name", label: "Add your name", done: true },
+      { key: "address", label: "Add a shipping address", done: true, required: true },
+      { key: "phone", label: "Add a phone number for delivery", done: false, why: "Couriers may call before they deliver." },
+      { key: "photo", label: "Add a profile photo", done: false },
+    ] },
+  },
+  "/members/addresses": { max: 2, addresses: [
+    { id: "a1", label: "Home", recipient_name: "Jordan Member", phone: null, line1: "12 Allen Avenue", line2: "Flat 3", city: "Ikeja", region: "Lagos", postal_code: "100271", country: "Nigeria", is_default: true },
+  ] },
   "/members/me/theme": { selected_theme: "base", active_theme: null, fallback_reason: null },
   "/members/conversations": { conversations: chats },
   "/members/conversations/c1/messages": { messages },
@@ -72,7 +84,10 @@ const fixtures: Record<string, unknown> = {
       { id: "n2", title: "Giveaway closing soon", body: "Enter the lace front wig giveaway before tonight.", created_at: "2026-10-14T00:00:00Z", read_at: null, href: "/member/chat?panel=catalog" },
     ],
   },
-  "/members/orders": { orders: [], invoices: [], wanted: [] },
+  "/members/orders": { orders: [], wanted: [], invoices: [
+    { id: "i1", kind: "order", title: "Body wave wig 22 inch", amount: 96, currency: "USD", quantity: 1, invoice_url: "https://shop.example/i/1", status: "sent", sent_at: "2026-10-15T00:00:00Z", paid_at: null },
+    { id: "i2", kind: "consultation", title: "FayFort consultation", amount: 100, currency: "USD", quantity: 1, invoice_url: "https://shop.example/i/2", status: "sent", sent_at: "2026-10-15T00:00:00Z", paid_at: null },
+  ] },
   "/members/products": { products: [], categories: [] },
   "/members/plan": { tier: "free", deposit: { rate: 0.5, reason: "free_rate" }, consultation: { tier: "free", price: 100, currency: "USD", included: false, included_left: 0, full_price: 100 }, contacts },
   "/members/rank": {
@@ -93,7 +108,7 @@ const fixtures: Record<string, unknown> = {
   },
 };
 
-export async function signedInMember(page: Page) {
+export async function signedInMember(page: Page, options: { newMember?: boolean } = {}) {
   await page.addInitScript(([session]) => {
     window.localStorage.setItem("sb-test-fayfort-auth-token", session);
   }, [JSON.stringify({
@@ -108,6 +123,7 @@ export async function signedInMember(page: Page) {
   });
   await page.route(`${API}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (options.newMember && path === "/members/me") return route.fulfill({ json: { ...(fixtures[path] as object), onboarding_completed: false } });
     const body = fixtures[path] ?? (path.startsWith("/members/shop/products/") ? { product: { ...products[0], description: "Soft 180% density body wave lace front wig, pre-plucked hairline, 22 inch." }, variants: [{ id: "v1", title: "22 inch", price: 96, available: true }, { id: "v2", title: "24 inch", price: 110, available: true }], media: [], pairs_with: [products[4], products[1]] } : {});
     return route.fulfill({ json: body });
   });

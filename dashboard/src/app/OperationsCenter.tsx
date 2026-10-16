@@ -35,6 +35,7 @@ import {
   useFirstWeek,
 } from "./operations/FlowPanels";
 import { GUIDES, guideKeyFor, playbookSteps } from "./operations/playbooks";
+import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
 
 type View = "queue" | "archive" | "guide" | "team" | "reports";
 
@@ -52,6 +53,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function OperationsCenterPage() {
   const ops = useOperationsCenter();
+  const [staffTheme, setStaffTheme] = useStaffTheme();
   const [view, setView] = useState<View>("queue");
   const [help, setHelp] = useState<string | null>(null);
   const detailRef = useRef<HTMLElement>(null);
@@ -157,6 +159,7 @@ export function OperationsCenterPage() {
           {token && (
             <div className="ops-head-actions">
               <OperationsNotifications accessToken={token} />
+              <StaffThemeToggle theme={staffTheme} onChange={setStaffTheme} className="ops-head-button staff-theme-toggle" />
               <button
                 type="button"
                 className="ops-head-button"

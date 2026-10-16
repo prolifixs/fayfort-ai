@@ -20,6 +20,7 @@ import { SettingsPage } from "./SettingsPage";
 import { OperationalModulePage } from "./OperationalModulePage";
 import { AnalyticsPage } from "./AnalyticsPage";
 import { InfrastructurePage } from "../staff/InfrastructurePage";
+import { StaffThemeToggle, useStaffTheme } from "../staff/staffTheme";
 
 export const modules = [
   ["Overview", "Workspace"],
@@ -87,6 +88,7 @@ export function DashboardWorkspace({
   const [eventStatus, setEventStatus] = useState("Connecting");
   const [waitingHandoffs, setWaitingHandoffs] = useState<number | null>(null);
   const [pendingWork, setPendingWork] = useState<{ pending: number; overdue: number } | null>(null);
+  const [staffTheme, setStaffTheme] = useStaffTheme();
   const [acknowledgedWaiting, setAcknowledgedWaiting] = useState<Record<string, number>>({});
   const eventCursors = useRef<Record<string, number>>({});
   const currentBusiness = businesses.find((item) => item.business_id === businessId);
@@ -462,6 +464,7 @@ export function DashboardWorkspace({
                 </button>
               </>
             )}
+            <StaffThemeToggle theme={staffTheme} onChange={setStaffTheme} />
             {import.meta.env.DEV ? <small className="staff-dev-pill">Dev</small> : null}
           </div>
         </header>

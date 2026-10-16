@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FindItResult, Giveaway, Rail, ShopCard, TrendCard } from "./commerceApi";
 import { isTrend, money, timeLeft } from "./commerceApi";
+import { SaveProductButton } from "./accountExtras";
 
 export function Countdown({ endsAt }: { endsAt: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -34,11 +35,16 @@ export function ProductTile({
   onOpen,
   onRequest,
   compact = false,
+  accessToken,
+  onSavedChange,
 }: {
   card: ShopCard;
   onOpen: (card: ShopCard) => void;
   onRequest?: (card: ShopCard) => void;
   compact?: boolean;
+  /** When given, the tile shows a heart to save the product. */
+  accessToken?: string | null;
+  onSavedChange?: (card: ShopCard, saved: boolean) => void;
 }) {
   return (
     <article className={compact ? "shop-tile compact" : "shop-tile"} aria-label={card.name}>
@@ -52,6 +58,15 @@ export function ProductTile({
         )}
         {card.sale ? <b className="shop-badge sale">Sale</b> : card.low_stock ? <b className="shop-badge">Few left</b> : null}
       </button>
+      {accessToken && (
+        <SaveProductButton
+          accessToken={accessToken}
+          productId={card.id}
+          initial={card.saved}
+          compact
+          onChange={(saved) => onSavedChange?.(card, saved)}
+        />
+      )}
       <div className="shop-tile-copy">
         <small>{card.group_name || card.category_ref || (card.source === "shopify" ? "FayFort store" : "Sourcing")}</small>
         <strong>{card.name}</strong>
@@ -192,6 +207,7 @@ export function HotRails({
   onWant,
   onEnter,
   busyId,
+  accessToken,
 }: {
   rails: Rail[];
   giveaways: Giveaway[];
@@ -199,6 +215,7 @@ export function HotRails({
   onWant: (trend: TrendCard) => void;
   onEnter: (giveaway: Giveaway) => void;
   busyId?: string;
+  accessToken?: string | null;
 }) {
   if (!rails.length && !giveaways.length) return null;
   return (
@@ -221,7 +238,7 @@ export function HotRails({
               isTrend(item) ? (
                 <TrendTile key={item.id} trend={item} onWant={onWant} onOpenProduct={onOpen} busy={busyId === item.id} />
               ) : (
-                <ProductTile key={item.id} card={item} onOpen={onOpen} compact />
+                <ProductTile key={item.id} card={item} onOpen={onOpen} compact accessToken={accessToken} />
               ),
             )}
           </div>

@@ -1011,3 +1011,83 @@ article.shop-tile,
   .member-request-progress{gap:2px 10px}
   .member-request-progress{grid-template-columns:1fr}
 }
+
+/* ---------- Save heart (shop products) ---------- */
+.shop-tile{position:relative}
+.shop-save{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--color-border);border-radius:var(--radius-pill);background:var(--color-bg);color:var(--color-text);font:inherit;font-size:var(--text-sm);font-weight:var(--weight-medium);cursor:pointer}
+.shop-save svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.shop-save.is-saved{color:var(--color-sale);border-color:color-mix(in srgb,var(--color-sale) 40%,transparent)}
+.shop-save.is-saved svg{fill:currentColor}
+.shop-save:disabled{opacity:.7}
+.shop-save.is-compact{position:absolute;top:8px;right:8px;z-index:1;justify-content:center;width:34px;min-height:34px;padding:0;box-shadow:var(--shadow-sm)}
+.shop-product-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.shop-product-title h2{margin:0}
+.shop-saved-empty{display:grid;justify-items:start;gap:10px}
+
+/* ---------- Orders: pay with an address, cancel a consultation ---------- */
+.shop-order-actions{display:grid;justify-items:end;gap:8px}
+.member-address-needed{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 16px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--color-warning) 40%,transparent);border-left:4px solid var(--color-warning);border-radius:var(--radius-md);background:var(--color-warning-soft)}
+.member-address-needed>div{display:grid;gap:2px}
+.member-address-needed span{color:var(--color-muted);font-size:var(--text-sm)}
+.link-button{padding:0;border:0;background:none;color:var(--color-accent);font:inherit;font-weight:var(--weight-medium);text-decoration:underline;cursor:pointer;justify-self:start}
+
+/* ---------- Addresses ---------- */
+.member-address-list{display:grid;gap:12px}
+.member-address-card{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
+.member-address-card.is-default{border-color:color-mix(in srgb,var(--color-accent) 45%,transparent);background:var(--color-accent-soft)}
+.member-address-card>div:first-child{display:grid;gap:3px;min-width:0}
+.member-address-card small{color:var(--color-muted)}
+.member-address-missing{color:var(--color-warning)!important}
+.member-address-badge{margin-left:8px;padding:2px 8px;border-radius:var(--radius-pill);background:var(--color-accent);color:var(--color-accent-text);font-size:var(--text-2xs);font-weight:var(--weight-strong);vertical-align:middle}
+.member-address-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.member-address-add{justify-self:start}
+.member-address-form{display:grid;gap:12px;padding:16px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface)}
+.member-address-form label{display:grid;gap:6px;font-size:var(--text-sm)}
+.member-address-form input,.member-address-form select{width:100%;min-width:0}
+.member-checkbox-row{display:flex!important;align-items:center;gap:8px}
+.member-checkbox-row input{width:auto!important}
+.member-address-choice{display:grid;gap:10px;margin:12px 0;padding:0;border:0}
+.member-address-choice>label{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer}
+.member-address-choice>label.is-chosen{border-color:var(--color-accent);background:var(--color-accent-soft)}
+.member-address-choice>label>span{display:grid;gap:2px}
+.member-address-choice small{color:var(--color-muted)}
+.member-pay-button{width:100%;margin-top:8px}
+
+/* ---------- Profile completion ---------- */
+.member-meter{display:block;width:100%;height:6px;overflow:hidden;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--color-text) 10%,transparent)}
+.member-meter>span{display:block;height:100%;border-radius:inherit;background:var(--color-warning);transition:width var(--duration) var(--ease)}
+.member-meter.is-mid>span{background:var(--color-accent)}
+.member-meter.is-complete>span{background:var(--color-success)}
+.member-completion-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.member-completion-head h2{margin:0}
+.member-completion-head span{color:var(--color-muted);font-size:var(--text-sm)}
+.member-completion .member-meter{margin:10px 0 14px;height:8px}
+.member-completion-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.member-completion-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:10px}
+.member-completion-list li>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--color-surface-2);color:var(--color-muted);font-size:var(--text-xs);font-weight:var(--weight-strong)}
+.member-completion-list li.is-done>span{background:var(--color-success-soft);color:var(--color-success)}
+.member-completion-list li.is-required>span{background:var(--color-warning-soft);color:var(--color-warning)}
+.member-completion-list li.is-done strong{color:var(--color-muted);font-weight:var(--weight-medium)}
+.member-completion-list li>div{display:grid;gap:2px}
+.member-completion-list small{color:var(--color-muted)}
+.mapp-account-meter{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;margin-top:4px}
+.mapp-account-meter small{color:var(--color-muted);font-size:var(--text-2xs)}
+.member-account-completion{display:grid!important;gap:6px}
+.member-account-completion>span{display:grid;gap:2px;text-align:left}
+.member-account-completion small{color:var(--color-warning);font-size:var(--text-2xs)}
+
+/* ---------- First-visit tour ---------- */
+.mapp-tour-anchor{display:inline-flex}
+.member-tour{position:fixed;inset:0;z-index:var(--z-dialog,100)}
+.member-tour-dim{position:absolute;inset:0;background:var(--color-scrim)}
+.member-tour-spot{position:absolute;border-radius:var(--radius-md);box-shadow:0 0 0 9999px var(--color-scrim),0 0 0 3px var(--color-accent);pointer-events:none;transition:all 220ms var(--ease)}
+.member-tour-card{position:absolute;display:grid;gap:8px;width:min(320px,calc(100vw - 32px));padding:18px;border-radius:var(--radius-lg);background:var(--color-bg);color:var(--color-text);box-shadow:var(--shadow-lg)}
+.member-tour-card.is-centered{left:50%;top:50%;transform:translate(-50%,-50%)}
+.member-tour-card small{color:var(--color-accent);font-size:var(--text-xs);font-weight:var(--weight-strong);letter-spacing:.04em;text-transform:uppercase}
+.member-tour-card h2{margin:0;font-size:var(--text-lg)}
+.member-tour-card p{margin:0;color:var(--color-muted);line-height:var(--leading)}
+.member-tour-dots{display:flex;gap:5px;margin-top:4px}
+.member-tour-dots span{width:6px;height:6px;border-radius:50%;background:var(--color-border)}
+.member-tour-dots span.is-active{width:18px;border-radius:3px;background:var(--color-accent)}
+.member-tour-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.member-tour-actions>span{display:flex;gap:8px}

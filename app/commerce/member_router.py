@@ -115,10 +115,13 @@ def create_member_commerce_router() -> APIRouter:
                category_ref: str | None = Query(default=None, max_length=200),
                group: str | None = Query(default=None, max_length=100),
                sort: Literal["for_you", "newest", "price_low", "price_high"] = "for_you",
-               in_stock: bool = False, limit: int = Query(default=60, ge=1, le=100)):
+               in_stock: bool = False, saved_only: bool = False, limit: int = Query(default=60, ge=1, le=100)):
         member_id = verified_member(authorization)
         try:
             products = service.load_products()
+            if saved_only:
+                saved = service.saved_ids(member_id)
+                products = [p for p in products if str(p["id"]) in saved]
             groups = service.category_groups()
             if category_ref:
                 products = [p for p in products if p.get("category_ref") == category_ref]
@@ -289,7 +292,7 @@ def create_member_commerce_router() -> APIRouter:
                 .order("placed_at", desc=True).limit(100).execute())
             invoices = rows(db().table("commerce_invoices").select(
                 "id,request_id,trend_item_id,title,amount,currency,quantity,invoice_url,status,sent_at,paid_at,created_at,"
-                "kind,deposit_credit")
+                "kind,deposit_credit,ship_to")
                 .eq("member_id", member_id).in_("status", ["sent", "paid"]).order("created_at", desc=True)
                 .limit(100).execute())
             wants = rows(db().table("commerce_pool_members").select("trend_item_id,request_id,joined_at")

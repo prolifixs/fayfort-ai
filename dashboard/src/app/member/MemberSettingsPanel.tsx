@@ -5,45 +5,40 @@ import { supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
 import { MemberSecuritySection } from "../auth/MemberSecuritySection";
 import { MemberEmailPreferences } from "./MemberEmailPreferences";
-import {
-  type MemberShippingForm,
-  emptyMemberShipping,
-  formatMemberTier,
-  memberCountryOptions,
-  memberDialCodes,
-  memberDialOptions,
-  memberShippingFromProfile,
-  splitMemberPhone,
-} from "./memberShared";
+import { formatMemberTier } from "./memberShared";
+import { AddressBook, ProfileCompletionCard, type ProfileCompletion } from "./accountExtras";
 
 /** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
 export function MemberSettingsPanel({
   onProfileChange,
   onOpenPlans,
+  onCompletionChange,
 }: {
   onProfileChange?: (profile: Record<string, unknown>) => void;
   onOpenPlans?: () => void;
+  onCompletionChange?: (completion: ProfileCompletion) => void;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<string[]>([]);
   const [accountEmail, setAccountEmail] = useState("");
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
-  const [shipping, setShipping] = useState<MemberShippingForm>(emptyMemberShipping);
-  const [phoneCountry, setPhoneCountry] = useState("US");
-  const [phoneLocal, setPhoneLocal] = useState("");
+  const [completion, setCompletion] = useState<ProfileCompletion | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(memberSoundsEnabled);
-  function hydrateShipping(profileData: Record<string, unknown>) {
-    const saved = memberShippingFromProfile(profileData);
-    setShipping(saved);
-    const parsed = splitMemberPhone(saved.shipping_phone);
-    setPhoneLocal(parsed.number);
-    setPhoneCountry(parsed.country);
+  async function reloadCompletion() {
+    if (!token) return;
+    try {
+      const member = await apiRequest<{ profile: Record<string, unknown>; completion?: ProfileCompletion }>("/members/me", token);
+      setCompletion(member.completion || null);
+      if (member.completion) onCompletionChange?.(member.completion);
+    } catch {
+      /* the address book shows its own errors */
+    }
   }
   useEffect(() => {
     let mounted = true;
@@ -59,9 +54,9 @@ export function MemberSettingsPanel({
       setAccountEmail(data.session?.user.email || "");
       if (accessToken) {
         try {
-          const member = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", accessToken);
+          const member = await apiRequest<{ profile: Record<string, unknown>; completion?: ProfileCompletion }>("/members/me", accessToken);
           setProfile(member.profile);
-          hydrateShipping(member.profile);
+          setCompletion(member.completion || null);
           const { data: identityData, error: identityError } = await client.auth.getUserIdentities();
           if (identityError) throw identityError;
           if (mounted) setProviders((identityData?.identities || []).map((identity) => identity.provider));
@@ -136,70 +131,10 @@ export function MemberSettingsPanel({
       setPhotoBusy(false);
     }
   }
-  async function saveShipping(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!token) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const dial = memberDialCodes[phoneCountry] || "";
-      const phone = phoneLocal.trim()
-        ? phoneCountry === "INTL"
-          ? phoneLocal.trim()
-          : `${dial} ${phoneLocal.trim()}`
-        : "";
-      const payload = { ...shipping, shipping_phone: phone };
-      const result = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", token, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-      setProfile(result.profile);
-      hydrateShipping(result.profile);
-      setNotice("Shipping details saved.");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Shipping details could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function clearShipping() {
-    if (!token) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", token, {
-        method: "PATCH",
-        body: JSON.stringify(Object.fromEntries(Object.keys(emptyMemberShipping).map((key) => [key, null]))),
-      });
-      setProfile(result.profile);
-      setShipping(emptyMemberShipping);
-      setPhoneCountry("US");
-      setPhoneLocal("");
-      setNotice("Saved shipping details cleared.");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Shipping details could not be cleared.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  function updateShipping(field: keyof MemberShippingForm, value: string) {
-    setShipping((current) => ({ ...current, [field]: value }));
-    setNotice("");
-  }
   useEffect(() => {
     if (profile && onProfileChange) onProfileChange(profile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
-  const addressStarted = Boolean(
-    shipping.shipping_address_line1 ||
-      shipping.shipping_address_line2 ||
-      shipping.shipping_city ||
-      shipping.shipping_region ||
-      shipping.shipping_postal_code ||
-      shipping.shipping_country,
-  );
   if (loading) return <p role="status">Checking your member sign-in…</p>;
   if (!token)
     return (
@@ -209,6 +144,14 @@ export function MemberSettingsPanel({
     );
   return (
     <div className="member-settings-panel">
+      <ProfileCompletionCard
+        completion={completion}
+        onAction={(key) =>
+          document
+            .getElementById(key === "photo" ? "member-settings-photo" : "member-settings-addresses")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      />
       <section className="member-settings-section" aria-labelledby="member-settings-signin">
         <h2 id="member-settings-signin">Sign-in methods</h2>
         <p>Link a provider to keep using the same member profile, saved products, and requests.</p>
@@ -278,131 +221,7 @@ export function MemberSettingsPanel({
           )}
         </div>
       </section>
-      <section className="member-settings-section" aria-labelledby="member-settings-shipping">
-        <h2 id="member-settings-shipping">Phone and shipping address</h2>
-        <p>Save contact and address details for shipping. You can edit or clear these details at any time.</p>
-        <form className="member-shipping-form" onSubmit={(event) => void saveShipping(event)}>
-          <div className="member-phone-field">
-            <span>Phone number</span>
-            <div className="member-phone-input">
-              <select
-                aria-label="Phone country code"
-                autoComplete="tel-country-code"
-                value={phoneCountry}
-                onChange={(event) => {
-                  setPhoneCountry(event.target.value);
-                  setNotice("");
-                }}
-              >
-                <option value="INTL">International number</option>
-                {memberDialOptions.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.name} ({country.dial})
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="Phone number"
-                type="tel"
-                autoComplete="tel-national"
-                maxLength={40}
-                value={phoneLocal}
-                onChange={(event) => {
-                  setPhoneLocal(event.target.value);
-                  setNotice("");
-                }}
-                placeholder="555 123 4567"
-              />
-            </div>
-          </div>
-          <label>
-            Address line 1
-            <input
-              autoComplete="address-line1"
-              maxLength={160}
-              required={addressStarted}
-              value={shipping.shipping_address_line1}
-              onChange={(event) => updateShipping("shipping_address_line1", event.target.value)}
-              placeholder="Street address"
-            />
-          </label>
-          <label>
-            Address line 2 <span className="quiet-note">(optional)</span>
-            <input
-              autoComplete="address-line2"
-              maxLength={160}
-              value={shipping.shipping_address_line2}
-              onChange={(event) => updateShipping("shipping_address_line2", event.target.value)}
-              placeholder="Apartment, suite, unit"
-            />
-          </label>
-          <div className="member-shipping-grid">
-            <label>
-              City or town
-              <input
-                autoComplete="address-level2"
-                maxLength={100}
-                required={addressStarted}
-                value={shipping.shipping_city}
-                onChange={(event) => updateShipping("shipping_city", event.target.value)}
-              />
-            </label>
-            <label>
-              State, province, or region
-              <input
-                autoComplete="address-level1"
-                maxLength={100}
-                value={shipping.shipping_region}
-                onChange={(event) => updateShipping("shipping_region", event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="member-shipping-grid">
-            <label>
-              ZIP or postal code
-              <input
-                autoComplete="postal-code"
-                maxLength={32}
-                value={shipping.shipping_postal_code}
-                onChange={(event) => updateShipping("shipping_postal_code", event.target.value)}
-              />
-            </label>
-            <label>
-              Country
-              <select
-                autoComplete="country-name"
-                required={addressStarted}
-                value={shipping.shipping_country}
-                onChange={(event) => updateShipping("shipping_country", event.target.value)}
-              >
-                <option value="">Select country</option>
-                {shipping.shipping_country &&
-                  !memberCountryOptions.some((country) => country.name === shipping.shipping_country) && (
-                    <option value={shipping.shipping_country}>{shipping.shipping_country}</option>
-                  )}
-                {memberCountryOptions.map((country) => (
-                  <option key={country.code} value={country.name}>
-                    {country.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="member-shipping-actions">
-            <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Save shipping details"}
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={busy || !Object.values(shipping).some(Boolean)}
-              onClick={() => void clearShipping()}
-            >
-              Clear saved details
-            </button>
-          </div>
-        </form>
-      </section>
+      <AddressBook accessToken={token} onChange={() => void reloadCompletion()} />
       <section className="member-settings-section" aria-labelledby="member-settings-theme">
         <h2 id="member-settings-theme">Theme</h2>
         <p>
