@@ -140,6 +140,11 @@ def create_member_chat_review_router(
                 finally:
                     supabase.table("member_chat_reviews").delete().eq("id", review["id"]).execute()
                 raise
+            try:
+                from app.accounts import operations_flow  # a person picks it up from the Operations queue
+                operations_flow.open_photo_review({**review, "member_id": member_id, "conversation_id": str(conversation_id)})
+            except Exception:
+                logger.exception("Could not open the photo review in Operations")
             return {"review": {"id": review["id"], "status": "pending_assignment",
                 "created_at": review.get("created_at"), "media": {"content_type": content_type,
                 "byte_size": len(content), "original_filename": safe_name}}}
@@ -307,6 +312,11 @@ def create_member_chat_review_router(
             message = inserted[0] if inserted else None
             if not message:
                 raise RuntimeError("Worker reply insert returned no message")
+            try:
+                from app.accounts import operations_flow
+                operations_flow.close_item("photo_review", str(review_id), reason="Reply sent to the member.")
+            except Exception:
+                logger.exception("Could not close the photo review work item")
             return {"message": {key: message.get(key) for key in
                     ("id", "sender_type", "content", "related_product_ids", "created_at")},
                     "products": products}

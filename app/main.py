@@ -97,10 +97,16 @@ _handoff_window_task: asyncio.Task | None = None
 _keepalive_task: asyncio.Task | None = None
 _rank_task: asyncio.Task | None = None
 _billing_task: asyncio.Task | None = None
+_operations_sweep_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def start_automation_scheduler() -> None:
+    global _operations_sweep_task
+    if settings.OPERATIONS_SWEEP_ENABLED and (_operations_sweep_task is None or _operations_sweep_task.done()):
+        # Recurring orders that are due, group buys, ended giveaways and failing subscriptions become work.
+        from app.accounts.operations_flow import operations_sweep_loop
+        _operations_sweep_task = asyncio.create_task(operations_sweep_loop(), name="fayfort-operations-sweep")
     global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task
     if settings.HANDOFF_WINDOW_ENABLED and (_handoff_window_task is None or _handoff_window_task.done()):
         _handoff_window_task = asyncio.create_task(handoff_window.handoff_window_loop(), name="fayfort-handoff-window")

@@ -34,12 +34,7 @@ export function App() {
     return <AuthCallbackPage />;
   if (window.location.pathname === "/auth/forgot") return <ForgotPasswordPage />;
   if (window.location.pathname === "/email/unsubscribe") return <EmailUnsubscribePage />;
-  if (window.location.pathname === "/worker/member-reviews")
-    return (
-      <StaffRoute>
-        <MemberPhotoReviewApp platformAdmin={false} />
-      </StaffRoute>
-    );
+  if (window.location.pathname === "/worker/member-reviews") return <MovedToOperations />;
   if (window.location.pathname === "/platform/member-reviews")
     return (
       <StaffRoute>
@@ -208,3 +203,17 @@ export function ControlCenterApp() {
 // Re-exported so existing imports from "./App" keep working.
 export { DashboardWorkspace } from "./workspace/DashboardWorkspace";
 export { WorkerInvitationAcceptancePage, WorkerPasswordResetPage, WorkerProvisioningPage } from "./staff/WorkerPages";
+
+/** Photo reviews are Operations Center work items now; old links land there. */
+function MovedToOperations() {
+  useEffect(() => {
+    window.location.replace("/operations");
+  }, []);
+  return (
+    <main className="auth-page">
+      <p role="status">
+        Photo reviews moved to the <a href="/operations">Operations Center</a>.
+      </p>
+    </main>
+  );
+}

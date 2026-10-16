@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { NavIcon, PageErrorBoundary, readable } from "../staff/StaffChrome";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 import type { Business, ConversationRow, EventRecord, WorkspaceProps } from "./types";
-import { PlatformRequestAssignmentPage, WorkerRequestsPage } from "../staff/WorkerPages";
+import { PlatformRequestAssignmentPage } from "../staff/WorkerPages";
 import { WorkforcePage } from "../staff/WorkforcePage";
 import { StaffAccountPage } from "../staff/StaffAccountPage";
 import { EmailCenterPage } from "../staff/EmailCenterPage";
@@ -375,7 +375,7 @@ export function DashboardWorkspace({
           {(activeWorker || platformAdmin) && (
             <section aria-label="Worker requests">
               <h2>{platformAdmin ? "Member work" : "Worker tools"}</h2>
-              {navButton("Member Requests")}
+              {platformAdmin && navButton("Member Requests")}
               <a className="nav-item" href="/operations">
                 <NavIcon name="Operations Center" />
                 <span className="nav-label">Operations Center</span>
@@ -464,7 +464,13 @@ export function DashboardWorkspace({
             platformAdmin ? (
               <PlatformRequestAssignmentPage accessToken={accessToken} />
             ) : (
-              <WorkerRequestsPage accessToken={accessToken} />
+              <div className="empty ops-moved">
+                <h2>Member requests moved to the Operations Center</h2>
+                <p>Requests, photo reviews and shop work are now one queue with step-by-step guidance.</p>
+                <a className="primary-button" href="/operations">
+                  Open the Operations Center
+                </a>
+              </div>
             )
           ) : businessLoading ? (
             <div className="empty" role="status">

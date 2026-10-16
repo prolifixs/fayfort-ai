@@ -538,7 +538,9 @@ class DepartmentalOperationsTests(unittest.TestCase):
         schedule_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = None
         occurrence_query = MagicMock()
         occurrence_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = None
-        table.side_effect = [work_query, request_query, event_query, schedule_query, occurrence_query]
+        media_query = MagicMock()
+        media_query.select.return_value.eq.return_value.order.return_value.execute.return_value.data = []
+        table.side_effect = [work_query, request_query, event_query, media_query, schedule_query, occurrence_query]
 
         response = self.client.get(f"/operations/work-items/{WORK_ITEM}/source-context")
 
@@ -600,7 +602,9 @@ class DepartmentalOperationsTests(unittest.TestCase):
             {"id": "schedule-event-1", "sequence_no": 1, "event_type": "activated",
              "occurrence_number": 1, "details": {}, "created_at": "2026-09-11T18:00:00+00:00"},
         ]
-        table.side_effect = [work_query, request_query, request_events_query, origin_schedule_query,
+        media_query = MagicMock()
+        media_query.select.return_value.eq.return_value.order.return_value.execute.return_value.data = []
+        table.side_effect = [work_query, request_query, request_events_query, media_query, origin_schedule_query,
                              occurrence_query, schedule_query, occurrences_query, schedule_events_query]
 
         response = self.client.get(f"/operations/work-items/{WORK_ITEM}/source-context")

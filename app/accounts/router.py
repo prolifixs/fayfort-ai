@@ -259,6 +259,19 @@ class RequestMilestone(BaseModel):
     tracking_url: str | None = Field(default=None, max_length=2000)
 
 
+class MemberRequestAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def trim_answer(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Enter your answer.")
+        return value
+
+
 class MemberSourcingOptionChoice(BaseModel):
     model_config = ConfigDict(extra="forbid")
     option_id: UUID
@@ -818,6 +831,14 @@ def create_accounts_router() -> APIRouter:
                 option = option[0] if option else None
             if not option:
                 raise RuntimeError("Option selection returned no row")
+            try:
+                from app.accounts import operations_flow  # the sourcing worker sends the invoice next
+                price = f"{option.get('price_amount')} {option.get('currency') or ''}".strip()
+                operations_flow.note_on_request_item(
+                    str(request_id), f"The member chose “{str(option.get('product_name') or 'an option')[:120]}” ({price}). Send the invoice.",
+                    "The member chose a sourcing option.")
+            except Exception:
+                logger.exception("Could not tell Operations about the member's option")
             return {"option": {key: option.get(key) for key in
                 ("id", "product_name", "product_url", "price_amount", "currency", "availability", "member_note", "status", "selected_at")}}
         except Exception as exc:
@@ -836,6 +857,24 @@ def create_accounts_router() -> APIRouter:
             }
             detail = f"{stage_messages[failure_stage]} Refresh the request and try again. (Diagnostic: {failure_stage})"
             raise HTTPException(status_code=409, detail=detail) from exc
+
+    @router.post("/members/requests/{request_id}/answer")
+    def answer_member_request(request_id: UUID, payload: MemberRequestAnswer,
+                              authorization: str | None = Header(default=None)):
+        """The member answers "your input is needed"; sourcing resumes and the work item returns to the queue."""
+        user_id = require_verified_member(authorization)
+        try:
+            supabase.rpc("member_answer_request_input", {"p_request_id": str(request_id), "p_member_id": user_id,
+                                                         "p_message": payload.message}).execute()
+            return {"request_id": str(request_id), "stage": "sourcing"}
+        except Exception as exc:
+            message = str(exc).casefold()
+            if "request not found" in message:
+                raise HTTPException(status_code=404, detail="Request not found.") from exc
+            if "not waiting" in message:
+                raise HTTPException(status_code=409, detail="This request isn't waiting for your answer any more.") from exc
+            logger.exception("Could not save the member's answer")
+            raise HTTPException(status_code=503, detail="Your answer could not be sent. Try again.") from exc
 
     @router.post("/members/requests", status_code=201)
     def create_member_request(payload: MemberPurchaseRequest, authorization: str | None = Header(default=None)):

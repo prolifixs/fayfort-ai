@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # SHOPIFY_STORE_DOMAIN and Admin API credentials are set.
     # Admin API: either a Dev Dashboard app's client id + secret (client credentials grant, token
     # renewed automatically every 24 h) or a legacy custom-app access token.
+    # Operations sweep (app/accounts/operations_flow.py): due recurring orders, group buys, ended giveaways and
+    # failing subscription payments become Operations work every 10 minutes.
+    OPERATIONS_SWEEP_ENABLED: bool = True
     SHOPIFY_STORE_DOMAIN: str = ""  # e.g. fayfort.myshopify.com
     SHOPIFY_CLIENT_ID: str = ""
     SHOPIFY_CLIENT_SECRET: str = ""  # also verifies webhook signatures

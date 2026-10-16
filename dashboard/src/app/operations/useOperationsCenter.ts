@@ -15,6 +15,8 @@ import {
   type HandoffContext,
   type DisputeCase,
   type SourceContext,
+  type FlowContext,
+  type RequestPayments,
   type WorkEvent,
   type WorkforceWorker,
   type Workforce,
@@ -50,6 +52,14 @@ export function useOperationsCenter() {
   const [filterDepartment, setFilterDepartment] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [items, setItems] = useState<WorkItem[]>([]);
+  const [listView, setListView] = useState<"active" | "archive">("active");
+  const [archiveQuery, setArchiveQuery] = useState("");
+  const [archiveDays, setArchiveDays] = useState<30 | 90 | 0>(30);
+  const [hasMore, setHasMore] = useState(false);
+  const [flowContext, setFlowContext] = useState<FlowContext | null>(null);
+  const [payments, setPayments] = useState<RequestPayments | null>(null);
+  const [requestStage, setRequestStage] = useState("");
+  const [requestStageNote, setRequestStageNote] = useState("");
   const [selected, setSelected] = useState<WorkItem | null>(null);
   const [notes, setNotes] = useState<WorkNote[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -143,14 +153,22 @@ export function useOperationsCenter() {
 
   const loadItems = useCallback(
     async (accessToken: string) => {
-      const query = new URLSearchParams({ scope });
+      const query = new URLSearchParams({ scope, view: listView });
       if (filterDepartment) query.set("department", filterDepartment);
-      if (filterStatus) query.set("status", filterStatus);
-      const result = await apiRequest<{ work_items: WorkItem[] }>(`/operations/work-items?${query}`, accessToken);
+      if (filterStatus && listView === "active") query.set("status", filterStatus);
+      if (listView === "archive") {
+        query.set("days", String(archiveDays));
+        if (archiveQuery.trim()) query.set("q", archiveQuery.trim());
+      }
+      const result = await apiRequest<{ work_items: WorkItem[]; has_more?: boolean }>(
+        `/operations/work-items?${query}`,
+        accessToken,
+      );
       setItems(result.work_items || []);
+      setHasMore(Boolean(result.has_more));
       setSelected((current) => (result.work_items || []).find((item) => item.id === current?.id) || null);
     },
-    [scope, filterDepartment, filterStatus],
+    [scope, filterDepartment, filterStatus, listView, archiveDays, archiveQuery],
   );
   const loadDetails = useCallback(
     async (accessToken: string, item: WorkItem) => {
@@ -158,6 +176,8 @@ export function useOperationsCenter() {
       setMemberConversationContext(null);
       setBusinessConversationContext(null);
       setHandoffContext(null);
+      setFlowContext(null);
+      setPayments(null);
       setWorkEvents([]);
       const [noteRows, checkRows, eventRows] = await Promise.all([
         apiRequest<{ notes: WorkNote[] }>(`/operations/work-items/${item.id}/notes`, accessToken),
@@ -179,7 +199,8 @@ export function useOperationsCenter() {
         item.member_request_id ||
         item.work_type === "dispute_case" ||
         (item.member_conversation_id && (canManage || item.assigned_worker_id === userId)) ||
-        item.handoff_id
+        item.handoff_id ||
+        item.metadata?.source_kind
       ) {
         sourceContext = await apiRequest<SourceContext>(
           `/operations/work-items/${item.id}/source-context`,
@@ -196,6 +217,14 @@ export function useOperationsCenter() {
           );
         } catch (reason) {
           candidateError = reason instanceof Error ? reason.message : "Research candidate storage is not available.";
+        }
+      }
+      let paymentRows: RequestPayments | null = null;
+      if (item.member_request_id && item.department === "sourcing") {
+        try {
+          paymentRows = await apiRequest<RequestPayments>(`/operations/work-items/${item.id}/payments`, accessToken);
+        } catch {
+          paymentRows = null;
         }
       }
       const conversation = sourceContext?.conversation;
@@ -219,6 +248,10 @@ export function useOperationsCenter() {
       setMemberConversationContext(conversation && "title" in conversation ? conversation : null);
       setBusinessConversationContext(conversation && "business_id" in conversation ? conversation : null);
       setHandoffContext(sourceContext?.handoff || null);
+      setFlowContext(sourceContext?.flow || null);
+      setPayments(paymentRows);
+      setRequestStage("");
+      setRequestStageNote("");
       setAction(item.status);
       setNextAction(item.next_action);
       setWaitingOn(item.waiting_on || "member");
@@ -362,6 +395,8 @@ export function useOperationsCenter() {
       setMemberConversationContext(null);
       setBusinessConversationContext(null);
       setHandoffContext(null);
+      setFlowContext(null);
+      setPayments(null);
     }
     return () => {
       current = false;
@@ -695,6 +730,98 @@ export function useOperationsCenter() {
       );
     }, "Checklist updated.");
   }
+  /** Sourcing stages staff move by hand (under review, sourcing, needs member input, cancelled). */
+  async function recordRequestStage(event: FormEvent) {
+    event.preventDefault();
+    if (!token || !selected?.member_request_id || !requestStage) return;
+    const stage = requestStage;
+    if (stage === "needs_member_input" && !requestStageNote.trim()) {
+      setError("Write the question for the member. They answer it from their dashboard.");
+      return;
+    }
+    await run(async () => {
+      await apiRequest(`/workers/requests/${selected.member_request_id}/events`, token, {
+        method: "POST",
+        body: JSON.stringify({ stage, member_note: requestStageNote.trim() || null }),
+      });
+      setRequestStage("");
+      setRequestStageNote("");
+      await loadDetails(token, selected);
+    }, stage === "needs_member_input" ? "Question sent. The member answers from their dashboard." : "Request stage updated. The member sees it on their timeline.");
+  }
+  async function sendDeposit(expectedTotal: number, currency: string) {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/deposit-invoice`, token, {
+        method: "POST",
+        body: JSON.stringify({ expected_total: expectedTotal, currency }),
+      });
+      await loadDetails(token, selected);
+    }, "Deposit invoice sent. The member pays from the email or their dashboard.");
+  }
+  async function sendInvoice() {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/invoice`, token, { method: "POST" });
+      await loadDetails(token, selected);
+    }, "Invoice sent. Payment moves the request to Fulfillment by itself.");
+  }
+  async function setGroupPrice(price: number, currency: string) {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/group-price`, token, {
+        method: "POST",
+        body: JSON.stringify({ price, currency }),
+      });
+      await loadDetails(token, selected);
+    }, "Group price saved.");
+  }
+  async function sendGroupInvoices() {
+    if (!token || !selected) return;
+    let outcome: { sent: number; failed: unknown[]; skipped: number } | null = null;
+    await run(async () => {
+      outcome = await apiRequest<{ sent: number; failed: unknown[]; skipped: number }>(
+        `/operations/work-items/${selected.id}/group-invoices`,
+        token,
+        { method: "POST" },
+      );
+      await loadDetails(token, selected);
+    }, "Group invoices sent.");
+    const result = outcome as { sent: number; failed: unknown[]; skipped: number } | null;
+    if (result)
+      setNotice(
+        `Group invoices: ${result.sent} sent${result.skipped ? `, ${result.skipped} already invoiced` : ""}${result.failed.length ? `, ${result.failed.length} failed — see the history` : ""}.`,
+      );
+  }
+  async function sendFlowMessage(event: FormEvent) {
+    event.preventDefault();
+    if (!token || !selected || !memberReply.trim()) return;
+    const content = memberReply.trim();
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/member-message`, token, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      });
+      setMemberReply("");
+      await loadDetails(token, selected);
+    }, "Message sent to the member's chat. They get a notification.");
+  }
+  async function drawGiveaway() {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/giveaway-draw`, token, { method: "POST" });
+    }, "Winners drawn and emailed. This work item is finished.");
+  }
+  async function reopenWork(reason: string) {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/reopen`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      setSelected(null);
+    }, "Reopened. It is back in the queue.");
+  }
   function toggleDepartment(workerId: string, department: Department, enabled: boolean) {
     setDepartmentDrafts((current) => {
       const next = new Set(current[workerId] || []);
@@ -734,6 +861,27 @@ export function useOperationsCenter() {
     setFilterStatus,
     items,
     setItems,
+    listView,
+    setListView,
+    archiveQuery,
+    setArchiveQuery,
+    archiveDays,
+    setArchiveDays,
+    hasMore,
+    flowContext,
+    payments,
+    requestStage,
+    setRequestStage,
+    requestStageNote,
+    setRequestStageNote,
+    recordRequestStage,
+    sendDeposit,
+    sendInvoice,
+    setGroupPrice,
+    sendGroupInvoices,
+    drawGiveaway,
+    reopenWork,
+    sendFlowMessage,
     selected,
     setSelected,
     notes,

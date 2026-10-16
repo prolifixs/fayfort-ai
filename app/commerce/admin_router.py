@@ -331,30 +331,13 @@ def create_admin_commerce_router() -> APIRouter:
     def invoice_pool(trend_id: UUID, authorization: str | None = Header(default=None)):
         admin_id = require_admin(authorization)
         require_shopify()
-        trend = one(db().table("commerce_trend_items").select(service.TREND_FIELDS).eq("id", str(trend_id))
-                    .maybe_single().execute())
-        if not trend or trend.get("status") not in ("pooling", "sourcing") or not trend.get("pool_price"):
-            raise HTTPException(status_code=409, detail="Set this item up as a pool with a group price first.")
-        members = rows(db().table("commerce_pool_members").select("member_id,quantity,request_id")
-                       .eq("trend_item_id", str(trend_id)).execute())
-        existing = {str(i["member_id"]) for i in rows(db().table("commerce_invoices").select("member_id,status")
-                    .eq("trend_item_id", str(trend_id)).in_("status", ["draft", "sent", "paid"]).execute())}
-        sent, failed = 0, []
-        for member in members:
-            if str(member["member_id"]) in existing:
-                continue
-            try:
-                service.send_invoice(member_id=str(member["member_id"]),
-                                     title=trend.get("title") or "FayFort group order",
-                                     amount=float(trend["pool_price"]), currency=trend["pool_currency"],
-                                     quantity=int(member.get("quantity") or 1), trend_item_id=str(trend_id),
-                                     request_id=None, actor_id=admin_id)
-                sent += 1
-            except Exception as exc:
-                failed.append({"member_id": str(member["member_id"]), "error": str(exc)[:200]})
-        db().table("commerce_trend_items").update({"status": "sourcing"}).eq("id", str(trend_id)).execute()
-        audit(admin_id, "pool_invoiced", {"trend_id": str(trend_id), "sent": sent, "failed": len(failed)})
-        return {"sent": sent, "failed": failed, "skipped": len(existing)}
+        try:
+            result = service.send_pool_invoices(str(trend_id), admin_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        audit(admin_id, "pool_invoiced", {"trend_id": str(trend_id), "sent": result["sent"],
+                                          "failed": len(result["failed"])})
+        return result
 
     # ---- sourcing deposits (docs/MEMBERSHIP_PLAN.md) ------------------------------------------
     def _deposit_view(invoice: dict | None) -> dict | None:
@@ -397,22 +380,11 @@ def create_admin_commerce_router() -> APIRouter:
     def create_deposit_invoice(payload: DepositInput, authorization: str | None = Header(default=None)):
         admin_id = require_admin(authorization)
         require_shopify()
-        request = one(db().table("member_purchase_requests").select("id,member_id,request_title")
-                      .eq("id", str(payload.request_id)).maybe_single().execute())
-        if not request:
-            raise HTTPException(status_code=404, detail="Request not found.")
-        quote = plans.deposit_quote(str(request["member_id"]), payload.expected_total)
-        if quote["amount"] <= 0:
-            raise HTTPException(status_code=409, detail="No deposit needed: this Pro member is in good standing.")
         try:
-            db().table("member_purchase_requests").update({"expected_total": round(payload.expected_total, 2),
-                                                           "expected_currency": payload.currency}) \
-                .eq("id", str(payload.request_id)).execute()
-            invoice = service.send_invoice(
-                member_id=str(request["member_id"]), title=f"Sourcing deposit: {request['request_title']}"[:255],
-                amount=quote["amount"], currency=payload.currency, request_id=str(payload.request_id),
-                actor_id=admin_id, kind="deposit", requires_shipping=False,
-                details={"expected_total": quote["expected_total"], "rate": quote["rate"], "tier": quote["tier"]})
+            invoice = service.send_deposit_invoice(str(payload.request_id), payload.expected_total, payload.currency, admin_id)
+            quote = invoice.pop("quote")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except shopify.ShopifyError as exc:
             raise shopify_failure(exc) from exc
         except ValueError as exc:
@@ -456,25 +428,10 @@ def create_admin_commerce_router() -> APIRouter:
     def create_request_invoice(payload: InvoiceInput, authorization: str | None = Header(default=None)):
         admin_id = require_admin(authorization)
         require_shopify()
-        request = one(db().table("member_purchase_requests").select("id,member_id,request_title")
-                      .eq("id", str(payload.request_id)).maybe_single().execute())
-        if not request:
-            raise HTTPException(status_code=404, detail="Request not found.")
-        option = one(db().table("operations_sourcing_member_options").select("product_name,price_amount,currency")
-                     .eq("request_id", str(payload.request_id)).eq("status", "selected").maybe_single().execute())
-        if not option or not option.get("price_amount") or not option.get("currency"):
-            raise HTTPException(status_code=409, detail="The member's chosen option needs a price and currency first.")
-        deposit = one(db().table("commerce_invoices").select("amount,currency").eq("request_id", str(payload.request_id))
-                      .eq("kind", "deposit").eq("status", "paid").limit(1).execute())
-        credit = 0.0
-        if deposit and deposit.get("currency") == option["currency"]:
-            credit = min(float(deposit["amount"]), float(option["price_amount"]))  # a deposit counts toward the order
         try:
-            invoice = service.send_invoice(member_id=str(request["member_id"]),
-                                           title=option.get("product_name") or request["request_title"],
-                                           amount=float(option["price_amount"]), currency=option["currency"],
-                                           request_id=str(payload.request_id), actor_id=admin_id,
-                                           deposit_credit=credit)
+            invoice = service.send_request_invoice(str(payload.request_id), admin_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except shopify.ShopifyError as exc:
             raise shopify_failure(exc) from exc
         except ValueError as exc:

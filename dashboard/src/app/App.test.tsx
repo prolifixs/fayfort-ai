@@ -1,5 +1,6 @@
 import { cleanup,fireEvent,render,screen,waitFor,within } from "@testing-library/react";
 import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
+import { MemberPhotoReviewQueue } from "./staff/MemberPhotoReview";
 import { App,DashboardWorkspace,WorkerInvitationAcceptancePage,WorkerPasswordResetPage,WorkerProvisioningPage } from "./App";
 
 const authMocks=vi.hoisted(()=>({updateUser:vi.fn(),getSession:vi.fn(),onAuthStateChange:vi.fn(),signInWithOAuth:vi.fn(),getUserIdentities:vi.fn(),linkIdentity:vi.fn()}));
@@ -198,7 +199,7 @@ describe("authenticated dashboard workspace",()=>{
    if(url.endsWith("/workers/member-reviews/review-human/reply")&&init?.method==="POST")return {ok:true,status:201,json:async()=>({message:{sender_type:"worker"}}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/worker/member-reviews");render(<App/>);
+  render(<MemberPhotoReviewQueue accessToken="test-access-token" platformAdmin={false} onlyReviewId="review-human"/>);
   expect(await screen.findByRole("heading",{name:"Reply to member"})).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"View member chat"}));
   expect(await screen.findByText("I need a small wrench.")).toBeInTheDocument();
@@ -321,6 +322,26 @@ describe("authenticated dashboard workspace",()=>{
   expect(submittedBody).toMatchObject({request_title:"Source a widget",request_description:"Two units",source_type:"catalog_product",product_id:"site-product",source_url:null});
  });
 
+ it("lets a member answer when FayFort needs a detail and shows sourcing carrying on",async()=>{
+  let answered:Record<string,unknown>|null=null;
+  const asked=[{id:"e1",sequence_no:1,stage:"submitted",member_note:null,created_at:"2026-10-10T00:00:00Z"},{id:"e2",sequence_no:2,stage:"needs_member_input",member_note:"Which length would you like?",created_at:"2026-10-10T00:05:00Z"}];
+  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=String(input);
+   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
+   if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[],saved_product_ids:[],categories:[]}),headers:new Headers()} as Response;
+   if(url.endsWith("/members/requests/request-1/answer")&&init?.method==="POST"){answered=JSON.parse(String(init.body));return {ok:true,status:200,json:async()=>({request_id:"request-1",stage:"sourcing"}),headers:new Headers()} as Response;}
+   if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source a wig",request_description:null,events:answered?[...asked,{id:"e3",sequence_no:3,stage:"sourcing",member_note:"Member answered: 22 inch",created_at:"2026-10-10T00:09:00Z"}]:asked}]}),headers:new Headers()} as Response;
+   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
+  });
+  window.history.replaceState({},"","/member/products");render(<App/>);
+  const form=await screen.findByRole("form",{name:"Answer FayFort about Source a wig"});
+  expect(within(form).getByText(/Which length would you like/)).toBeInTheDocument();
+  fireEvent.change(within(form).getByRole("textbox",{name:"Your answer"}),{target:{value:"22 inch"}});
+  fireEvent.click(within(form).getByRole("button",{name:"Send answer"}));
+  await waitFor(()=>expect(answered).toEqual({message:"22 inch"}));
+  await waitFor(()=>expect(screen.queryByRole("form",{name:"Answer FayFort about Source a wig"})).not.toBeInTheDocument());
+ });
+
  it("creates a recurring request schedule only after the member approves the no-automatic-order terms",async()=>{
   const requestPosts:unknown[]=[];
   fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
@@ -361,70 +382,23 @@ describe("authenticated dashboard workspace",()=>{
   expect(requestPosts).toHaveLength(0);
  });
 
- it("shows assigned request milestones to an active worker without a business workspace",async()=>{
+ it("sends old worker photo-review links to the Operations Center",async()=>{
+  window.history.replaceState({},"","/worker/member-reviews");render(<App/>);
+  expect(await screen.findByText(/Photo reviews moved to the/)).toBeInTheDocument();
+  expect(screen.getByRole("link",{name:"Operations Center"})).toHaveAttribute("href","/operations");
+  window.history.replaceState({},"","/");
+ });
+
+ it("keeps Member Requests as an admin assignment page; workers do request work in the Operations Center",async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
    const url=String(input);
    if(url.endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
    if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
-   if(url.endsWith("/workers/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source widget",request_description:null,product_name_snapshot:"Widget",events:[{id:"event-1",sequence_no:1,stage:"submitted",member_note:null,created_at:"2026-10-10T00:00:00Z"}]}]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
   renderWorkspace();const nav=screen.getByRole("navigation",{name:"Main navigation"});
-  fireEvent.click(await within(nav).findByRole("button",{name:/Member Requests/}));
-  expect(await screen.findByRole("heading",{name:"Assigned member requests"})).toBeInTheDocument();
-  expect(await screen.findByRole("heading",{name:"Source widget"})).toBeInTheDocument();
-  expect(screen.getByRole("button",{name:"Add milestone"})).toBeInTheDocument();
- });
-
- it("advances the selected milestone after the previous stage is saved",async()=>{
-  const submitted=[{id:"event-1",sequence_no:1,stage:"submitted",member_note:null,created_at:"2026-10-10T00:00:00Z"}];
-  const underReview=[...submitted,{id:"event-2",sequence_no:2,stage:"under_review",member_note:null,created_at:"2026-10-10T00:01:00Z"}];
-  const milestonePosts:string[]=[];
-  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
-   const url=String(input);
-   if(url.endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
-   if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
-   if(url.includes("/workers/requests/")&&url.endsWith("/events")&&init?.method==="POST"){
-    milestonePosts.push(JSON.parse(String(init.body)).stage);
-    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-   }
-   if(url.endsWith("/workers/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source widget",request_description:null,product_name_snapshot:null,events:milestonePosts.length?underReview:submitted}]}),headers:new Headers()} as Response;
-   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-  });
-  renderWorkspace();
-  fireEvent.click(await within(screen.getByRole("navigation",{name:"Main navigation"})).findByRole("button",{name:/Member Requests/}));
-  const add=await screen.findByRole("button",{name:"Add milestone"});
-  fireEvent.click(add);
-  await waitFor(()=>expect(milestonePosts).toEqual(["under_review"]));
-  const next=await screen.findByRole("combobox",{name:"Next milestone for Source widget"});
-  await waitFor(()=>expect(next).toHaveValue("sourcing"));
-  fireEvent.click(add);
-  await waitFor(()=>expect(milestonePosts).toEqual(["under_review","sourcing"]));
- });
-
- it("requires and submits tracking details for the shipped milestone",async()=>{
-  let posted:Record<string,unknown>|null=null;
-  const warehouse=[{id:"event-warehouse",sequence_no:4,stage:"item_in_warehouse",member_note:null,created_at:"2026-10-10T00:04:00Z"}];
-  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
-   const url=String(input);
-   if(url.endsWith("/workers/me"))return {ok:true,status:200,json:async()=>({worker:{status:"active"}}),headers:new Headers()} as Response;
-   if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
-   if(url.includes("/workers/requests/")&&url.endsWith("/events")&&init?.method==="POST"){
-    posted=JSON.parse(String(init.body));return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-   }
-   if(url.endsWith("/workers/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source widget",request_description:null,product_name_snapshot:"Widget",events:warehouse}]}),headers:new Headers()} as Response;
-   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-  });
-  renderWorkspace();
-  fireEvent.click(await within(screen.getByRole("navigation",{name:"Main navigation"})).findByRole("button",{name:/Member Requests/}));
-  fireEvent.change(await screen.findByRole("combobox",{name:"Next milestone for Source widget"}),{target:{value:"shipped"}});
-  const tracking=screen.getByRole("textbox",{name:"Tracking number for Source widget"});
-  expect(screen.getByRole("button",{name:"Add milestone"})).toBeDisabled();
-  fireEvent.change(tracking,{target:{value:"FF-TRACK-1"}});
-  fireEvent.change(screen.getByRole("textbox",{name:"Carrier for Source widget"}),{target:{value:"FayShip"}});
-  fireEvent.change(screen.getByRole("textbox",{name:"Tracking URL for Source widget"}),{target:{value:"https://tracking.example.test/FF-TRACK-1"}});
-  fireEvent.click(screen.getByRole("button",{name:"Add milestone"}));
-  await waitFor(()=>expect(posted).toEqual({stage:"shipped",member_note:null,carrier_name:"FayShip",tracking_number:"FF-TRACK-1",tracking_url:"https://tracking.example.test/FF-TRACK-1"}));
+  await waitFor(()=>expect(fetchMock).toHaveBeenCalled());
+  expect(within(nav).queryByRole("button",{name:/Member Requests/})).not.toBeInTheDocument();
  });
 
  it("shows paid purchase, private warehouse evidence, and shipment tracking on the member timeline",async()=>{

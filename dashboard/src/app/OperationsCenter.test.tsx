@@ -54,7 +54,7 @@ const report = {
   data_limit_reached: false,
 };
 
-function routeApi(identity: { user_id: string; departments: string[]; can_manage: boolean }, items = [sourcingItem, openItem]) {
+function routeApi(identity: { user_id: string; departments: string[]; can_manage: boolean }, items: Record<string, unknown>[] = [sourcingItem, openItem]) {
   mocks.apiRequest.mockImplementation(async (path: string) => {
     if (path === "/operations/me/departments") return identity;
     if (path.startsWith("/operations/work-items?")) return { work_items: items };
@@ -114,11 +114,61 @@ describe("Operations Center", () => {
     expect(screen.queryByRole("region", { name: "Operations reports and reconciliation" })).not.toBeInTheDocument();
     expect(mocks.apiRequest).not.toHaveBeenCalledWith("/operations/workforce", "staff-token");
     fireEvent.click(within(within(filters).getByRole("group", { name: "Queue scope" })).getByRole("button", { name: /Available/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Claim / renew" }));
+    fireEvent.click(await within(screen.getByRole("region", { name: "Operations work items" })).findByRole("button", { name: "Claim" }));
     await waitFor(() =>
       expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/work-items/work-2/claim", "staff-token", { method: "POST" }),
     );
     expect(await screen.findByText("Work claimed for 15 minutes.")).toBeInTheDocument();
+  });
+
+  it("lets the worker who claimed a sourcing request ask the member a question from the step panel", async () => {
+    const mine = { ...sourcingItem, assigned_worker_id: "worker-1" };
+    routeApi({ user_id: "worker-1", departments: ["sourcing"], can_manage: false }, [mine]);
+    render(<OperationsCenterPage />);
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Operations work items" })).findByRole("button", { name: /Desk lamp sourcing/ }));
+    expect(await screen.findByRole("region", { name: "Steps for this work" })).toBeInTheDocument();
+    fireEvent.change(await screen.findByRole("combobox", { name: "Next request stage" }), { target: { value: "needs_member_input" } });
+    const question = screen.getByRole("textbox", { name: /Your question for the member/ });
+    expect(question).toBeRequired();
+    fireEvent.change(question, { target: { value: "Which length would you like?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+    await waitFor(() =>
+      expect(mocks.apiRequest).toHaveBeenCalledWith("/workers/requests/request-1/events", "staff-token", {
+        method: "POST", body: JSON.stringify({ stage: "needs_member_input", member_note: "Which length would you like?" }),
+      }),
+    );
+  });
+
+  it("lists finished work in the Archive and lets an admin reopen it with a reason", async () => {
+    const done = { ...sourcingItem, id: "work-9", status: "completed", summary: "[SYNTHETIC] Packed order 1001",
+      assigned_worker_id: null, claimed_until: null, completed_at: now };
+    routeApi({ user_id: "admin-1", departments: [], can_manage: true }, [done]);
+    render(<OperationsCenterPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Archive" }));
+    await waitFor(() =>
+      expect(mocks.apiRequest).toHaveBeenCalledWith(expect.stringMatching(/^\/operations\/work-items\?.*view=archive.*days=30/), "staff-token"),
+    );
+    fireEvent.click(await within(screen.getByRole("region", { name: "Operations work items" })).findByRole("button", { name: /Packed order 1001/ }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Reopen with a reason" }), { target: { value: "Customer wrote back" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
+    await waitFor(() =>
+      expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/work-items/work-9/reopen", "staff-token", {
+        method: "POST", body: JSON.stringify({ reason: "Customer wrote back" }),
+      }),
+    );
+  });
+
+  it("opens a guide for every work type from the Guide tab", async () => {
+    routeApi({ user_id: "worker-1", departments: ["fulfillment"], can_manage: false }, [openItem]);
+    render(<OperationsCenterPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Guide" }));
+    const index = await screen.findByRole("complementary", { name: "Guides" });
+    const buttons = within(index).getAllByRole("button");
+    expect(buttons.length).toBeGreaterThan(8);
+    for (const button of buttons) {
+      fireEvent.click(button);
+      expect(screen.getByRole("heading", { level: 2, name: button.textContent || "" })).toBeInTheDocument();
+    }
   });
 
   it("explains business reply delivery outcomes to staff", () => {

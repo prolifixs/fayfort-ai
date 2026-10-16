@@ -1,5 +1,6 @@
 import { departments, departmentLabel, statuses, statusLabel } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
+import { GUIDES, guideKeyFor, queueStepLabel } from "./playbooks";
 
 export function WorkforcePanel({ ops }: { ops: OperationsState }) {
   const {
@@ -500,11 +501,13 @@ export function QueueFilters({ ops }: { ops: OperationsState }) {
           onChange={(event) => setFilterStatus(event.target.value)}
         >
           <option value="">All statuses</option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>
-              {statusLabel(status)}
-            </option>
-          ))}
+          {statuses
+            .filter((status) => status !== "completed" && status !== "cancelled")
+            .map((status) => (
+              <option key={status} value={status}>
+                {statusLabel(status)}
+              </option>
+            ))}
         </select>
       </label>
     </nav>
@@ -547,85 +550,99 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     setBatchWorkIds,
     busy,
     claim,
+    listView,
   } = ops;
+  const archive = listView === "archive";
+  const groups = departments
+    .map((department) => ({ department, rows: items.filter((item) => item.department === department) }))
+    .filter((group) => group.rows.length > 0);
+  const heading = archive
+    ? "Finished work"
+    : scope === "mine"
+      ? "My work"
+      : scope === "available"
+        ? "Available work"
+        : "All operations work";
   return (
     <section className="operations-work-list" aria-label="Operations work items">
       <div className="operations-section-title">
-        <h2>{scope === "mine" ? "My work" : scope === "available" ? "Available work" : "All operations work"}</h2>
+        <h2>{heading}</h2>
         <span>{items.length} shown</span>
       </div>
       {items.length === 0 ? (
         <p className="operations-empty-copy">
-          No work matches these filters. New sourcing requests and human handoffs appear here automatically.
+          {archive
+            ? "Nothing finished matches this search."
+            : scope === "mine"
+              ? "You have nothing claimed. Look in Available to pick up work."
+              : "Nothing waiting here. New requests, chats, shop orders and group buys appear automatically."}
         </p>
       ) : (
-        items.map((item) => (
-          <article
-            className={selected?.id === item.id ? "operations-work-card is-selected" : "operations-work-card"}
-            key={item.id}
-          >
-            {item.department === "sourcing" && (
-              <label className="operations-batch-select">
-                <input
-                  type="checkbox"
-                  aria-label={`Add ${item.summary} to sourcing batch`}
-                  checked={batchWorkIds.includes(item.id)}
-                  onChange={(event) =>
-                    setBatchWorkIds((current) =>
-                      event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
-                    )
-                  }
-                  disabled={
-                    item.status === "completed" ||
-                    item.status === "cancelled" ||
-                    sourcingBatches.some((batch) => batch.items.some((member) => member.work_item_id === item.id))
-                  }
-                />
-                <span>
-                  {sourcingBatches.some((batch) => batch.items.some((member) => member.work_item_id === item.id))
-                    ? "In a batch"
-                    : "Add to batch"}
-                </span>
-              </label>
-            )}
-            <button type="button" className="operations-work-select" onClick={() => setSelected(item)}>
-              <span className="operations-work-card-top">
-                <strong>{item.summary}</strong>
-                <span className={`operations-status status-${item.status}`}>{statusLabel(item.status)}</span>
-              </span>
-              <small>
-                {departmentLabel[item.department]} · {item.work_type.replaceAll("_", " ")} · {item.priority} priority
-              </small>
-              <span>{item.next_action}</span>
-              <small>
-                {item.due_at
-                  ? `Due ${new Date(item.due_at).toLocaleString()}`
-                  : `Created ${new Date(item.created_at).toLocaleString()}`}
-              </small>
-              {item.assigned_worker_id && (
-                <small>
-                  {item.assigned_worker_id === userId
-                    ? "Assigned to you"
-                    : `Assigned · ${item.assigned_worker_id.slice(0, 8)}`}
-                </small>
-              )}
-            </button>
-            {!canManage &&
-              scope === "available" &&
-              (item.status === "open" || item.status === "claimed") &&
-              item.assigned_worker_id !== undefined && (
-                <button
-                  type="button"
-                  className="primary-button operations-claim"
-                  disabled={busy}
-                  onClick={() => void claim(item)}
+        groups.map((group) => (
+          <section key={group.department} className="ops-queue-group" aria-label={`${departmentLabel[group.department]} work`}>
+            <h3 className="ops-queue-group-title">
+              {departmentLabel[group.department]} <span>{group.rows.length}</span>
+            </h3>
+            {group.rows.map((item) => {
+              const inBatch = sourcingBatches.some((batch) => batch.items.some((member) => member.work_item_id === item.id));
+              const guide = GUIDES[guideKeyFor(item)];
+              const overdue = !archive && item.due_at && new Date(item.due_at).getTime() < Date.now();
+              return (
+                <article
+                  className={`operations-work-card priority-${item.priority}${selected?.id === item.id ? " is-selected" : ""}`}
+                  key={item.id}
                 >
-                  {item.assigned_worker_id && item.assigned_worker_id !== userId
-                    ? "Take over expired claim"
-                    : "Claim / renew"}
-                </button>
-              )}
-          </article>
+                  {!archive && item.department === "sourcing" && item.work_type === "member_request" && (
+                    <label className="operations-batch-select">
+                      <input
+                        type="checkbox"
+                        aria-label={`Add ${item.summary} to sourcing batch`}
+                        checked={batchWorkIds.includes(item.id)}
+                        onChange={(event) =>
+                          setBatchWorkIds((current) =>
+                            event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
+                          )
+                        }
+                        disabled={inBatch}
+                      />
+                      <span>{inBatch ? "In a batch" : "Add to batch"}</span>
+                    </label>
+                  )}
+                  <button type="button" className="operations-work-select" onClick={() => setSelected(item)}>
+                    <span className="operations-work-card-top">
+                      <strong>{item.summary}</strong>
+                      <span className={`operations-status status-${item.status}`}>{statusLabel(item.status)}</span>
+                    </span>
+                    <small className="ops-card-kind">
+                      {guide?.title || item.work_type.replaceAll("_", " ")}
+                      {item.priority === "urgent" || item.priority === "high" ? ` · ${item.priority} priority` : ""}
+                    </small>
+                    <span className="ops-card-step">{queueStepLabel(item, userId, canManage)}</span>
+                    <small className={overdue ? "ops-overdue" : undefined}>
+                      {archive && item.completed_at
+                        ? `Finished ${new Date(item.completed_at).toLocaleString()}`
+                        : item.due_at
+                          ? `${overdue ? "Overdue · was due" : "Due"} ${new Date(item.due_at).toLocaleString()}`
+                          : `Created ${new Date(item.created_at).toLocaleString()}`}
+                    </small>
+                  </button>
+                  {!archive &&
+                    !canManage &&
+                    scope === "available" &&
+                    (item.status === "open" || item.status === "claimed") && (
+                      <button
+                        type="button"
+                        className="primary-button operations-claim"
+                        disabled={busy}
+                        onClick={() => void claim(item)}
+                      >
+                        {item.assigned_worker_id && item.assigned_worker_id !== userId ? "Take over expired claim" : item.assigned_worker_id === userId ? "Renew claim" : "Claim"}
+                      </button>
+                    )}
+                </article>
+              );
+            })}
+          </section>
         ))
       )}
     </section>

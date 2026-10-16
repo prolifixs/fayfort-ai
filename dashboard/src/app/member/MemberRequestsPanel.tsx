@@ -28,6 +28,8 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
   const [productsLoading, setProductsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [optionBusy, setOptionBusy] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answerBusy, setAnswerBusy] = useState("");
   const [error, setError] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [recurrence, setRecurrence] = useState<"monthly" | "quarterly" | "yearly" | "custom">("monthly");
@@ -202,6 +204,28 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
       setError(e instanceof Error ? e.message : "The option could not be selected.");
     } finally {
       setOptionBusy("");
+    }
+  }
+  /** "Your input is needed": the member answers here and sourcing carries on. */
+  async function answerRequest(event: FormEvent, requestId: string) {
+    event.preventDefault();
+    const message = (answers[requestId] || "").trim();
+    if (!message) return;
+    setAnswerBusy(requestId);
+    setError("");
+    try {
+      await apiRequest(`/members/requests/${requestId}/answer`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      });
+      setAnswers((current) => ({ ...current, [requestId]: "" }));
+      setNotice("Thanks — your answer was sent. FayFort carries on sourcing.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Your answer could not be sent.");
+      await load();
+    } finally {
+      setAnswerBusy("");
     }
   }
   return (
@@ -547,6 +571,31 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
                     </li>
                   ))}
                 </ol>
+                {stage === "needs_member_input" && (
+                  <form
+                    className="member-request-answer"
+                    aria-label={`Answer FayFort about ${request.request_title}`}
+                    onSubmit={(event) => void answerRequest(event, request.id)}
+                  >
+                    <strong>FayFort needs a detail from you</strong>
+                    {latest?.member_note && <p className="member-request-question">“{latest.member_note}”</p>}
+                    <label>
+                      Your answer
+                      <textarea
+                        aria-label="Your answer"
+                        required
+                        maxLength={2000}
+                        rows={3}
+                        value={answers[request.id] || ""}
+                        onChange={(event) => setAnswers((current) => ({ ...current, [request.id]: event.target.value }))}
+                        placeholder="Size, colour, quantity, budget…"
+                      />
+                    </label>
+                    <button className="primary-button" disabled={answerBusy === request.id || !(answers[request.id] || "").trim()}>
+                      {answerBusy === request.id ? "Sending…" : "Send answer"}
+                    </button>
+                  </form>
+                )}
                 {stage === "purchase_confirmed" && (
                   <p className="member-request-paid-note">
                     Payment is confirmed. The next request milestone will show warehouse receipt.

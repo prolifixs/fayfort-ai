@@ -263,6 +263,13 @@ def refresh_trend_counts(trend_item_id: str) -> dict:
     values = {"share_count": len(shares), "want_count": len(wants), "last_shared_at": iso(now_utc()),
               "updated_at": iso(now_utc())}
     db().table("commerce_trend_items").update(values).eq("id", trend_item_id).execute()
+    try:
+        trend = one(db().table("commerce_trend_items").select(TREND_FIELDS).eq("id", trend_item_id).maybe_single().execute())
+        if trend:
+            from app.accounts import operations_flow  # a pool that reached its target becomes one group-buy item
+            operations_flow.sync_group_buy({**trend, **values})
+    except Exception:
+        logger.exception("Could not sync the group buy to Operations")
     return values
 
 
@@ -350,6 +357,13 @@ def want_trend_item(member_id: str, trend_item_id: str, *, session_id: str, conv
                                                 "request_id": str(request_id) if request_id else None},
                                                on_conflict="trend_item_id,member_id").execute()
     counts = refresh_trend_counts(trend_item_id)
+    try:
+        from app.accounts import operations_flow
+        group = operations_flow.find_item("trend_pool", trend_item_id)
+        if group and group.get("status") in operations_flow.ACTIVE:
+            operations_flow.hold_pool_requests(trend_item_id, trend.get("title") or "this group buy")
+    except Exception:
+        logger.exception("Could not link a new pool buyer to the group buy")
     record_events(member_id, session_id, [{"event_type": "want", "trend_item_id": trend_item_id,
                                            "product_id": trend.get("linked_product_id")}])
     return {"trend_item_id": trend_item_id, "request_id": str(request_id) if request_id else None,
@@ -513,10 +527,80 @@ def send_invoice(*, member_id: str, title: str, amount: float, currency: str, qu
                                                note=f"FayFort invoice {record['id']}")
     except Exception as exc:
         db().table("commerce_invoices").update({"status": "failed", "error": str(exc)[:500]}).eq("id", record["id"]).execute()
+        try:
+            from app.accounts import operations_flow
+            operations_flow.invoice_failed(record, str(exc))
+        except Exception:
+            logger.exception("Could not open an operations item for a failed invoice")
         raise
     values = {"status": "sent", "shopify_draft_order_id": draft_id, "invoice_url": url or None, "sent_at": iso(now_utc())}
     db().table("commerce_invoices").update(values).eq("id", record["id"]).execute()
     return {**record, **values}
+
+
+def send_request_invoice(request_id: str, actor_id: str | None) -> dict:
+    """Invoice the member for the option they chose; a paid deposit is taken off the total."""
+    request = one(db().table("member_purchase_requests").select("id,member_id,request_title")
+                  .eq("id", request_id).maybe_single().execute())
+    if not request:
+        raise LookupError("Request not found.")
+    option = one(db().table("operations_sourcing_member_options").select("product_name,price_amount,currency")
+                 .eq("request_id", request_id).eq("status", "selected").maybe_single().execute())
+    if not option or not option.get("price_amount") or not option.get("currency"):
+        raise ValueError("The member's chosen option needs a price and currency first.")
+    deposit = one(db().table("commerce_invoices").select("amount,currency").eq("request_id", request_id)
+                  .eq("kind", "deposit").eq("status", "paid").limit(1).execute())
+    credit = 0.0
+    if deposit and deposit.get("currency") == option["currency"]:
+        credit = min(float(deposit["amount"]), float(option["price_amount"]))  # a deposit counts toward the order
+    return send_invoice(member_id=str(request["member_id"]), title=option.get("product_name") or request["request_title"],
+                        amount=float(option["price_amount"]), currency=option["currency"], request_id=request_id,
+                        actor_id=actor_id, deposit_credit=credit)
+
+
+def send_deposit_invoice(request_id: str, expected_total: float, currency: str, actor_id: str | None) -> dict:
+    """The sourcing deposit for the member's plan (Free 50%, Standard 25%, Pro none in good standing)."""
+    from app.membership import plans
+    request = one(db().table("member_purchase_requests").select("id,member_id,request_title")
+                  .eq("id", request_id).maybe_single().execute())
+    if not request:
+        raise LookupError("Request not found.")
+    quote = plans.deposit_quote(str(request["member_id"]), expected_total)
+    if quote["amount"] <= 0:
+        raise ValueError("No deposit needed: this Pro member is in good standing.")
+    db().table("member_purchase_requests").update({"expected_total": round(expected_total, 2),
+                                                   "expected_currency": currency}).eq("id", request_id).execute()
+    invoice = send_invoice(member_id=str(request["member_id"]), title=f"Sourcing deposit: {request['request_title']}"[:255],
+                           amount=quote["amount"], currency=currency, request_id=request_id, actor_id=actor_id,
+                           kind="deposit", requires_shipping=False,
+                           details={"expected_total": quote["expected_total"], "rate": quote["rate"], "tier": quote["tier"]})
+    return {**invoice, "quote": quote}
+
+
+def send_pool_invoices(trend_id: str, actor_id: str | None) -> dict:
+    """Invoice every group-buy member. Each invoice is linked to the member's own request so paying it moves
+    that request to Fulfillment."""
+    trend = one(db().table("commerce_trend_items").select(TREND_FIELDS).eq("id", trend_id).maybe_single().execute())
+    if not trend or trend.get("status") not in ("pooling", "sourcing") or not trend.get("pool_price"):
+        raise ValueError("Set this item up as a pool with a group price first.")
+    members = rows(db().table("commerce_pool_members").select("member_id,quantity,request_id")
+                   .eq("trend_item_id", trend_id).execute())
+    existing = {str(i["member_id"]) for i in rows(db().table("commerce_invoices").select("member_id,status")
+                .eq("trend_item_id", trend_id).in_("status", ["draft", "sent", "paid"]).execute())}
+    sent, failed = 0, []
+    for member in members:
+        if str(member["member_id"]) in existing:
+            continue
+        try:
+            send_invoice(member_id=str(member["member_id"]), title=trend.get("title") or "FayFort group order",
+                         amount=float(trend["pool_price"]), currency=trend["pool_currency"],
+                         quantity=int(member.get("quantity") or 1), trend_item_id=trend_id,
+                         request_id=str(member["request_id"]) if member.get("request_id") else None, actor_id=actor_id)
+            sent += 1
+        except Exception as exc:
+            failed.append({"member_id": str(member["member_id"]), "error": str(exc)[:200]})
+    db().table("commerce_trend_items").update({"status": "sourcing"}).eq("id", trend_id).execute()
+    return {"sent": sent, "failed": failed, "skipped": len(existing)}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -530,7 +614,7 @@ def record_order(order: dict) -> dict:
     attributes = _attributes(order)
     invoice = None
     if attributes.get("fayfort_invoice_id"):
-        invoice = one(db().table("commerce_invoices").select("id,member_id,status,kind,details")
+        invoice = one(db().table("commerce_invoices").select("id,member_id,status,kind,details,request_id,trend_item_id,amount,currency,title")
                       .eq("id", attributes["fayfort_invoice_id"]).maybe_single().execute())
     member_id = attributes.get("fayfort_member_id") or (invoice or {}).get("member_id")
     shopify_order_id = shopify.gid("Order", order.get("admin_graphql_api_id") or order.get("id"))
@@ -570,6 +654,8 @@ def record_order(order: dict) -> dict:
     if invoice and order.get("financial_status") in ("paid", "partially_refunded", "refunded") and invoice.get("status") != "paid":
         db().rpc("record_commerce_invoice_paid", {"p_invoice_id": str(invoice["id"]),
                                                   "p_shopify_order_id": shopify_order_id}).execute()
+    if invoice and order.get("financial_status") == "paid" and invoice.get("status") != "paid":
+        _tell_operations_invoice_paid(invoice)
     if invoice and order.get("financial_status") == "paid" and invoice.get("kind") in ("consultation", "contact_credits"):
         # Idempotent, so a retried webhook finishes the job if an earlier attempt stopped half way.
         from app.membership import service as membership
@@ -586,7 +672,28 @@ def record_order(order: dict) -> dict:
     if member_id and (newly_paid or order.get("financial_status") in ("refunded", "voided") or order.get("cancelled_at")):
         from app.membership import ranks  # rank and points follow paid (and refunded) orders
         ranks.safe_recompute(member_id)
+    try:
+        from app.accounts import operations_flow  # paid shop orders become packing work for staff
+        operations_flow.sync_store_order(values)
+    except Exception:
+        logger.exception("Could not sync the shop order to Operations")
     return values
+
+
+def _tell_operations_invoice_paid(invoice: dict) -> None:
+    """Payments show up on the work item: deposits as a note, pool payments close the group buy when complete.
+    Order invoices move the request to Fulfillment in the database (record_commerce_invoice_paid)."""
+    try:
+        from app.accounts import operations_flow
+        amount = f"{invoice.get('amount')} {invoice.get('currency') or ''}".strip()
+        if invoice.get("kind") == "deposit" and invoice.get("request_id"):
+            operations_flow.note_on_request_item(
+                str(invoice["request_id"]), f"Deposit of {amount} paid. Continue sourcing; it counts toward the final invoice.",
+                f"Deposit paid ({amount}).")
+        if invoice.get("trend_item_id"):
+            operations_flow.group_buy_paid_check(str(invoice["trend_item_id"]))
+    except Exception:
+        logger.exception("Could not tell Operations about a paid invoice")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -660,4 +767,9 @@ def draw_giveaway(giveaway_id: str, actor_id: str) -> dict:
                     title=f"You won: {giveaway['title']}",
                     body=f"Congratulations! You won {giveaway['prize_text']}.{prize}", href="/member/chat")
         results.append({"member_id": member_id, "rank": rank, "prize_code": code, "prize_error": error})
+    try:
+        from app.accounts import operations_flow
+        operations_flow.after_giveaway_draw(giveaway, results)
+    except Exception:
+        logger.exception("Could not update Operations after the giveaway draw")
     return {"seed": seed, "entries": len(entries), "winners": results}

@@ -47,9 +47,14 @@ export function MemberPhotoReviewApp({ platformAdmin }: { platformAdmin: boolean
 export function MemberPhotoReviewQueue({
   accessToken,
   platformAdmin,
+  onlyReviewId,
+  onReplied,
 }: {
   accessToken: string;
   platformAdmin: boolean;
+  /** Inside an Operations Center work item: show just this review. */
+  onlyReviewId?: string;
+  onReplied?: () => void;
 }) {
   const [reviews, setReviews] = useState<any[]>([]);
   const [workers, setWorkers] = useState<{ user_id: string; email: string | null }[]>([]);
@@ -67,13 +72,13 @@ export function MemberPhotoReviewQueue({
         platformAdmin ? "/platform/member-reviews" : "/workers/member-reviews",
         accessToken,
       );
-      setReviews(result.reviews || []);
+      setReviews((result.reviews || []).filter((review) => !onlyReviewId || review.id === onlyReviewId));
       setWorkers(result.active_workers || []);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Photo review queue could not be loaded.");
     }
-  }, [accessToken, platformAdmin]);
+  }, [accessToken, platformAdmin, onlyReviewId]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -170,6 +175,7 @@ export function MemberPhotoReviewQueue({
       setReply((current) => ({ ...current, [reviewId]: "" }));
       setSelected((current) => ({ ...current, [reviewId]: [] }));
       setNotice("Your reply was sent to the member chat.");
+      onReplied?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The reply could not be sent.");
     } finally {
@@ -177,7 +183,8 @@ export function MemberPhotoReviewQueue({
     }
   }
   return (
-    <section className="control-panel" aria-label="Member photo review queue">
+    <section className={onlyReviewId ? "operations-photo-review" : "control-panel"} aria-label="Member photo review queue">
+      {!onlyReviewId && (
       <div className="panel-heading">
         <div>
           <h2>Member photo reviews</h2>
@@ -190,6 +197,7 @@ export function MemberPhotoReviewQueue({
           Refresh
         </button>
       </div>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -197,7 +205,13 @@ export function MemberPhotoReviewQueue({
       )}
       {notice && <p role="status">{notice}</p>}
       {reviews.length === 0 ? (
-        <p>No member photos are waiting in this queue.</p>
+        <p>
+          {onlyReviewId
+            ? platformAdmin
+              ? "Workers open and answer photo reviews. Claim is for workers; you can follow along here."
+              : "Claim this work item to open the photo."
+            : "No member photos are waiting in this queue."}
+        </p>
       ) : (
         reviews.map((review) => (
           <article className="member-request-card" key={review.id}>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Literal
 from urllib.parse import urljoin, urlsplit
 from uuid import UUID
@@ -16,12 +16,24 @@ from app.database.client import supabase
 from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
+from app.accounts import operations_flow
 
 logger = logging.getLogger(__name__)
 Department = Literal["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"]
 WorkStatus = Literal["open", "claimed", "waiting", "blocked", "completed", "cancelled"]
 Priority = Literal["low", "normal", "high", "urgent"]
 SOURCES = {"member_request", "member_conversation", "business_handoff", "business_conversation"}
+PRIORITY_RANK = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+STATUS_RANK = {"blocked": 0, "open": 1, "claimed": 2, "waiting": 3}
+
+
+def queue_rank(row: dict) -> tuple:
+    """Needs-you-now order: urgent first, then work that can move (blocked, open) before work that is waiting,
+    then the earliest due date, then the oldest."""
+    return (PRIORITY_RANK.get(row.get("priority"), 2), STATUS_RANK.get(row.get("status"), 4),
+            row.get("due_at") or "9999", row.get("created_at") or "")
+
+
 WORK_ITEM_FIELDS = (
     "id,department,work_type,status,priority,summary,next_action,waiting_on,waiting_reason,due_at,"
     "assigned_worker_id,assigned_automation_key,claimed_until,version,member_request_id,"
@@ -270,6 +282,45 @@ class DisputeCaseUpdate(BaseModel):
         if self.status in ("resolved", "closed") and not self.resolution:
             raise ValueError("Add a resolution before resolving or closing the dispute.")
         return self
+
+
+class WorkReopen(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class WorkMemberMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Write a message.")
+        return value.strip()
+
+
+class WorkGroupPrice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    price: float = Field(gt=0, le=1000000)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("currency")
+    @classmethod
+    def upper_currency(cls, value: str) -> str:
+        return value.upper()
+
+
+class WorkDepositInvoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_total: float = Field(gt=0, le=1000000)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("currency")
+    @classmethod
+    def upper_currency(cls, value: str) -> str:
+        return value.upper()
 
 
 def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict | None]) -> APIRouter:
@@ -568,6 +619,10 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         scope: Literal["mine", "available", "all"] = Query(default="mine"),
         department: Department | None = None,
         status: WorkStatus | None = None,
+        view: Literal["active", "archive"] = Query(default="active"),
+        q: str | None = Query(default=None, max_length=100),
+        days: int = Query(default=30, ge=0, le=3650),
+        offset: int = Query(default=0, ge=0, le=10000),
         authorization: str | None = Header(default=None),
     ):
         staff = staff_identity(authorization)
@@ -580,7 +635,20 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 query = query.eq("department", department)
             if status:
                 query = query.eq("status", status)
-            if not admin:
+            elif view == "archive":
+                # Archive: finished work, newest first. The queue only shows live work.
+                query = query.in_("status", ["completed", "cancelled"])
+                if days:
+                    query = query.gte("completed_at", (datetime.now().astimezone() - timedelta(days=days)).isoformat())
+            else:
+                query = query.in_("status", ["open", "claimed", "waiting", "blocked"])
+            if not admin and view == "archive" and scope != "mine":
+                # Workers can look back at finished work in their own departments.
+                allowed = departments_for(staff["user_id"])
+                if not allowed or (department and department not in allowed):
+                    return {"work_items": [], "scope": scope, "view": view, "has_more": False}
+                query = query.in_("department", allowed)
+            elif not admin:
                 if scope == "mine":
                     query = query.eq("assigned_worker_id", staff["user_id"])
                 else:
@@ -596,12 +664,22 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 query = query.eq("assigned_worker_id", staff["user_id"])
             elif scope == "available":
                 query = query.in_("status", ["open", "claimed"])
-            rows = query.order("priority").order("due_at", nullsfirst=True).order("created_at").limit(200).execute().data or []
-            if not admin and scope == "available":
+            if view == "archive" and not status:
+                rows = query.order("completed_at", desc=True).range(offset, offset + 200).execute().data or []
+            else:
+                rows = query.order("priority").order("due_at", nullsfirst=True).order("created_at").limit(200).execute().data or []
+            if q and q.strip():
+                needle = q.strip().casefold()
+                rows = [row for row in rows if needle in " ".join(str(row.get(key) or "") for key in
+                        ("summary", "next_action", "work_type", "id", "member_request_id")).casefold()]
+            if view != "archive":
+                rows.sort(key=queue_rank)
+            if not admin and scope == "available" and view != "archive":
                 now = datetime.now().astimezone()
                 rows = [row for row in rows if row.get("assigned_worker_id") in (None, staff["user_id"])
                     or (row.get("claimed_until") and datetime.fromisoformat(row["claimed_until"].replace("Z", "+00:00")) <= now)]
-            return {"work_items": attach_handoff_conversations(rows), "scope": scope}
+            return {"work_items": attach_handoff_conversations(rows[:200]), "scope": scope, "view": view,
+                    "has_more": view == "archive" and len(rows) > 200}
         except HTTPException:
             raise
         except Exception as exc:
@@ -646,6 +724,14 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 item = item[0] if item else None
             if not item:
                 raise RuntimeError("Claim did not return the work item")
+            meta = item.get("metadata") or {}
+            if meta.get("source_kind") == "photo_review":
+                # The photo review tools follow the claim, so the worker can open the photo and reply.
+                supabase.table("member_chat_reviews").update({
+                    "assigned_worker_id": staff["user_id"], "status": "assigned", "updated_at": datetime.now().astimezone().isoformat(),
+                }).eq("id", str(meta.get("source_id"))).eq("status", "pending_assignment").execute()
+                supabase.table("member_chat_reviews").update({"assigned_worker_id": staff["user_id"]}) \
+                    .eq("id", str(meta.get("source_id"))).execute()
             return {"work_item": item}
         except Exception as exc:
             logger.exception("Could not claim operations work item")
@@ -796,6 +882,12 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
     def work_item_source_context(work_item_id: UUID, authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
         item = load_accessible_item(work_item_id, staff)
+        if (item.get("metadata") or {}).get("source_kind"):
+            try:
+                return operations_flow.source_context(item)
+            except Exception as exc:
+                logger.exception("Could not load the work item's source")
+                raise HTTPException(status_code=503, detail="This item's details could not be loaded.") from exc
         request_id = item.get("member_request_id")
         dispute_case = None
         dispute_case_id = item.get("dispute_case_id")
@@ -849,6 +941,23 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                                 "byte_size": media["byte_size"], "original_filename": media["original_filename"],
                                 "created_at": media["created_at"],
                             })
+                # The screenshot the member sent with the request (private bucket, short-lived link).
+                request["source_media"] = []
+                try:
+                    for media in (supabase.table("member_request_source_media")
+                            .select("id,storage_path,content_type,byte_size,original_filename,created_at")
+                            .eq("request_id", str(request_id)).order("created_at").execute().data or []):
+                        signed = supabase.storage.from_("member-request-source-images").create_signed_url(media["storage_path"], 900)
+                        signed_url = signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url")
+                        if signed_url and signed_url.startswith("/"):
+                            signed_url = urljoin(settings.SUPABASE_URL.rstrip("/") + "/", signed_url.lstrip("/"))
+                        if signed_url:
+                            request["source_media"].append({
+                                "id": media["id"], "url": signed_url, "content_type": media["content_type"],
+                                "byte_size": media["byte_size"], "original_filename": media["original_filename"],
+                                "created_at": media["created_at"]})
+                except Exception:
+                    logger.exception("Could not sign a request screenshot")
                 schedule_result = (supabase.table("member_request_schedules")
                     .select("id,cadence,interval_count,interval_unit,units_per_order,occurrence_limit,time_zone,next_occurrence_number,next_due_at,expires_at,status,created_at,updated_at")
                     .eq("originating_request_id", str(request_id)).maybe_single().execute())
@@ -1262,5 +1371,152 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         except Exception as exc:
             logger.exception("Could not update operations checklist item")
             raise HTTPException(status_code=503, detail="The checklist item could not be updated.") from exc
+
+    # ---- Operations flow: archive, payments, group buys, giveaways (docs/OPERATIONS_CENTER_PLAN.md) ----
+    def require_owner(item: dict, staff: dict) -> None:
+        if staff.get("role") == "platform_admin":
+            return
+        if item.get("assigned_worker_id") != staff["user_id"] or item.get("status") != "claimed":
+            raise HTTPException(status_code=403, detail="Claim this work item first.")
+
+    def by(staff: dict) -> dict:
+        """History entries for staff actions name the person who did them."""
+        return {"actor_user_id": staff.get("user_id"),
+                "actor_type": "platform_admin" if staff.get("role") == "platform_admin" else "worker"}
+
+    def flow_failure(exc: Exception, default: str) -> HTTPException:
+        from app.commerce import shopify
+        if isinstance(exc, HTTPException):
+            return exc
+        if isinstance(exc, LookupError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, ValueError):
+            return HTTPException(status_code=409, detail=str(exc))
+        if isinstance(exc, shopify.ShopifyError):
+            return HTTPException(status_code=502, detail="Shopify didn't accept the invoice. Check the shop connection and try again.")
+        if "duplicate" in str(exc).casefold() or "unique" in str(exc).casefold():
+            return HTTPException(status_code=409, detail="That invoice was already sent.")
+        logger.exception(default)
+        return HTTPException(status_code=503, detail=default)
+
+    @router.post("/operations/work-items/{work_item_id}/reopen")
+    def reopen_work_item(work_item_id: UUID, payload: WorkReopen, authorization: str | None = Header(default=None)):
+        staff = staff_identity(authorization)
+        if staff.get("role") != "platform_admin":
+            raise HTTPException(status_code=403, detail="Only a platform administrator can reopen archived work.")
+        item = load_accessible_item(work_item_id, staff)
+        if item.get("status") not in ("completed", "cancelled"):
+            raise HTTPException(status_code=409, detail="Only finished work can be reopened.")
+        values = {"status": "open", "completed_at": None, "assigned_worker_id": None, "claimed_until": None,
+                  "waiting_on": None, "waiting_reason": None, "next_action": f"Reopened: {payload.reason}"[:500],
+                  "version": int(item.get("version") or 1) + 1, "updated_at": datetime.now().astimezone().isoformat()}
+        supabase.table("operations_work_items").update(values).eq("id", str(work_item_id)).execute()
+        operations_flow.add_event(item, "reopened", f"Reopened by an administrator: {payload.reason}", next_status="open", **by(staff))
+        return {"work_item": {**item, **values}}
+
+    @router.get("/operations/work-items/{work_item_id}/payments")
+    def work_item_payments(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if not item.get("member_request_id"):
+            return {"invoices": [], "selected_option": None, "deposit_terms": None, "expected_total": None,
+                    "expected_currency": "USD", "suggested_deposit": None}
+        try:
+            return operations_flow.request_payments(str(item["member_request_id"]))
+        except Exception as exc:
+            raise flow_failure(exc, "Payments for this request could not be loaded.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/deposit-invoice", status_code=201)
+    def send_work_deposit(work_item_id: UUID, payload: WorkDepositInvoice, authorization: str | None = Header(default=None)):
+        from app.commerce import service as commerce
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        if not item.get("member_request_id"):
+            raise HTTPException(status_code=409, detail="Deposits belong to sourcing requests.")
+        try:
+            invoice = commerce.send_deposit_invoice(str(item["member_request_id"]), payload.expected_total,
+                                                    payload.currency, staff["user_id"])
+        except Exception as exc:
+            raise flow_failure(exc, "The deposit invoice could not be sent.") from exc
+        operations_flow.add_event(item, "status_changed", f"Deposit invoice sent ({invoice.get('amount')} {payload.currency}).", **by(staff))
+        return {"invoice": {key: value for key, value in invoice.items() if key != "quote"}}
+
+    @router.post("/operations/work-items/{work_item_id}/invoice", status_code=201)
+    def send_work_invoice(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        from app.commerce import service as commerce
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        if not item.get("member_request_id"):
+            raise HTTPException(status_code=409, detail="Invoices from here belong to sourcing requests.")
+        try:
+            invoice = commerce.send_request_invoice(str(item["member_request_id"]), staff["user_id"])
+        except Exception as exc:
+            raise flow_failure(exc, "The invoice could not be sent.") from exc
+        operations_flow.add_event(item, "status_changed", f"Invoice sent ({invoice.get('amount')} {invoice.get('currency')}).", **by(staff))
+        return {"invoice": invoice}
+
+    @router.post("/operations/work-items/{work_item_id}/group-invoices")
+    def send_group_invoices(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        from app.commerce import service as commerce
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        meta = item.get("metadata") or {}
+        if meta.get("source_kind") != "trend_pool":
+            raise HTTPException(status_code=409, detail="This isn't a group buy.")
+        try:
+            result = commerce.send_pool_invoices(str(meta["source_id"]), staff["user_id"])
+        except Exception as exc:
+            raise flow_failure(exc, "The group invoices could not be sent.") from exc
+        operations_flow.add_event(item, "status_changed", f"Group invoices sent: {result['sent']} sent, "
+                                  f"{len(result['failed'])} failed, {result['skipped']} already invoiced.", **by(staff))
+        return result
+
+    @router.post("/operations/work-items/{work_item_id}/member-message", status_code=201)
+    def message_member(work_item_id: UUID, payload: WorkMemberMessage, authorization: str | None = Header(default=None)):
+        """For work with no chat of its own (prize, failed payment, failed invoice): write in the member's chat."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        if item.get("member_conversation_id") or item.get("member_request_id"):
+            raise HTTPException(status_code=409, detail="Reply in this work item's own chat.")
+        try:
+            return operations_flow.send_member_message(item, staff["user_id"], by(staff)["actor_type"], payload.content)
+        except Exception as exc:
+            raise flow_failure(exc, "The message could not be sent.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/group-price")
+    def set_group_price(work_item_id: UUID, payload: WorkGroupPrice, authorization: str | None = Header(default=None)):
+        """The price each buyer pays, agreed with the supplier for the whole group."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        meta = item.get("metadata") or {}
+        if meta.get("source_kind") != "trend_pool":
+            raise HTTPException(status_code=409, detail="This isn't a group buy.")
+        try:
+            supabase.table("commerce_trend_items").update({"pool_price": round(payload.price, 2),
+                                                           "pool_currency": payload.currency}) \
+                .eq("id", str(meta["source_id"])).execute()
+        except Exception as exc:
+            raise flow_failure(exc, "The group price could not be saved.") from exc
+        operations_flow.add_event(item, "status_changed", f"Group price set to {payload.price:.2f} {payload.currency}.", **by(staff))
+        return {"price": round(payload.price, 2), "currency": payload.currency}
+
+    @router.post("/operations/work-items/{work_item_id}/giveaway-draw")
+    def draw_work_giveaway(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        from app.commerce import service as commerce
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        meta = item.get("metadata") or {}
+        if meta.get("source_kind") != "giveaway":
+            raise HTTPException(status_code=409, detail="This isn't a giveaway draw.")
+        try:
+            return commerce.draw_giveaway(str(meta["source_id"]), staff["user_id"])
+        except Exception as exc:
+            raise flow_failure(exc, "The giveaway could not be drawn.") from exc
 
     return router

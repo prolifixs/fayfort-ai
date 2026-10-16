@@ -21,7 +21,9 @@ export type WorkItem = {
   business_conversation_id: string | null;
   handoff_id: string | null;
   dispute_case_id?: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
+  completed_at?: string | null;
 };
 export type WorkNote = { id: string; author_id: string; note: string; created_at: string };
 export type MentionWorker = { user_id: string; email: string; label: string };
@@ -165,6 +167,70 @@ export type SourceContext = {
   conversation?: MemberConversationContext | BusinessConversationContext | null;
   handoff?: HandoffContext | null;
   dispute_case?: DisputeCase | null;
+  flow?: FlowContext | null;
+};
+/** Context for work that came from outside a request or conversation (operations_flow.source_context). */
+export type FlowContext = {
+  kind: string;
+  metadata: Record<string, unknown>;
+  member_name?: string;
+  order?: {
+    id: string;
+    order_name: string | null;
+    financial_status: string | null;
+    fulfillment_status: string | null;
+    cancelled_at: string | null;
+    total: number | string | null;
+    currency: string | null;
+    line_items: { title?: string; quantity?: number; variant_title?: string | null; sku?: string | null }[] | null;
+    tracking: { number?: string; url?: string; company?: string }[] | null;
+    status_url: string | null;
+    placed_at: string | null;
+  } | null;
+  trend?: {
+    id: string;
+    title: string;
+    status: string;
+    want_count: number;
+    pool_target: number | null;
+    pool_price: number | string | null;
+    pool_currency: string | null;
+    pool_deadline: string | null;
+    pool_note: string | null;
+    image_url?: string | null;
+    source_url?: string | null;
+  } | null;
+  buyers?: number;
+  invoices?: { id: string; member_id: string; status: string; amount: number; currency: string; sent_at: string | null; paid_at: string | null }[];
+  giveaway?: { id: string; title: string; prize_text?: string | null; ends_at?: string; winner_count?: number; status?: string; drawn_at?: string | null } | null;
+  entries?: number;
+  review?: { id: string; conversation_id: string | null; status: string; assigned_worker_id: string | null; created_at: string } | null;
+  subscription?: { plan: string; status: string; current_period_end: string | null } | null;
+  invoice?: { id: string; title: string; status: string; error: string | null; amount: number; currency: string; request_id: string | null; created_at: string } | null;
+  chat?: {
+    conversation_id: string | null;
+    messages: { id: string; sender_type: "member" | "assistant" | "worker"; content: string; created_at: string }[];
+  } | null;
+};
+export type RequestPayments = {
+  invoices: {
+    id: string;
+    kind: "order" | "deposit" | string;
+    status: string;
+    amount: number;
+    currency: string;
+    deposit_credit: number;
+    invoice_url: string | null;
+    sent_at: string | null;
+    paid_at: string | null;
+    error: string | null;
+    trend_item_id: string | null;
+  }[];
+  selected_option: { id: string; product_name: string; price_amount: number | null; currency: string | null; selected_at: string } | null;
+  deposit_terms: { tier: string; rate: number; reason: string } | null;
+  expected_total: number | null;
+  expected_currency: string;
+  suggested_deposit: number | null;
 };
 export type WorkEvent = {
   id: string;
@@ -177,6 +243,7 @@ export type WorkEvent = {
   next_status: string | null;
   reason: string | null;
   created_at: string;
+  actor_user_id?: string | null;
 };
 export type WorkforceWorker = {
   user_id: string;
@@ -289,6 +356,14 @@ export const disputeNextStatuses: Record<string, string[]> = {
   awaiting_supplier: ["investigating", "resolved", "closed"],
   resolved: ["closed"],
   closed: [],
+};
+/** A request moves through these stages; staff pick the next one (purchase confirmed comes from payment). */
+export const requestNextStages: Record<string, string[]> = {
+  submitted: ["under_review", "cancelled"],
+  under_review: ["sourcing", "needs_member_input", "cancelled"],
+  sourcing: ["needs_member_input", "cancelled"],
+  needs_member_input: ["sourcing", "cancelled"],
+  options_sent: ["cancelled"],
 };
 export const statusLabel = (value: string) =>
   value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());

@@ -168,7 +168,7 @@ export const requestNextStages: Record<string, string[]> = {
   submitted: ["under_review", "cancelled"],
   under_review: ["sourcing", "needs_member_input", "cancelled"],
   sourcing: ["needs_member_input", "options_sent", "purchase_confirmed", "item_in_warehouse", "cancelled"],
-  needs_member_input: ["options_sent", "cancelled"],
+  needs_member_input: ["sourcing", "options_sent", "cancelled"],
   options_sent: ["purchase_confirmed", "cancelled"],
   purchase_confirmed: ["item_in_warehouse", "cancelled"],
   item_in_warehouse: ["shipped", "cancelled"],

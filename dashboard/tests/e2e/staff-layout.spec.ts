@@ -84,3 +84,26 @@ test("Operations Center puts the queue first and keeps chats in the shared threa
   await page.getByRole("tab", { name: "Team" }).click();
   await expect(page.getByRole("region", { name: "Workforce overview" })).toBeVisible();
 });
+
+for (const size of [SIZES[0], SIZES[2]]) {
+  test(`Operations steps, Archive and Guide fit a ${size.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await signedInStaff(page);
+    await page.goto("/operations");
+    const queue = page.getByRole("region", { name: "Operations work items" });
+    await queue.getByRole("button", { name: /Pack and ship #1042/ }).click();
+    await expect(page.getByRole("region", { name: "Steps for this work" })).toBeVisible();
+    await expect(page.getByText("Body wave wig 22 inch")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open order in Shopify/ })).toHaveAttribute("href", /admin\/orders\/5001/);
+    await noSideScroll(page);
+    await page.screenshot({ path: `${OUT}/ops-store-order-${size.name}.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Archive" }).click();
+    await expect(page.getByRole("button", { name: /Packed and shipped #1031/ })).toBeVisible();
+    await noSideScroll(page);
+    await page.screenshot({ path: `${OUT}/ops-archive-${size.name}.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Guide" }).click();
+    await expect(page.getByRole("complementary", { name: "Guides" })).toBeVisible();
+    await noSideScroll(page);
+    await page.screenshot({ path: `${OUT}/ops-guide-${size.name}.png`, fullPage: true });
+  });
+}
