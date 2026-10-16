@@ -77,7 +77,6 @@ export function OperationsCenterPage() {
     handoffContext,
     flowContext,
     payments,
-    sourcingBatches,
     sourcingCandidates,
     busy,
     error,
@@ -146,40 +145,52 @@ export function OperationsCenterPage() {
   const openHelp = () => setHelp(guideKey || "glossary");
   return (
     <main className="operations-center-page">
-      <header className="operations-center-header">
-        <a className="operations-back" href="/">
-          ← Control Center
-        </a>
-        <div>
-          <small>FAYFORT STAFF WORKSPACE</small>
-          <h1>Operations Center</h1>
-          <p>Every piece of staff work in one place, step by step.</p>
-        </div>
-        <div className="operations-header-actions">
-          {token && <OperationsNotifications accessToken={token} />}
-          {canManage && (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => void processDueSchedules()}
-              disabled={processingDueSchedules}
-              title="Recurring orders run on their own every minute. Use this only to catch up after an outage."
-            >
-              {processingDueSchedules ? "Processing due requests…" : "Run due recurring requests now"}
-            </button>
+      <header className="ops-head">
+        <div className="ops-head-top">
+          <div className="ops-head-title">
+            <a className="ops-crumb" href="/">
+              ← Control Center
+            </a>
+            <h1>Operations Center</h1>
+            <p>Every piece of staff work in one place, step by step.</p>
+          </div>
+          {token && (
+            <div className="ops-head-actions">
+              <OperationsNotifications accessToken={token} />
+              <button
+                type="button"
+                className="ops-head-button"
+                onClick={() => {
+                  setNotice("");
+                  void refresh(token);
+                }}
+                disabled={busy}
+                title="Load the latest work"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
+                </svg>
+                <span>Refresh</span>
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              setNotice("");
-              if (token) void refresh(token);
-            }}
-            disabled={busy}
-          >
-            Refresh
-          </button>
         </div>
+        {token && !authLoading && (
+          <div className="ops-tabs" role="tablist" aria-label="Operations views">
+            {tabs.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={view === id}
+                className={view === id ? "ops-tab is-active" : "ops-tab"}
+                onClick={() => openView(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
       {authLoading ? (
         <p role="status">Checking your FayFort staff sign-in…</p>
@@ -197,45 +208,35 @@ export function OperationsCenterPage() {
         </section>
       ) : (
         <>
-          <div className="operations-tabs" role="tablist" aria-label="Operations views">
-            {tabs.map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={view === id}
-                className={view === id ? "operations-tab active" : "operations-tab"}
-                onClick={() => openView(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           {canManage && view === "team" && <WorkforcePanel ops={ops} />}
           {canManage && view === "reports" && <ReportsPanel ops={ops} />}
           {canManage && view === "reports" && <AutomationActivity ops={ops} />}
+          {canManage && view === "reports" && (
+            <section className="ops-maintenance" aria-label="Maintenance">
+              <div>
+                <strong>Recurring orders</strong>
+                <p>Due recurring requests are created automatically. Use this only to catch up after an outage.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => void processDueSchedules()} disabled={processingDueSchedules}>
+                {processingDueSchedules ? "Processing due requests…" : "Run due recurring requests now"}
+              </button>
+            </section>
+          )}
           {view === "guide" && <GuideTab firstWeek={firstWeek} setFirstWeek={setFirstWeek} />}
           {(view === "queue" || view === "archive") && (
             <>
               {view === "queue" ? <QueueFilters ops={ops} /> : <ArchiveControls ops={ops} />}
               {(error || notice) && (
-                <p className={error ? "form-error" : "operations-notice"} role={error ? "alert" : "status"}>
-                  {error || notice}
-                </p>
+                <div className={`ops-flash ${error ? "is-error" : "is-ok"}`} role={error ? "alert" : "status"}>
+                  <span>{error || notice}</span>
+                  {!error && (
+                    <button type="button" aria-label="Dismiss message" onClick={() => setNotice("")}>
+                      ×
+                    </button>
+                  )}
+                </div>
               )}
-              {view === "queue" && items.some((item) => item.department === "sourcing" && item.work_type === "member_request") && (
-                <SourcingBatchForm ops={ops} />
-              )}
-              {view === "queue" && sourcingBatches.length > 0 && (
-                <details className="operations-sourcing-batches">
-                  <summary>Recent sourcing batches ({sourcingBatches.length})</summary>
-                  {sourcingBatches.slice(0, 5).map((batch) => (
-                    <p key={batch.id}>
-                      {batch.title} · {batch.items.length} requests · {statusLabel(batch.status)}
-                    </p>
-                  ))}
-                </details>
-              )}
+              {view === "queue" && ops.batchWorkIds.length > 0 && <SourcingBatchForm ops={ops} />}
               <div className="operations-center-grid">
                 <WorkList ops={ops} />
                 <section className="operations-work-detail" aria-label="Selected work details" ref={detailRef}>

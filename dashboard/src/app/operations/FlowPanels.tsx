@@ -740,38 +740,51 @@ export function ArchiveControls({ ops }: { ops: OperationsState }) {
   const [draft, setDraft] = useState(archiveQuery);
   return (
     <form
-      className="operations-queue-controls ops-archive-controls"
+      className="ops-toolbar ops-archive-controls"
       aria-label="Archive search"
       onSubmit={(event) => {
         event.preventDefault();
         setArchiveQuery(draft);
       }}
     >
-      <label>
-        Search finished work
-        <input type="search" maxLength={100} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Order, member request, words in the title…" />
-      </label>
-      <label>
-        Finished in
-        <select aria-label="Archive period" value={archiveDays} onChange={(event) => setArchiveDays(Number(event.target.value) as 30 | 90 | 0)}>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-          <option value={0}>Any time</option>
-        </select>
-      </label>
-      <label>
-        Department
-        <select aria-label="Archive department" value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)}>
-          <option value="">All departments</option>
-          {visibleDepartments.map((department) => (
-            <option key={department} value={department}>
-              {departmentLabel[department]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button className="secondary-button">Search</button>
-      {hasMore && <small>Showing the newest 200. Narrow the search to see older work.</small>}
+      <div className="ops-search">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input
+          type="search"
+          className="ops-search-input"
+          aria-label="Search finished work"
+          maxLength={100}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Search finished work: order, request, words in the title…"
+        />
+      </div>
+      <div className="ops-toolbar-filters">
+        <label className="ops-select">
+          <span>Finished</span>
+          <select aria-label="Archive period" value={archiveDays} onChange={(event) => setArchiveDays(Number(event.target.value) as 30 | 90 | 0)}>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+            <option value={0}>Any time</option>
+          </select>
+        </label>
+        <label className="ops-select">
+          <span>Department</span>
+          <select aria-label="Archive department" value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)}>
+            <option value="">All</option>
+            {visibleDepartments.map((department) => (
+              <option key={department} value={department}>
+                {departmentLabel[department]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="secondary-button">Search</button>
+      </div>
+      {hasMore && <small className="ops-toolbar-note">Showing the newest 200. Narrow the search to see older work.</small>}
     </form>
   );
 }

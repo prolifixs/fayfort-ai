@@ -463,65 +463,77 @@ export function QueueFilters({ ops }: { ops: OperationsState }) {
     filterStatus,
     setFilterStatus,
     visibleDepartments,
+    sourcingBatches,
   } = ops;
+  const scopes: [typeof scope, string][] = [
+    ["mine", "My work"],
+    ["available", "Available"],
+    ...(canManage ? ([["all", "All work"]] as [typeof scope, string][]) : []),
+  ];
   return (
-    <nav className="operations-queue-controls" aria-label="Operations queue filters">
-      <div role="group" aria-label="Queue scope">
-        <button type="button" aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>
-          My work
-        </button>
-        <button type="button" aria-pressed={scope === "available"} onClick={() => setScope("available")}>
-          Available
-        </button>
-        {canManage && (
-          <button type="button" aria-pressed={scope === "all"} onClick={() => setScope("all")}>
-            All work
+    <nav className="ops-toolbar" aria-label="Operations queue filters">
+      <div className="ops-segmented" role="group" aria-label="Queue scope">
+        {scopes.map(([value, label]) => (
+          <button key={value} type="button" className="ops-seg" aria-pressed={scope === value} onClick={() => setScope(value)}>
+            {label}
           </button>
-        )}
+        ))}
       </div>
-      <label>
-        Department
-        <select
-          aria-label="Filter department"
-          value={filterDepartment}
-          onChange={(event) => setFilterDepartment(event.target.value)}
-        >
-          <option value="">All departments</option>
-          {visibleDepartments.map((department) => (
-            <option key={department} value={department}>
-              {departmentLabel[department]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Status
-        <select
-          aria-label="Filter status"
-          value={filterStatus}
-          onChange={(event) => setFilterStatus(event.target.value)}
-        >
-          <option value="">All statuses</option>
-          {statuses
-            .filter((status) => status !== "completed" && status !== "cancelled")
-            .map((status) => (
-              <option key={status} value={status}>
-                {statusLabel(status)}
+      <div className="ops-toolbar-filters">
+        <label className="ops-select">
+          <span>Department</span>
+          <select aria-label="Filter department" value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)}>
+            <option value="">All</option>
+            {visibleDepartments.map((department) => (
+              <option key={department} value={department}>
+                {departmentLabel[department]}
               </option>
             ))}
-        </select>
-      </label>
+          </select>
+        </label>
+        <label className="ops-select">
+          <span>Status</span>
+          <select aria-label="Filter status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+            <option value="">All</option>
+            {statuses
+              .filter((status) => status !== "completed" && status !== "cancelled")
+              .map((status) => (
+                <option key={status} value={status}>
+                  {statusLabel(status)}
+                </option>
+              ))}
+          </select>
+        </label>
+        {sourcingBatches.length > 0 && (
+          <details className="ops-batches">
+            <summary>Sourcing batches · {sourcingBatches.length}</summary>
+            <ul>
+              {sourcingBatches.slice(0, 8).map((batch) => (
+                <li key={batch.id}>
+                  <strong>{batch.title}</strong>
+                  <small>
+                    {batch.items.length} requests · {statusLabel(batch.status)}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
     </nav>
   );
 }
 
+/** Appears once requests are ticked with "Add to batch": name the batch and create it. */
 export function SourcingBatchForm({ ops }: { ops: OperationsState }) {
-  const { batchTitle, setBatchTitle, batchWorkIds, busy, createSourcingBatch } = ops;
+  const { batchTitle, setBatchTitle, batchWorkIds, setBatchWorkIds, busy, createSourcingBatch } = ops;
   return (
-    <form className="operations-sourcing-batch-form" onSubmit={createSourcingBatch}>
-      <strong>Group sourcing requests</strong>
-      <label>
-        Batch name
+    <form className="ops-batch-bar" onSubmit={createSourcingBatch} aria-label="Group sourcing requests">
+      <strong>
+        {batchWorkIds.length} request{batchWorkIds.length === 1 ? "" : "s"} selected
+      </strong>
+      <label className="ops-select">
+        <span>Batch name</span>
         <input
           required
           maxLength={120}
@@ -530,9 +542,11 @@ export function SourcingBatchForm({ ops }: { ops: OperationsState }) {
           placeholder="For example: October outerwear"
         />
       </label>
-      <span>{batchWorkIds.length} requests selected</span>
-      <button className="secondary-button" disabled={busy || batchWorkIds.length === 0}>
+      <button className="primary-button" disabled={busy || batchWorkIds.length === 0}>
         Create batch
+      </button>
+      <button type="button" className="ops-link-button" onClick={() => setBatchWorkIds([])}>
+        Clear selection
       </button>
     </form>
   );
