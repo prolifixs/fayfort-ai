@@ -61,38 +61,62 @@ export function useCaptcha() {
   };
 }
 
+const AUTO_RETRIES = 2;
+
 function TurnstileWidget({ onToken }: { onToken: (token: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
+  // Bumping this remounts the widget ("Try again") without reloading the page or losing what was typed.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let widgetId: string | undefined;
     let cancelled = false;
+    let retries = 0;
+    let retryTimer: number | undefined;
+    setError("");
     loadTurnstile()
       .then(() => {
         if (cancelled || !container.current || !window.turnstile) return;
         widgetId = window.turnstile.render(container.current, {
           sitekey: TURNSTILE_SITE_KEY,
           appearance: "interaction-only",
-          callback: (value: string) => onToken(value),
+          // A page left open a long time gets a fresh check by itself instead of failing at "Sign in".
+          "refresh-expired": "auto",
+          callback: (value: string) => {
+            setError("");
+            onToken(value);
+          },
           "expired-callback": () => onToken(""),
           "error-callback": () => {
             onToken("");
-            setError("The security check could not complete. Refresh the page and try again.");
+            // Brief network drops are common: try again quietly before asking the person to do anything.
+            if (retries < AUTO_RETRIES && widgetId && window.turnstile) {
+              retries += 1;
+              const id = widgetId;
+              retryTimer = window.setTimeout(() => window.turnstile?.reset(id), 1500 * retries);
+              return true;
+            }
+            setError("The security check couldn't finish. Check your connection, then try again.");
+            return true;
           },
         });
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Security check unavailable."));
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
-  }, [onToken]);
+  }, [onToken, attempt]);
   return (
     <div className="auth-captcha">
       <div ref={container} />
       {error && (
         <p className="form-error" role="alert">
-          {error}
+          {error}{" "}
+          <button type="button" className="link-button" onClick={() => setAttempt((value) => value + 1)}>
+            Try again
+          </button>
         </p>
       )}
     </div>

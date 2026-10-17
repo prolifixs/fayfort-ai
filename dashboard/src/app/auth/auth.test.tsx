@@ -110,7 +110,9 @@ describe("forgot password", () => {
   it("shows the one sign-in page at the Control Center address and at /member/account", async () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
-    expect(screen.getByText("Members and the FayFort team use the same sign-in.")).toBeInTheDocument();
+    expect(screen.getByText("Welcome back. Sign in to your FayFort account.")).toBeInTheDocument();
+    // The public sign-in page says nothing about staff accounts.
+    expect(screen.queryByText(/FayFort team|staff|Control Center/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Forgot your password?" })).toHaveAttribute("href", "/auth/forgot?audience=member");
     expect(screen.queryByText(/FAYFORT CONTROL CENTER/)).not.toBeInTheDocument();
     cleanup();

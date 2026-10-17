@@ -27,7 +27,7 @@ Everything else (email, password, captcha) is already on the member page.
 ## 2. One sign-in for everyone
 
 - **Keep the recent page** and make it the only sign-in. Its label becomes "FAYFORT ACCOUNT", and its line becomes
-  "Members and the FayFort team use the same sign-in."
+  "Welcome back. Sign in to your FayFort account." (it never mentions staff).
 - **After sign-in, the account decides where you go:**
   - FayFort staff (platform admin, or an active worker) → two-step verification → Control Center (`/`) or Operations.
   - Members → `/member/chat` (as today).
@@ -130,7 +130,12 @@ the page read it, so the page showed a general message.
 - Worker password resets sent from the Control Center use the same link (`hashed_token` from `generate_link`).
 - **Supabase email templates** (confirm sign-up, invite, magic link, change email, reset password) link to
   `{{ .SiteURL }}/auth/callback?type=<type>&token_hash={{ .TokenHash }}` in place of `{{ .ConfirmationURL }}`.
-  The templates are switched over after this dashboard version is live.
+  The reset password, confirm sign-up and invite templates were switched on 2026-10-17 after this version went live.
+  Change email and magic link keep Supabase's default link, because the app doesn't use them.
+- **Security check (Turnstile)**: a check that fails is retried twice by itself, and then the page offers "Try again"
+  instead of asking for a reload. A page left open a long time gets a fresh check by itself (`refresh-expired: auto`).
+- The public sign-in page no longer says that staff use the same sign-in. It now reads "Welcome back. Sign in to your
+  FayFort account.", and a test checks that the page doesn't mention staff or the Control Center.
 
 ## 9. The logo
 

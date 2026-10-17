@@ -190,7 +190,7 @@ export function MemberAccountPage() {
             ? "Your member identity is separate from business workspaces and staff access."
             : mode === "signup"
               ? "Free to join. Use email and password; we’ll send a verification link before your account is enabled."
-              : "Members and the FayFort team use the same sign-in."}
+              : "Welcome back. Sign in to your FayFort account."}
         </p>
         {siteChatCode && !profile && (
           <p className="quiet-note site-chat-carry-note">Your chat with FayFort AI will be waiting in your FayFort chat.</p>
