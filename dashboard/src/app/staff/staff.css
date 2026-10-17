@@ -877,3 +877,17 @@
   .ads-creative { grid-template-columns: 1fr; }
   .ads-three { grid-template-columns: 1fr; }
 }
+
+/* Control Center → Website */
+.website-posts { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.website-post { display: grid; gap: 10px; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.website-post.is-hidden { background: var(--color-surface); }
+.website-post-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.website-post-head > div { display: grid; gap: 2px; }
+.website-post-head a { font-size: var(--text-sm); }
+.website-post-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.website-post-actions input { flex: 1 1 220px; min-width: 0; }
+.website-post-actions .danger { color: var(--color-danger); }
+.website-preview { position: relative; width: min(360px, 100%); aspect-ratio: 4 / 5; border-radius: var(--radius-md); overflow: hidden; background: var(--color-surface); }
+.website-preview.is-reel { aspect-ratio: 9 / 16; max-height: 560px; }
+.website-preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

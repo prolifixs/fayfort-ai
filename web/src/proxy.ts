@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 // Only the public site is served from fayfort.com. Every other path returns the standard 404.
 // Retired enterprise URLs (/login, /dashboard, ...) are redirected to the FayFort AI app in
 // next.config.js once FAYFORT_APP_URL is set; redirects run before this proxy.
-export const PUBLIC_SITE_PATHS = ['/', '/services', '/about-us', '/terms', '/terms-ebooks', '/ebook/landed']
+export const PUBLIC_SITE_PATHS = ['/', '/how-it-works', '/services', '/about-us', '/terms', '/terms-ebooks', '/ebook/landed']
 
 export const isPublicSitePath = (pathname: string) =>
   PUBLIC_SITE_PATHS.includes(pathname) || pathname.startsWith('/ebook/landed/')

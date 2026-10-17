@@ -33,7 +33,7 @@ class AiUsageTests(unittest.TestCase):
             ),
             action_decision=None,
         )
-        self.assertIn("I can't confirm that from the information I have", answer)
+        self.assertIn("a member of the FayFort team can", answer)
         self.assertIn("Refund exceptions are reviewed by a manager", answer)
         self.assertNotIn("qualify for a full refund", answer)
         self.assertNotIn("I can forward", answer)
@@ -139,7 +139,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="A manager may review refund exceptions.",
             action_decision=None,
         )
-        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN + " " + ai_responder.FALLBACK_NO_ACTION)
+        self.assertEqual(answer, ai_responder.FALLBACK_NO_ACTION)
 
     def test_grounding_guard_blocks_typographic_contraction_action_promise(self):
         answer = ai_responder._guard_response_grounding(
@@ -148,7 +148,7 @@ class AiUsageTests(unittest.TestCase):
             knowledge_context="A manager can review refund exceptions.",
             action_decision=None,
         )
-        self.assertEqual(answer, ai_responder.FALLBACK_UNKNOWN + " " + ai_responder.FALLBACK_NO_ACTION)
+        self.assertEqual(answer, ai_responder.FALLBACK_NO_ACTION)
 
     def test_grounding_guard_blocks_unexecuted_pass_along_action(self):
         answer = ai_responder._guard_response_grounding(

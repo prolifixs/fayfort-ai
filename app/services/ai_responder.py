@@ -221,7 +221,11 @@ def _price_amounts(text: str) -> set[str]:
 # What the customer sees when a model answer is held back (docs/KNOWLEDGE_AND_AI_PLAN.md: no robotic replies).
 FALLBACK_UNKNOWN = ("I can't confirm that from the information I have, dear. "
                     "A member of the FayFort team can check it for you; just ask for a person.")
-FALLBACK_NO_ACTION = "I haven't sent or forwarded anything yet."
+FALLBACK_NO_ACTION = ("I can't check or send anything myself, dear, but a member of the FayFort team can. "
+                      "Just ask for a person and they'll join this chat.")
+FALLBACK_SORRY = "I'm sorry about this."
+_UPSET = re.compile(r"\b(?:ridiculous|unacceptable|terrible|awful|angry|upset|frustrat\w*|annoy\w*|nobody|no one|"
+                    r"still waiting|waited|waiting for|scam|disappointed|complain\w*)\b", re.IGNORECASE)
 FALLBACK_NEEDS_PERSON = ("This one needs a person from the FayFort team, dear. "
                          "Ask for a person and someone from the team will join this chat.")
 
@@ -235,9 +239,9 @@ def _safe_response_fallback(
 ) -> str:
     if action_decision is not None and action_decision.needs_human:
         return FALLBACK_NEEDS_PERSON
-    fallback = FALLBACK_UNKNOWN
-    if unexecuted_action:
-        fallback += " " + FALLBACK_NO_ACTION
+    fallback = FALLBACK_NO_ACTION if unexecuted_action else FALLBACK_UNKNOWN
+    if _UPSET.search(customer_message or ""):
+        fallback = FALLBACK_SORRY + " " + fallback
     if re.search(r"\b(?:refund|reimburse|chargeback)\b", customer_message, re.IGNORECASE):
         refund_facts = [
             sentence.strip()
@@ -547,6 +551,17 @@ def generate_ai_response(
         content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
         content = None
+    if not (isinstance(content, str) and content.strip()):
+        # The provider sometimes returns an empty answer to a one-word message ("Ghana"); one retry fixes most.
+        data = _request_completion(
+            messages=messages, temperature=0.4, max_tokens=500,
+            business_id=business_id, operation="response",
+            conversation_id=conversation_id, source_message_id=source_message_id,
+        )
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            content = None
 
     if isinstance(content, str) and content.strip():
         return _guard_response_grounding(

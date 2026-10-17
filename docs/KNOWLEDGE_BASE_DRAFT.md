@@ -32,6 +32,9 @@ Everything happens in the FayFort member dashboard (sign up free).
 1. **Send a request** from Orders & requests (or from the chat): what you want, plus a link, photo or description,
    quantity, colours, sizes and an optional budget.
 2. **We review it within 24 hours.** If we need a detail, we ask in your request and you answer there.
+   Sending a request is free.
+   **Deposit:** after the review, Free and Standard members get a sourcing deposit invoice (50% or 25% of the
+   expected total) before we start sourcing. Pro members in good standing pay no deposit.
 3. **Delivery estimate.** Before we start sourcing we give you an estimated delivery date. If it changes, we tell you
    the new date and why.
 4. **Options.** We send you the products we found with their prices and notes. You choose one.
@@ -61,6 +64,8 @@ A request can be cancelled from the dashboard until it's paid. After paying, mes
 
 ## 4. Sourcing deposit
 
+- Sending a sourcing request is free. Before we start sourcing, Free and Standard members pay a deposit: we send the
+  invoice after reviewing the request. So yes, something is paid before sourcing starts (except Pro in good standing).
 - A deposit is a part-payment of the expected product total, not an extra fee.
 - It counts toward your order: when we invoice your chosen product, the deposit is taken off.
 - If you decide not to buy, FayFort keeps the deposit for the sourcing work done.
@@ -83,6 +88,8 @@ A request can be cancelled from the dashboard until it's paid. After paying, mes
 - One unlock costs one contact credit: $15 each or 5 for $50. Pro includes 10 unlocks a month. 500 points also buy one
   credit.
 - Unlocked contacts stay in My contacts permanently. Hotels and restaurants are free to view.
+- When someone asks for a factory or supplier contact: tell them to sign up free, open Supplier directory in the
+  dashboard, search (for example "wigs Guangzhou") and unlock the one they want. The team doesn't send contacts in chat.
 
 ## 7. Shop, group buys and giveaways
 

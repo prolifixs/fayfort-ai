@@ -129,3 +129,16 @@ normal replies.
    classifier). The classifier is told supplier or factory contacts are supplier_search answered from the knowledge.
 5. Upset customers: apologise once, ask the one detail needed, offer a person in the same reply.
 6. Knowledge: "What's trending" points to Browse → What's moving. scripts/load_knowledge.py updates changed documents.
+
+**Second run (2026-10-16, after 5dd9e38).** Fixed: the $40 fee ("We don't have a separate $40 commitment fee"),
+plain text everywhere, the new-enquiry flow (asks what → where → budget once each, then "sign up free … submit a
+sourcing request"), delivery promises, trending (points to Browse after the knowledge update), commission, consultation
+refund. Still wrong, fixed in the third batch:
+- "Do I have to pay anything before you source?" answered "No". The knowledge now says plainly that Free and Standard
+  members get a deposit invoice after the review, before sourcing starts.
+- "Fayfay or a bot?" opened a handoff ("Fayfay" was counted as asking for a person). Removed.
+- The upset customer got a cold fallback. Fallbacks now apologise when the customer is upset and say plainly "I can't
+  check or send anything myself, but a member of the FayFort team can".
+- "Ghana" (a one-word answer) got an empty reply from the model; the reply is now retried once.
+- Supplier contacts: the knowledge now says how to unlock one in the Supplier directory; the team doesn't send contacts
+  in chat.

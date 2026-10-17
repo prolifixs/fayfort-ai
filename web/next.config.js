@@ -1,6 +1,6 @@
 const SHOPIFY_STORE = 'https://8kjjz9-ei.myshopify.com'
 
-// Allowlist of what the public pages load: the site itself and Shopify for LANDED. The old
+// Allowlist of what the public pages load: the site itself, Shopify for LANDED and Instagram embeds. The old
 // enterprise app's Supabase, Stripe and video hosts were dropped with it (owner decision D11).
 // Next.js injects inline bootstrap scripts, so
 // script-src needs 'unsafe-inline' until a nonce-based CSP is set up; dev mode
@@ -12,7 +12,8 @@ const contentSecurityPolicy = [
   `img-src 'self' data: blob: https://cdn.shopify.com`,
   "font-src 'self' data:",
   `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com`,
-  `frame-src ${SHOPIFY_STORE}`,
+  // Instagram's own player for the posts and reels on the home page (Control Center → Website).
+  `frame-src ${SHOPIFY_STORE} https://www.instagram.com`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

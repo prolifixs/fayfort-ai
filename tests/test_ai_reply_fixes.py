@@ -42,7 +42,12 @@ class GuardTests(unittest.TestCase):
     def test_a_bare_promise_is_still_blocked(self):
         answer = "I'll forward your request to the sourcing team now."
         result = self.guard(answer, "Can you help me find a supplier?")
-        self.assertIn(ai_responder.FALLBACK_NO_ACTION, result)
+        self.assertEqual(result, ai_responder.FALLBACK_NO_ACTION)
+
+    def test_upset_customer_gets_an_apology_in_the_fallback(self):
+        result = self.guard("I'll check on your order right away.", "This is ridiculous, I've waited 3 days!")
+        self.assertTrue(result.startswith(ai_responder.FALLBACK_SORRY))
+        self.assertIn("ask for a person", result)
 
 
 class HandoffTests(unittest.TestCase):
@@ -62,6 +67,10 @@ class HandoffTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertTrue(explicit_person_request(message))
                 self.assertTrue(customer_asked_for_human(soften_unrequested_handoff(self.handoff(), message)))
+
+    def test_asking_if_its_fayfay_is_not_a_request_for_a_person(self):
+        softened = soften_unrequested_handoff(self.handoff(), "Am I talking to Fayfay or a bot?")
+        self.assertFalse(customer_asked_for_human(softened))
 
     def test_other_languages_trust_the_classifier(self):
         self.assertTrue(customer_asked_for_human(soften_unrequested_handoff(self.handoff("fr"), "Je veux de l'aide")))

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { FAYFORT_INSTAGRAM, SUPPORT_EMAIL } from '@/config/contact'
+import { CHAT_URL, FAYFAY_SOCIAL_HANDLE, FAYFORT_INSTAGRAM, JOIN_URL } from '@/config/contact'
 import { PageHero, revealDelay } from '../components'
 
 export const metadata: Metadata = {
@@ -54,17 +54,19 @@ export default function AboutPage() {
           <h2>The other side of the business</h2>
           <p>Alongside the sourcing work, we publish.</p>
           <p><strong><Link href="/ebook/landed">LANDED — The Guangzhou Sourcing Directory</Link></strong> is our book: market and factory addresses, in English and Chinese, with the working knowledge that makes them useful. It’s published under our imprint, The Hard Way Press.</p>
-          <p><strong>FaySource</strong> is the directory behind it — continuously updated, because markets move, stalls change hands and buildings get redeveloped. A printed list starts dying the day it ships. A maintained one doesn’t.</p>
-          <p>Both exist for the same reason the sourcing business does: the information that makes importing work isn’t secret, it’s just hard to find, and the people who know it rarely write it down.</p>
+          <p><strong>The FayFort dashboard</strong> is where clients work with us now: sourcing requests with a timeline and a delivery estimate, the shop and group buys, and a supplier directory of markets, factories and service providers that we keep up to date — because markets move, stalls change hands and buildings get redeveloped.</p>
+          <p>All of it exists for the same reason the sourcing business does: the information that makes importing work isn’t secret, it’s just hard to find, and the people who know it rarely write it down.</p>
         </section>
 
         <section className="cta-panel" data-reveal="zoom">
           <h2>Get in touch</h2>
           <p>If you’re coming to China and want someone on the ground, or you have a product and no idea where to start — that’s the conversation to have.</p>
           <div className="cta-actions">
-            <a className="button button-primary" href={`mailto:${SUPPORT_EMAIL}`}>Email {SUPPORT_EMAIL}</a>
+            <a className="button button-primary" href={JOIN_URL}>Join free</a>
+            <a className="text-button" href={CHAT_URL}>Chat with us</a>
             <a className="text-button" href={`https://instagram.com/${FAYFORT_INSTAGRAM}`} target="_blank" rel="noreferrer">Instagram @{FAYFORT_INSTAGRAM}</a>
           </div>
+          <p className="about-personal">FayFay on Instagram and TikTok: <a href={`https://instagram.com/${FAYFAY_SOCIAL_HANDLE}`} target="_blank" rel="noreferrer">@{FAYFAY_SOCIAL_HANDLE}</a></p>
         </section>
       </div>
     </>

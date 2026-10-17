@@ -11,6 +11,7 @@ import { StaffAccountPage } from "../staff/StaffAccountPage";
 import { EmailCenterPage } from "../staff/EmailCenterPage";
 import { CommercePage } from "../staff/CommercePage";
 import { AdsPage } from "../staff/AdsPage";
+import { WebsitePage } from "../staff/WebsitePage";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { AgentAvailabilityPanel, HandoffsPage } from "./HandoffsPage";
@@ -414,7 +415,7 @@ export function DashboardWorkspace({
           {platformAdmin && (
             <section aria-label="Platform administration">
               <h2>Platform admin</h2>
-              {["FayFort Workers", "Shop", "Ads", "Emails", "Theme Studio", "Infrastructure"].map((label) => navButton(label))}
+              {["FayFort Workers", "Shop", "Ads", "Website", "Emails", "Theme Studio", "Infrastructure"].map((label) => navButton(label))}
             </section>
           )}
         </nav>
@@ -491,6 +492,8 @@ export function DashboardWorkspace({
             <CommercePage accessToken={accessToken} />
           ) : active === "Ads" && platformAdmin ? (
             <AdsPage accessToken={accessToken} />
+          ) : active === "Website" && platformAdmin ? (
+            <WebsitePage accessToken={accessToken} />
 
           ) : active === "Member Requests" && (platformAdmin || activeWorker) ? (
             platformAdmin ? (

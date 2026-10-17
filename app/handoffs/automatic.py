@@ -30,7 +30,7 @@ def customer_asked_for_human(intent: IntentResult) -> bool:
 # Words that show the customer asked for a person (English and Chinese). Other languages trust the classifier.
 _PERSON_REQUEST = re.compile(
     r"\b(?:person|people|human|agent|someone|somebody|staff|team member|representative|rep|operator|manager|"
-    r"customer (?:service|support|care)|support team|real|live chat|call me|phone me|fayfay|favour)\b"
+    r"customer (?:service|support|care)|support team|real|live chat|call me|phone me)\b"
     r"|(?:talk|speak|chat)\s+(?:to|with)\b|人工|真人|客服|工作人员",
     re.IGNORECASE,
 )

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { SOURCING_ENQUIRY_URL, SUPPORT_EMAIL } from '@/config/contact'
+import { CHAT_URL, JOIN_URL } from '@/config/contact'
 import { PageHero, revealDelay } from '../components'
 
 export const metadata: Metadata = {
@@ -88,16 +88,16 @@ const services: { id: string; title: string; lead: string; intro?: string; label
 ]
 
 const steps = [
-  ['Tell us what you need.', 'The product, the quantity, where it’s going. If you’re not sure of the quantity, say so — it changes the price, and we’d rather know now.'],
-  ['We come back with a plan and a quote.', 'What we’ll do, what it costs, and how long it takes.'],
-  ['We work.', 'You get updates as we go — photographs, quotes, samples, inspection reports.'],
-  ['Your goods ship.', 'Consolidated, checked, packed and documented.'],
+  ['Tell us what you need.', 'Send a request from your dashboard: the product, the quantity, where it’s going. If you’re not sure of the quantity, say so — it changes the price, and we’d rather know now.'],
+  ['We come back with options and a delivery estimate.', 'Within 24 hours: what we found, what it costs, and how long it takes.'],
+  ['We work.', 'You see it on your request as we go — photographs, quotes, samples, inspection reports.'],
+  ['Your goods ship.', 'Consolidated, checked, packed and documented, with tracking on your timeline.'],
 ]
 
 export default function ServicesPage() {
   return (
     <>
-      <PageHero kicker="Services" title={<>From first enquiry to <em>delivered container.</em></>} lede="Everything below can be taken on its own, or as one job from first enquiry to delivered container." />
+      <PageHero kicker="Services" title={<>From first enquiry to <em>delivered container.</em></>} lede="Everything below can be taken on its own, or as one job from first enquiry to delivered container. Start any of it from your free FayFort dashboard." />
 
       <nav className="shell service-index" aria-label="Services on this page" data-reveal="fade" style={revealDelay(3)}>
         {services.map((service) => <a key={service.id} href={`#${service.id}`}>{service.title.split(' — ')[0]}</a>)}
@@ -128,8 +128,10 @@ export default function ServicesPage() {
 
       <div className="shell prose-page">
         <section className="prose" data-reveal>
-          <h2>Pricing</h2>
+          <h2>How pricing works</h2>
           <p><strong>Every quote is broken out.</strong> Goods here, freight there, inspection separately. Anyone who’ll only give you one bundled number is telling you where their margin is.</p>
+          <p><strong>Our commission is agreed with you</strong> and built into the product invoice. There is no entry or “commitment” fee.</p>
+          <p><strong>Sourcing deposits depend on your plan.</strong> On the Free and Standard plans a deposit is invoiced after we review your request; it comes off your final invoice. Pro members in good standing pay none. Plan details are in your dashboard.</p>
 
           <h2>What we don’t do</h2>
           <p>Being straight about this saves everyone time.</p>
@@ -143,9 +145,10 @@ export default function ServicesPage() {
 
         <section className="cta-panel" data-reveal="zoom">
           <h2>Start a job</h2>
-          <p>Tell us the product, the quantity and the destination. That’s enough for a first answer.</p>
+          <p>Join free and send a request with the product, the quantity and the destination. That’s enough for a first answer, within 24 hours.</p>
           <div className="cta-actions">
-            <a className="button button-primary" href={SOURCING_ENQUIRY_URL}>Email {SUPPORT_EMAIL}</a>
+            <a className="button button-primary" href={JOIN_URL}>Join free and send a request</a>
+            <a className="text-button" href={CHAT_URL}>Chat with us first</a>
             <Link className="text-button" href="/ebook/landed">Prefer to go yourself? See LANDED</Link>
           </div>
         </section>
