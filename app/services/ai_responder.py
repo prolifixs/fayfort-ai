@@ -7,7 +7,7 @@ import requests
 
 from app.config.settings import settings
 from app.schemas.customer import CustomerState
-from app.schemas.intent import ActionDecision, IntentResult
+from app.schemas.intent import ActionDecision, IntentResult, NextAction
 from app.services.ai_usage import normalize_provider_usage, record_ai_usage, resolved_provider_model
 from app.services.ai_budget import (
     cost_from_provider_usage,
@@ -317,6 +317,27 @@ def _guard_response_grounding(
     return answer
 
 
+# Quantity is useful but optional (docs/KNOWLEDGE_BASE_DRAFT.md, conversation guide). Once the assistant has asked for it,
+# the customer either answered or chose not to, so it is never asked again.
+_QUANTITY_FIELD = re.compile(r"quantit|qty|units|pieces|pcs|volume|moq|how_many", re.IGNORECASE)
+_QUANTITY_QUESTION = re.compile(r"\bhow many\b|\bquantit|\bhow much (?:stock|volume)|\bnumber of (?:pieces|units|items)", re.IGNORECASE)
+NEXT_STEP_GUIDANCE = (
+    "You have what you need. Do not ask more questions about the order. Give the next step: sign up free in the FayFort "
+    "member dashboard and send a sourcing request with these details, or ask for a person for a bigger order."
+)
+
+
+def quantity_already_asked(history: list[dict[str, Any]] | None) -> bool:
+    return any(
+        _sender_to_role(item.get("sender_type", "")) == "assistant" and _QUANTITY_QUESTION.search(item.get("content") or "")
+        for item in history or []
+    )
+
+
+def _without_quantity(fields: list[Any] | None) -> list[Any]:
+    return [field for field in fields or [] if not _QUANTITY_FIELD.search(str(field))]
+
+
 def _sender_to_role(sender_type: str) -> str:
     """
     Convert our database sender_type values into
@@ -434,6 +455,29 @@ def build_messages(
                     if request_state is not None else None
                 ),
             }
+        if quantity_already_asked(conversation_history):
+            collecting = False
+            intent_part = routing_context.get("intent_result")
+            if intent_part:
+                intent_part["missing_information"] = _without_quantity(intent_part.get("missing_information"))
+                collecting = collecting or bool(intent_part["missing_information"])
+            decision_part = routing_context.get("action_decision")
+            if decision_part:
+                decision_part["requirements_to_collect"] = _without_quantity(decision_part.get("requirements_to_collect"))
+                collecting = collecting or bool(decision_part["requirements_to_collect"])
+                asking = decision_part.get("action") in {
+                    NextAction.COLLECT_PRODUCT_REQUIREMENTS.value, NextAction.COLLECT_SHIPPING_DETAILS.value,
+                    NextAction.ASK_FOR_MISSING_INFORMATION.value, NextAction.UPDATE_REQUIREMENTS.value,
+                }
+            else:
+                asking = False
+            request_part = (routing_context.get("customer_state") or {}).get("current_request")
+            if request_part:
+                request_part["missing_information"] = _without_quantity(request_part.get("missing_information"))
+                collecting = collecting or bool(request_part["missing_information"])
+            if decision_part and asking and not collecting:
+                decision_part["response_guidance"] = NEXT_STEP_GUIDANCE
+            routing_context["note"] = "Quantity was already asked. Never ask for quantity again; it is optional."
         messages.append(
             {
                 "role": "system",

@@ -7,17 +7,19 @@ import { WorkerInvitationAcceptancePage } from "../staff/WorkerPages";
 import { friendlyAuthError, homePathFor, parseAuthCallback, type AuthAudience } from "./authLinks";
 import { RequestLinkForm } from "./RequestLinkForm";
 import { SetPasswordForm } from "./SetPasswordForm";
+import { AuthPage } from "./AuthPage";
+import { landingFor, type Landing } from "./landing";
 
 function AuthCard({ audience, title, children }: { audience: AuthAudience; title: string; children: ReactNode }) {
   return (
-    <div className="auth-page">
+    <AuthPage staff={audience === "staff"}>
       <section className="auth-card">
         <b className="brand-mark">F</b>
-        <label>{audience === "staff" ? "FAYFORT TEAM ACCOUNT" : "FAYFORT MEMBER ACCOUNT"}</label>
+        <label>{audience === "staff" ? "FAYFORT TEAM ACCOUNT" : "FAYFORT ACCOUNT"}</label>
         <h1>{title}</h1>
         {children}
       </section>
-    </div>
+    </AuthPage>
   );
 }
 
@@ -49,6 +51,7 @@ export function AuthCallbackPage() {
   const [session, setSession] = useState<Session | null | undefined>(info.errorCode ? null : undefined);
   const [recovery, setRecovery] = useState(info.type === "recovery");
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const [home, setHome] = useState<Landing | null>(null);
 
   useEffect(() => {
     if (!supabaseClient || info.errorCode) {
@@ -76,9 +79,19 @@ export function AuthCallbackPage() {
   const finishesSignIn = !recovery && type !== "invite";
 
   useEffect(() => {
+    // Where this account belongs is worked out from the account, not from the link (one sign-in for everyone).
+    if (!session) return;
+    let alive = true;
+    void landingFor(session).then((landing) => alive && setHome(landing));
+    return () => {
+      alive = false;
+    };
+  }, [session]);
+
+  useEffect(() => {
     // Verification, email change and OAuth returns need no further input: continue to the right home.
-    if (settled && session && finishesSignIn && type !== "email_change") window.location.replace(homePathFor(audience));
-  }, [settled, session, finishesSignIn, type, audience]);
+    if (settled && session && home && finishesSignIn && type !== "email_change") window.location.replace(home);
+  }, [settled, session, home, finishesSignIn, type]);
 
   if (!dashboardAuthConfigured) return <SetupScreen />;
   if (!settled)
@@ -131,7 +144,7 @@ export function AuthCallbackPage() {
     return (
       <AuthCard audience={audience} title="Password updated">
         <p role="status">Your password has been changed. Other devices stay signed in until you sign them out.</p>
-        <a className="primary-button auth-link-button" href={audience === "staff" ? "/" : "/member/chat"}>
+        <a className="primary-button auth-link-button" href={home || (audience === "staff" ? "/" : "/member/chat")}>
           Continue
         </a>
       </AuthCard>
@@ -145,7 +158,7 @@ export function AuthCallbackPage() {
             ? `Almost done: also confirm the link we sent to ${session.user.new_email}.`
             : `Your sign-in email is now ${session.user.email}.`}
         </p>
-        <a className="primary-button auth-link-button" href={homePathFor(audience)}>
+        <a className="primary-button auth-link-button" href={home || homePathFor(audience)}>
           Continue
         </a>
       </AuthCard>

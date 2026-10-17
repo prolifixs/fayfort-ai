@@ -1,3 +1,4 @@
+import { AuthPage } from "../auth/AuthPage";
 import { supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -330,7 +331,7 @@ export function WorkerRequestsPage({ accessToken }: { accessToken: string }) {
 export function WorkerPasswordResetPage() {
   const [message, setMessage] = useState("");
   return (
-    <div className="auth-page">
+    <AuthPage staff>
       <section className="auth-card">
         <b className="brand-mark">F</b>
         <label>FAYFORT WORKER ACCOUNT</label>
@@ -340,9 +341,9 @@ export function WorkerPasswordResetPage() {
           onDone={() => setMessage("Your password has been updated. You can now sign in to your FayFort worker account.")}
         />
         {message && <p role="status">{message}</p>}
-        <a href="/">Return to FayFort Control Center</a>
+        <a href="/">Go to the Control Center</a>
       </section>
-    </div>
+    </AuthPage>
   );
 }
 
@@ -378,7 +379,7 @@ export function WorkerInvitationAcceptancePage({ accessToken }: { accessToken: s
             ? "Unable to confirm worker account"
             : "Checking your invitation";
   return (
-    <div className="auth-page">
+    <AuthPage staff>
       <section className="auth-card">
         <b className="brand-mark">F</b>
         <label>FAYFORT WORKER ACCOUNT</label>
@@ -401,9 +402,9 @@ export function WorkerInvitationAcceptancePage({ accessToken }: { accessToken: s
         ) : (
           <p>Confirming your verified worker account.</p>
         )}
-        <a href="/">Return to FayFort Control Center</a>
+        <a href="/">Go to the Control Center</a>
       </section>
-    </div>
+    </AuthPage>
   );
 }
 

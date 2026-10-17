@@ -1,3 +1,5 @@
+import { AuthPage } from "../auth/AuthPage";
+import { landingFor } from "../auth/landing";
 import { MemberNotificationsBar, MemberNotificationsPage } from "../MemberNotifications";
 import { dashboardAuthConfigured, supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
@@ -29,8 +31,9 @@ export function MemberRoutePage() {
 }
 
 export function MemberAccountPage() {
+  // One sign-in for everyone (docs/AUTH_PAGES_PLAN.md): only /member/signup opens in sign-up mode.
   const [mode, setMode] = useState<"signup" | "signin">(
-    window.location.pathname === "/member/account" ? "signin" : "signup",
+    window.location.pathname === "/member/signup" ? "signup" : "signin",
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,6 +70,10 @@ export function MemberAccountPage() {
     if (isEmailCallback)
       supabaseClient.auth.getSession().then(async ({ data }) => {
         if (mounted && data.session) {
+          if ((await landingFor(data.session)) === "/") {
+            window.location.assign("/");
+            return;
+          }
           const loaded = await loadMemberProfile(data.session.access_token, data.session.user.email);
           if (loaded && sessionStorage.getItem("member-settings-return") === "true") {
             sessionStorage.removeItem("member-settings-return");
@@ -82,7 +89,11 @@ export function MemberAccountPage() {
         setProfile(null);
         setMemberEmail("");
         setAccessToken(null);
-      } else if (isEmailCallback && next) void loadMemberProfile(next.access_token, next.user.email);
+      } else if (isEmailCallback && next)
+        void landingFor(next).then((landing) => {
+          if (landing === "/") window.location.assign("/");
+          else void loadMemberProfile(next.access_token, next.user.email);
+        });
     });
     return () => {
       mounted = false;
@@ -122,8 +133,11 @@ export function MemberAccountPage() {
           options: { captchaToken: captcha.captchaToken },
         });
         if (authError) throw authError;
-        if (data.session && (await loadMemberProfile(data.session.access_token, data.user.email)))
-          window.location.assign("/member/chat");
+        if (data.session) {
+          // Staff and business owners continue to the Control Center (two-step verification runs there).
+          if ((await landingFor(data.session)) === "/") window.location.assign("/");
+          else if (await loadMemberProfile(data.session.access_token, data.user.email)) window.location.assign("/member/chat");
+        }
       }
     } catch (e) {
       const text = `${e instanceof Error ? e.message : ""} ${(e as { code?: string })?.code || ""}`.toLowerCase();
@@ -157,15 +171,17 @@ export function MemberAccountPage() {
   }
   if (!dashboardAuthConfigured) return <SetupScreen />;
   return (
-    <div className="auth-page">
+    <AuthPage>
       <section className="auth-card">
         <b className="brand-mark">F</b>
-        <label>FAYFORT MEMBER ACCOUNT</label>
-        <h1>{profile ? "Your member account" : mode === "signup" ? "Create your account" : "Member sign in"}</h1>
+        <label>{mode === "signup" && !profile ? "FAYFORT MEMBER ACCOUNT" : "FAYFORT ACCOUNT"}</label>
+        <h1>{profile ? "Your member account" : mode === "signup" ? "Create your account" : "Sign in"}</h1>
         <p>
           {profile
             ? "Your member identity is separate from business workspaces and staff access."
-            : "Use email and password. We’ll send a verification link before member access is enabled."}
+            : mode === "signup"
+              ? "Free to join. Use email and password; we’ll send a verification link before your account is enabled."
+              : "Members and the FayFort team use the same sign-in."}
         </p>
         {!profile && (
           <>
@@ -272,9 +288,8 @@ export function MemberAccountPage() {
             </button>
           </p>
         )}
-        <a href="/">Return to FayFort Control Center</a>
       </section>
-    </div>
+    </AuthPage>
   );
 }
 

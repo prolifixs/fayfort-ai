@@ -106,16 +106,42 @@ describe("forgot password", () => {
     expect(screen.getByRole("button", { name: /You can send another in/ })).toBeDisabled();
   });
 
-  it("links to forgot password from both sign-in pages", async () => {
+  it("shows the one sign-in page at the Control Center address and at /member/account", async () => {
     render(<App />);
-    expect(await screen.findByRole("link", { name: "Forgot your password?" })).toHaveAttribute(
-      "href",
-      "/auth/forgot?audience=staff",
-    );
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByText("Members and the FayFort team use the same sign-in.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Forgot your password?" })).toHaveAttribute("href", "/auth/forgot?audience=member");
+    expect(screen.queryByText(/FAYFORT CONTROL CENTER/)).not.toBeInTheDocument();
     cleanup();
     window.history.replaceState({}, "", "/member/account");
     render(<App />);
-    expect(screen.getByRole("link", { name: "Forgot your password?" })).toHaveAttribute("href", "/auth/forgot?audience=member");
+    expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByText("Return to FayFort Control Center")).not.toBeInTheDocument();
+    cleanup();
+    window.history.replaceState({}, "", "/member/signup");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Create your account" })).toBeInTheDocument();
+  });
+});
+
+describe("landing after sign-in", () => {
+  const session = (meta: Record<string, unknown> = {}) =>
+    ({ access_token: "t", user: { id: "u", email: "a@b.c", app_metadata: meta } }) as never;
+  const respond = (routes: Record<string, unknown>) =>
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const hit = Object.keys(routes).find((path) => String(input).endsWith(path));
+      return hit ? json(routes[hit]) : { ok: false, status: 403, json: async () => ({ detail: "no" }), headers: new Headers() } as Response;
+    });
+
+  it("sends the FayFort team and business owners to the Control Center and members to their chat", async () => {
+    const { landingFor } = await import("./landing");
+    expect(await landingFor(session({ platform_admin: true }))).toBe("/");
+    respond({ "/workers/me": { worker: { status: "active" } }, "/members/me": { profile: { user_id: "u" } } });
+    expect(await landingFor(session())).toBe("/");
+    respond({ "/dashboard/businesses": { businesses: [{ business_id: "b" }] } });
+    expect(await landingFor(session())).toBe("/");
+    respond({ "/workers/me": { worker: { status: "inactive" } }, "/members/me": { profile: { user_id: "u" } } });
+    expect(await landingFor(session())).toBe("/member/chat");
   });
 });
 

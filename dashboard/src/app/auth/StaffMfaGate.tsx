@@ -1,3 +1,4 @@
+import { AuthPage } from "./AuthPage";
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { friendlyAuthError } from "./authLinks";
@@ -151,7 +152,7 @@ export function StaffMfaGate({ signedIn, email, children }: { signedIn: boolean;
     </button>
   );
   return (
-    <div className="auth-page">
+    <AuthPage staff>
       <section className="auth-card staff-mfa-card">
         <b className="brand-mark">F</b>
         <label>FAYFORT TEAM ACCOUNT</label>
@@ -220,6 +221,6 @@ export function StaffMfaGate({ signedIn, email, children }: { signedIn: boolean;
         )}
         <p className="quiet-note">{signOut}</p>
       </section>
-    </div>
+    </AuthPage>
   );
 }

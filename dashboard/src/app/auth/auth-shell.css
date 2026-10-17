@@ -1,0 +1,34 @@
+/* Sign-in screens on the navy globe (docs/AUTH_PAGES_PLAN.md). The card keeps the light tokens even when the
+   Control Center is in dark mode, so forms always read the same. */
+.auth-page.auth-globe-page {
+  position: relative; display: flex !important; flex-direction: column; min-height: 100vh; min-height: 100dvh; overflow: hidden;
+  padding: 24px clamp(16px, 5vw, 64px); place-items: initial;
+  background: radial-gradient(120% 90% at 75% 40%, #0a2a8a 0%, #042770 35%, #02144e 75%) !important; /* beats the member theme */
+}
+.auth-globe-canvas { position: fixed; inset: 0; pointer-events: none; }
+.auth-topbar { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.auth-logo { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; font-weight: 800; letter-spacing: .16em; }
+.auth-logo .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #f20789 !important; color: #fff !important; font-family: Georgia, serif; font-style: italic; letter-spacing: 0; }
+.auth-back { color: #fff; font-size: 13px; font-weight: 600; opacity: .85; text-decoration: none; }
+.auth-back:hover { opacity: 1; text-decoration: underline; }
+.auth-main { position: relative; z-index: 1; flex: 1; display: flex; align-items: center; padding: 24px 0; }
+.auth-caption { position: absolute; z-index: 1; right: clamp(16px, 5vw, 64px); bottom: 24px; margin: 0; color: #c3cae3; font-size: 12px; font-weight: 600; }
+.auth-page.auth-globe-page .auth-card {
+  --color-bg: #ffffff; --color-surface: #f4f6fb; --color-text: #02144e; --color-muted: #4a5578; --color-border: rgba(2, 20, 78, .16);
+  --staff-accent: #0540f2;
+  width: min(100%, 440px); margin-left: clamp(0px, 4vw, 60px); border: 0; border-radius: 18px; background: #fff; color: #02144e;
+  box-shadow: 0 24px 60px rgba(1, 10, 40, .35);
+}
+.auth-page.auth-globe-page .auth-card > .brand-mark { display: none; }
+.auth-page.auth-globe-page .auth-card h1 { color: #02144e; font-family: Georgia, "Iowan Old Style", serif; font-weight: 400; font-size: 30px; letter-spacing: -.02em; }
+.auth-page.auth-globe-page .auth-card a { color: #0540f2; }
+.auth-page.auth-globe-page .auth-card .primary-button { border-radius: 999px; min-height: 44px; font-size: 14px; background: #0540f2; color: #fff; }
+.auth-page.auth-globe-page .auth-card .secondary-button { border-radius: 999px; min-height: 44px; }
+@media (max-width: 699px) {
+  .auth-main { align-items: flex-end; }
+  .auth-page.auth-globe-page .auth-card { margin: 0 auto; padding: 26px; }
+  .auth-caption { display: none; }
+}
+@media (max-height: 640px) and (min-width: 700px) {
+  .auth-main { align-items: flex-start; }
+}

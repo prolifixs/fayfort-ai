@@ -142,3 +142,19 @@ refund. Still wrong, fixed in the third batch:
 - "Ghana" (a one-word answer) got an empty reply from the model; the reply is now retried once.
 - Supplier contacts: the knowledge now says how to unlock one in the Supplier directory; the team doesn't send contacts
   in chat.
+
+**Third run (2026-10-17, after 8dbfc46, during working hours).** 21 of 22 as intended:
+- Deposit: "No, you can submit a sourcing request for free. If you're a Free or Standard member, we'll review it and then
+  send a deposit invoice … before we start sourcing. Pro members in good standing don't pay a deposit."
+- "$40 commitment fee?" → "No, there isn't a $40 commitment fee", then explains deposits.
+- "Fayfay or a bot?" → "I'm the FayFort team's assistant. If you'd like a person to join the chat, just let me know."
+  (no handoff).
+- Upset customer → "I'm sorry about this. … a member of the FayFort team can. Just ask for a person …".
+- Supplier contact → sign up free, Supplier directory, search "wigs Guangzhou", unlock.
+- Trending → Browse → "What's moving". Greeting → "Hi dear, what would you like to source from China?"
+- Asking for a person (in working hours) → "a person usually replies within 30 minutes".
+- "Ghana" (one word) now answered: asks for the budget with the handbook's explanation.
+
+Still open: the new-enquiry flow asks "How many pieces?" again after the customer gave destination and budget
+(quantity is never given, so the classifier keeps listing it as missing). Suggested fix: once the assistant has asked
+for quantity, drop it from the missing details and move to the next step.

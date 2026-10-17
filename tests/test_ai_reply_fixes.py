@@ -87,3 +87,41 @@ class KnowledgeLoaderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuantityTests(unittest.TestCase):
+    def build(self, history, missing):
+        from app.services.action_handler import prepare_action
+        from app.services.ai_responder import build_messages
+        intent = IntentResult(intent="product_sourcing", action="ask_for_missing_information", confidence=0.9,
+                              missing_information=missing)
+        messages = build_messages(customer_message=history[-1]["content"], knowledge_context="", conversation_history=history,
+                                  intent_result=intent, action_decision=prepare_action(intent))
+        return next(m["content"] for m in messages if m["content"].startswith("INTERNAL CONVERSATION HANDLING GUIDANCE"))
+
+    def test_quantity_is_not_asked_twice_and_the_next_step_follows(self):
+        history = [
+            {"sender_type": "customer", "content": "I want to start a clothing business"},
+            {"sender_type": "ai", "content": "How many pieces are you thinking of ordering?"},
+            {"sender_type": "customer", "content": "Lagos, Nigeria"},
+            {"sender_type": "ai", "content": "Do you have a budget in mind?"},
+            {"sender_type": "customer", "content": "Around 2000 dollars"},
+        ]
+        guidance = self.build(history, ["quantity"])
+        self.assertIn(ai_responder.NEXT_STEP_GUIDANCE, guidance)
+        self.assertIn("Never ask for quantity again", guidance)
+        self.assertNotIn('"quantity"', guidance)
+
+    def test_other_missing_details_are_still_asked(self):
+        history = [
+            {"sender_type": "customer", "content": "I need wigs"},
+            {"sender_type": "ai", "content": "How many wigs do you need?"},
+            {"sender_type": "customer", "content": "Not sure yet"},
+        ]
+        guidance = self.build(history, ["quantity", "destination_country"])
+        self.assertNotIn(ai_responder.NEXT_STEP_GUIDANCE, guidance)
+        self.assertIn("destination_country", guidance)
+
+    def test_quantity_can_be_asked_the_first_time(self):
+        guidance = self.build([{"sender_type": "customer", "content": "I need wigs"}], ["quantity"])
+        self.assertIn('"quantity"', guidance)
