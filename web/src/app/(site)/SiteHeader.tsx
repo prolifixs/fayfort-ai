@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
+import { FayfortLogo } from '@/app/components/brand/FayfortLogo'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
@@ -17,7 +17,7 @@ const LINKS: [string, string][] = [
 export function BrandLockup({ className }: { className: string }) {
   return (
     <Link className={className} href="/" aria-label="FAYFORT home">
-      <span className="brand-logo"><Image src="/images/brand/fayfort-logo.png" alt="" width={229} height={240} priority /></span>
+      <span className="brand-logo"><FayfortLogo /></span>
       <span><strong>FAYFORT</strong><small>International Trading</small></span>
     </Link>
   )

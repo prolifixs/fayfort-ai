@@ -1,4 +1,5 @@
 const SHOPIFY_STORE = 'https://8kjjz9-ei.myshopify.com'
+const CHAT_API = new URL(process.env.NEXT_PUBLIC_FAYFORT_API_URL || 'https://api.fayfort.com').origin
 
 // Allowlist of what the public pages load: the site itself, Shopify for LANDED and Instagram embeds. The old
 // enterprise app's Supabase, Stripe and video hosts were dropped with it (owner decision D11).
@@ -11,7 +12,8 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https://cdn.shopify.com`,
   "font-src 'self' data:",
-  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com`,
+  // FayFort AI chat help talks to the FayFort API from the browser.
+  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API}`,
   // Instagram's own player for the posts and reels on the home page (Control Center → Website).
   `frame-src ${SHOPIFY_STORE} https://www.instagram.com`,
   "worker-src 'self' blob:",

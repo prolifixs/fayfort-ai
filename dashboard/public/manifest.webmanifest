@@ -6,9 +6,9 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#197c69",
+  "theme_color": "#07276c",
   "icons": [
-    { "src": "/fayfort-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/fayfort-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "share_target": {
     "action": "/member/share",

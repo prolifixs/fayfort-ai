@@ -1,6 +1,6 @@
 # Sign-in pages: one sign-in, and a globe background (plan for review)
 
-Status: built 2026-10-17 (waiting for push). Owner decisions: navy look, admins who are also members land in the
+Status: live 2026-10-17 (03b5b1e). Reset-link fix and the logo (sections 8–9) built 2026-10-17. Owner decisions: navy look, admins who are also members land in the
 Control Center, globe on the two-step verification screen too.
 
 ## 1. The two sign-in pages today
@@ -108,3 +108,39 @@ easy to read. The fields, buttons and captcha are unchanged.
 - Not done: the "Sign in to FayFort" button in the invitation email. Those emails are Supabase's templates, managed in
   the Supabase dashboard, and the existing link already leads to setting a password and then the Control Center.
 - Tests: landing rule, one sign-in at `/` and `/member/account`, and layout checks at phone and laptop for four screens.
+
+## 8. Password reset links said "expired" (fixed 2026-10-17)
+
+**Cause.** Supabase's auth log for the owner's reset showed the same link opened twice from the owner's network,
+12 seconds apart:
+- 01:13:46, the first open: it signed in and used up the one-time link;
+- 01:13:58, the second open, the click the owner saw: refused as "invalid or has expired".
+
+Something on the device or in the mail app opened the link before the click, and links used to be used up on opening.
+A second problem made the page vaguer than it should have been: supabase-js wiped the error from the address before
+the page read it, so the page showed a general message.
+
+**Fix**
+- Email links now open `/auth/callback?type=…&token_hash=…`. The page shows a **Continue** button ("Continue to reset
+  password", "Confirm my email", "Accept invitation"), and only that click uses the code (`verifyOtp`). Opening or
+  scanning the link uses nothing, and the link works in any browser or on any device.
+- While the Continue step shows, an account already signed in on that browser is ignored. After the click, the code
+  is removed from the address.
+- The page reads the address before supabase-js clears it, so expired links get the right message.
+- Worker password resets sent from the Control Center use the same link (`hashed_token` from `generate_link`).
+- **Supabase email templates** (confirm sign-up, invite, magic link, change email, reset password) link to
+  `{{ .SiteURL }}/auth/callback?type=<type>&token_hash={{ .TokenHash }}` in place of `{{ .ConfirmationURL }}`.
+  The templates are switched over after this dashboard version is live.
+
+## 9. The logo
+
+- The owner's logo was traced into a vector (`dashboard/src/app/brand/`, `web/src/app/components/brand/`). There are
+  four versions: colour, white-and-pink for navy, silver, and one colour.
+- The placeholder "F" squares are replaced everywhere:
+  - sign-in pages, the member chat and pages, and the Control Center sidebar;
+  - the website header and footer;
+  - the app icon and tab icon. The tab title is now "FayFort", and the theme colour is navy.
+- **Loading animation** (2.2 s loop): the outline draws in, the shell fills, the F slides up, then a silver shine
+  sweeps across. With "reduce motion" on, it fades gently instead.
+  - It replaces the "Loading…" and "Checking…" lines across the dashboard (42 places).
+  - The opening screen ("Opening FayFort…") uses the white version on the navy globe.

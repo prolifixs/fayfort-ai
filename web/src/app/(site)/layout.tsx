@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { CHAT_URL, FAYFORT_INSTAGRAM, JOIN_URL, SIGN_IN_URL, SUPPORT_EMAIL } from '@/config/contact'
 import RevealOnScroll, { REVEAL_BOOT_SCRIPT } from './RevealOnScroll'
 import SiteHeader, { BrandLockup } from './SiteHeader'
+import SiteChat from './chat/SiteChat'
 import './site.css'
 
 // Shared header and footer for the public site pages: /, /how-it-works, /services, /about-us, /terms and /terms-ebooks.
@@ -22,6 +23,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         <div><span>Account</span><a href={JOIN_URL}>Join free</a><a href={SIGN_IN_URL}>Sign in</a><a href={CHAT_URL}>Chat with us</a></div>
         <div><span>Contact</span><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a><a href={`https://instagram.com/${FAYFORT_INSTAGRAM}`} target="_blank" rel="noreferrer">@{FAYFORT_INSTAGRAM}</a></div>
       </div><div className="shell footer-bottom"><p>© {new Date().getFullYear()} FAYFORT International Trading</p><p><Link href="/terms">Terms</Link> · <Link href="/terms-ebooks">Ebook &amp; Directory Terms</Link></p></div></footer>
+      <SiteChat />
     </div>
   )
 }

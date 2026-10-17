@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 type Preferences = { conversations: boolean; fulfillment: boolean; notifications: boolean; newsletter: boolean };
 
@@ -51,7 +52,7 @@ export function MemberEmailPreferences({ accessToken }: { accessToken: string })
           {error}
         </p>
       )}
-      {!preferences && !error && <p role="status">Loading…</p>}
+      {!preferences && !error && <FayfortLoader label="Loading…" />}
       {preferences &&
         ROWS.map((row) => (
           <label key={row.key} className="member-identity-row member-email-row">

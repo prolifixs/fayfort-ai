@@ -1,6 +1,7 @@
 import { apiRequest } from "../../lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AiUsageResult, AnalyticsEvent, AnalyticsResult } from "./types";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export const emptyAiUsage = (days: number): AiUsageResult => ({
   days,
@@ -139,7 +140,7 @@ export function AnalyticsPage({ accessToken, businessId }: { accessToken: string
         </p>
       )}
       {loading ? (
-        <p role="status">Loading business activity…</p>
+        <FayfortLoader label="Loading business activity…" />
       ) : (
         <>
           <div className="record">

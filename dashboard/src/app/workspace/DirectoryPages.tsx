@@ -9,6 +9,7 @@ import type {
   EntitlementRow,
   ProductCategory,
 } from "./types";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: string; businessId: string }) {
   const [tools, setTools] = useState<DirectoryToolRow[]>([]);
@@ -85,7 +86,7 @@ export function DirectoryToolsPage({ accessToken, businessId }: { accessToken: s
         </p>
       )}
       {loading ? (
-        <p role="status">Loading directory tools and conversations…</p>
+        <FayfortLoader label="Loading directory tools and conversations…" />
       ) : (
         <>
           {!tools.length ? (
@@ -541,7 +542,7 @@ export function DirectoryProductsPanel({ accessToken, businessId }: { accessToke
         </form>
       )}
       {loading ? (
-        <p role="status">Loading products…</p>
+        <FayfortLoader label="Loading products…" />
       ) : products.length === 0 ? (
         <p className="empty-copy">No products have been added yet.</p>
       ) : (

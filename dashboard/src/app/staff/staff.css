@@ -891,3 +891,18 @@
 .website-preview { position: relative; width: min(360px, 100%); aspect-ratio: 4 / 5; border-radius: var(--radius-md); overflow: hidden; background: var(--color-surface); }
 .website-preview.is-reel { aspect-ratio: 9 / 16; max-height: 560px; }
 .website-preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* Control Center → Website → FayFort AI on the website */
+.site-chat-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--space-3); align-items: end; margin: var(--space-3) 0; }
+.site-chat-settings .checkbox-row { display: flex; gap: 8px; align-items: center; grid-column: 1 / -1; }
+.site-chat-settings input[type="number"] { width: 100%; }
+.site-chat-settings .primary-button { justify-self: start; }
+.site-chat-heading { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-base); }
+.site-chat-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.site-chat-row { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; text-align: left; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: inherit; cursor: pointer; }
+.site-chat-row > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.site-chat-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-chat-row small { color: var(--color-text-muted); }
+.site-chat-thread { display: grid; gap: 6px; padding: 10px 12px 4px; }
+.site-chat-thread p { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--color-surface); }
+.site-chat-thread p.from-visitor { background: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg)); }
+.site-chat-thread b { display: block; font-size: var(--text-xs, 12px); color: var(--color-text-muted); }

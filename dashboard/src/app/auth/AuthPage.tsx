@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AuthGlobe } from "./AuthGlobe";
 import "./auth-shell.css";
+import { BrandMark } from "../brand/FayfortLogo";
 
 /**
  * The frame for every sign-in screen (docs/AUTH_PAGES_PLAN.md): navy globe background, logo, a link back to
@@ -12,7 +13,7 @@ export function AuthPage({ children, staff = false }: { children: ReactNode; sta
       <AuthGlobe />
       <header className="auth-topbar">
         <span className="auth-logo">
-          <b className="brand-mark">F</b>
+          <BrandMark tone="dark" />
           <span>FAYFORT</span>
         </span>
         {!staff && (

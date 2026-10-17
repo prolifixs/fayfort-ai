@@ -32,3 +32,6 @@
 @media (max-height: 640px) and (min-width: 700px) {
   .auth-main { align-items: flex-start; }
 }
+/* "Opening FayFort": the animated logo where the card will appear. */
+.auth-page.auth-globe-page .auth-opening { width: min(400px, 100%); display: grid; place-items: center; min-height: 360px; }
+.auth-page.auth-globe-page .auth-logo .brand-mark.brand-mark-logo { width: 30px; height: 32px; }

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 type Category = "conversations" | "fulfillment" | "notifications" | "newsletter" | "account_security";
 
@@ -153,7 +154,7 @@ function EmailTypesPanel({ accessToken }: { accessToken: string }) {
           {error}
         </p>
       )}
-      {!overview && !error && <p role="status">Loading email settings…</p>}
+      {!overview && !error && <FayfortLoader label="Loading email settings…" />}
       {overview && (
         <ul className="email-type-list">
           {overview.categories.map((row) => (

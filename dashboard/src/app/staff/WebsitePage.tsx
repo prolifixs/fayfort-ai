@@ -1,7 +1,9 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, apiRequest } from "../../lib/api";
+import { FayfortLoader } from "../brand/FayfortLogo";
+import { WebsiteChatSection } from "./WebsiteChatSection";
 
-/** Control Center → Website: the Instagram posts and reels on www.fayfort.com (docs/PUBLIC_SITE_REBUILD_PLAN.md). */
+/** Control Center → Website: FayFort AI on the website, and the Instagram posts and reels on www.fayfort.com (docs/PUBLIC_SITE_REBUILD_PLAN.md). */
 
 type Post = { id: string; kind: "p" | "reel"; shortcode: string; label: string | null; active: boolean; sort_order: number };
 
@@ -77,6 +79,7 @@ export function WebsitePage({ accessToken }: { accessToken: string }) {
 
   return (
     <div className="email-center website-center">
+      <WebsiteChatSection accessToken={accessToken} />
       <section className="control-panel" aria-label="Instagram on the website">
         <div className="panel-heading">
           <h2>Instagram on the website</h2>
@@ -109,7 +112,7 @@ export function WebsitePage({ accessToken }: { accessToken: string }) {
           </button>
         </form>
         {!posts ? (
-          !error && <p role="status">Loading…</p>
+          !error && <FayfortLoader label="Loading…" />
         ) : !posts.length ? (
           <p className="muted">No posts yet. Add your best market, inspection and shipping posts.</p>
         ) : (

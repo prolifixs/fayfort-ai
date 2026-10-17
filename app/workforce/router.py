@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.config.settings import settings, staff_recovery_redirect_url, worker_invite_redirect_url
+from app.config.settings import click_to_continue_link, settings, staff_recovery_redirect_url, worker_invite_redirect_url
 from app.database.client import supabase
 from app.directory.identity import trusted_fayfort_staff, trusted_platform_admin
 from app.workforce.audit import record_workforce_audit
@@ -369,7 +369,7 @@ def create_workforce_router() -> APIRouter:
                 "type": "recovery", "email": auth["email"],
                 "options": {"redirect_to": staff_recovery_redirect_url()},
             })
-            action_link = getattr(getattr(link, "properties", None), "action_link", None)
+            action_link = click_to_continue_link(link, staff_recovery_redirect_url())
             if not action_link:
                 raise RuntimeError("No recovery link was generated.")
             send_immediately(to=auth["email"], rendered=staff_password_reset_email(action_link=action_link))

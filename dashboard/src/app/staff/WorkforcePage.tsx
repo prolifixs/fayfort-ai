@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { WorkerProvisioningPage } from "./WorkerPages";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export interface WorkerSummary {
   user_id: string;
@@ -220,7 +221,7 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
             {error}
           </p>
         )}
-        {!directory && !error && <p role="status">Loading workers…</p>}
+        {!directory && !error && <FayfortLoader label="Loading workers…" />}
         {directory && workers.length === 0 && (
           <p className="empty-copy">{directory.workers.length ? "No workers match these filters." : "No workers yet."}</p>
         )}
@@ -376,7 +377,7 @@ export function WorkerProfilePage({
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
-      {!worker && !error && <p role="status">Loading worker…</p>}
+      {!worker && !error && <FayfortLoader label="Loading worker…" />}
       {worker && (
         <>
           <header className="worker-profile-header">

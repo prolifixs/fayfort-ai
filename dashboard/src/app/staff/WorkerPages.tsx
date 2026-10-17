@@ -4,6 +4,7 @@ import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { SetPasswordForm } from "../auth/SetPasswordForm";
 import { RequestSourceSummary, type WorkerRequestRow, requestNextStages } from "../requests/requestShared";
+import { BrandMark } from "../brand/FayfortLogo";
 
 export function PlatformRequestAssignmentPage({ accessToken }: { accessToken: string }) {
   const [data, setData] = useState<{
@@ -333,7 +334,7 @@ export function WorkerPasswordResetPage() {
   return (
     <AuthPage staff>
       <section className="auth-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT WORKER ACCOUNT</label>
         <h1>Set your password</h1>
         <p>Choose a password for your FayFort worker account.</p>
@@ -381,7 +382,7 @@ export function WorkerInvitationAcceptancePage({ accessToken }: { accessToken: s
   return (
     <AuthPage staff>
       <section className="auth-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT WORKER ACCOUNT</label>
         <h1>{title}</h1>
         {worker?.status === "active" ? (

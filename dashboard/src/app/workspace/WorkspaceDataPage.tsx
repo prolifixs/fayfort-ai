@@ -12,6 +12,7 @@ import type {
   MessageRow,
   RequestRow,
 } from "./types";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export function WorkspaceDataPage({
   module,
@@ -359,7 +360,7 @@ export function WorkspaceDataPage({
         </div>
       )}
       {loading ? (
-        <p role="status">Loading {module.toLowerCase()}…</p>
+        <FayfortLoader label={`Loading ${module.toLowerCase()}…`} />
       ) : module === "Conversations" ? (
         conversations.length === 0 ? (
           <p className="empty-copy">
@@ -517,7 +518,7 @@ export function WorkspaceDataPage({
                   )}
                   </aside>
                   {detailLoading ? (
-                    <p role="status">Loading messages…</p>
+                    <FayfortLoader label="Loading messages…" />
                   ) : (
                     <StaffChatThread
                       label="Conversation messages"
@@ -912,7 +913,7 @@ export function CustomerWorkspace({
               </p>
             )}
             {loading ? (
-              <p role="status">Loading customer history…</p>
+              <FayfortLoader label="Loading customer history…" />
             ) : (
               detail && (
                 <>

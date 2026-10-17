@@ -52,3 +52,27 @@ describe('public site', () => {
     expect(text).not.toMatch(/\d+\s?%/)
   })
 })
+
+describe('FayFort AI chat help', () => {
+  const { readFileSync } = require('node:fs') as typeof import('node:fs')
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+
+  it('is on every site-layout page but not on LANDED', () => {
+    expect(read('../src/app/(site)/layout.tsx')).toContain('<SiteChat />')
+    expect(read('../src/app/ebook/landed/page.tsx')).not.toContain('SiteChat')
+  })
+
+  it('may call the FayFort API from the browser', async () => {
+    const headers = await nextConfig.headers()
+    const csp = headers[0].headers.find((h: { key: string }) => h.key === 'Content-Security-Policy').value as string
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/api\.fayfort\.com/)
+  })
+
+  it('offers the agreed starters and keeps the visitor token out of the address', () => {
+    const source = read('../src/app/(site)/chat/SiteChat.tsx')
+    expect(source).toContain("'Talk to a person'")
+    expect(source).toContain("'X-Visitor-Token'")
+    expect(source).not.toMatch(/\?visitor_token|visitor_token=/)
+    expect(source).toContain('(min-width: 1024px) and (hover: hover)') // welcome bubble on desktop only
+  })
+})

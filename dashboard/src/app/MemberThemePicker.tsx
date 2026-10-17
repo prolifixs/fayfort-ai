@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { exitMemberThemePreview, previewMemberTheme } from "./MemberThemeRuntime";
+import { FayfortLoader } from "./brand/FayfortLogo";
 
 type ThemeChoice = { theme_id: string; display_name: string; description: string; requires_paid: boolean; can_apply: boolean; is_current: boolean };
 type ThemeCatalog = { member_tier: string; selected_theme: string; themes: ThemeChoice[] };
@@ -44,7 +45,7 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
    <section className="member-theme-dialog" role="dialog" aria-modal="true" aria-labelledby="member-theme-dialog-title">
     <header><div><p className="eyebrow">MEMBER APPEARANCE</p><h2 id="member-theme-dialog-title">Choose a theme</h2></div><button type="button" aria-label="Close themes" onClick={() => setOpen(false)}>×</button></header>
     <p>Preview any published theme. FayFort base is available to everyone; applying premium themes requires Standard or Pro.</p>
-    {loading && <p role="status">Loading published themes…</p>}
+    {loading && <FayfortLoader label="Loading published themes…" />}
     {catalog && <div className="member-theme-choice-list">{catalog.themes.map(theme => <article key={theme.theme_id} className="member-theme-choice">
      <div><h3>{theme.display_name} {theme.is_current && <small>Saved</small>}</h3><p>{theme.description || "A FayFort member theme."}</p>{theme.requires_paid && !theme.can_apply && <span className="quiet-note">Standard or Pro required to apply</span>}</div>
      <div className="member-theme-choice-actions"><button className="secondary-button" type="button" onClick={() => void preview(theme)}>Preview</button><button className="primary-button" type="button" disabled={busy || !theme.can_apply || theme.is_current} onClick={() => void apply(theme)}>{theme.is_current ? "Current theme" : busy ? "Saving…" : "Apply"}</button></div>

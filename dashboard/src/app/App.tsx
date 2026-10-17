@@ -18,6 +18,7 @@ import { SetupScreen } from "./SetupScreen";
 import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
 // Member app styles (tokens are loaded first in main.tsx).
 import "./member/member.css";
+import { FayfortLoader } from "./brand/FayfortLogo";
 
 export function App() {
   if (window.location.pathname === "/operations")
@@ -131,10 +132,8 @@ export function ControlCenterApp() {
   if (authLoading || (session && !landing))
     return (
       <AuthPage staff>
-        <section className="auth-card">
-          <label>FAYFORT ACCOUNT</label>
-          <h1>Opening FayFort</h1>
-          <p role="status">Checking your sign-in…</p>
+        <section className="auth-opening" aria-label="Opening FayFort">
+          <FayfortLoader size="lg" tone="dark" label="Opening FayFort…" />
         </section>
       </AuthPage>
     );

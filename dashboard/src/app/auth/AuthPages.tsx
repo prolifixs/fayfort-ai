@@ -1,6 +1,6 @@
-import type { Session } from "@supabase/supabase-js";
+import type { EmailOtpType, Session } from "@supabase/supabase-js";
 import { useEffect, useState, type ReactNode } from "react";
-import { supabaseClient } from "../../lib/supabase";
+import { openedAt, supabaseClient } from "../../lib/supabase";
 import { SetupScreen } from "../SetupScreen";
 import { dashboardAuthConfigured } from "../../lib/supabase";
 import { WorkerInvitationAcceptancePage } from "../staff/WorkerPages";
@@ -9,12 +9,12 @@ import { RequestLinkForm } from "./RequestLinkForm";
 import { SetPasswordForm } from "./SetPasswordForm";
 import { AuthPage } from "./AuthPage";
 import { landingFor, type Landing } from "./landing";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 function AuthCard({ audience, title, children }: { audience: AuthAudience; title: string; children: ReactNode }) {
   return (
     <AuthPage staff={audience === "staff"}>
       <section className="auth-card">
-        <b className="brand-mark">F</b>
         <label>{audience === "staff" ? "FAYFORT TEAM ACCOUNT" : "FAYFORT ACCOUNT"}</label>
         <h1>{title}</h1>
         {children}
@@ -42,16 +42,32 @@ export function ForgotPasswordPage() {
   );
 }
 
+const CODE_STEP_WORDING: Record<string, { title: string; text: string; button: string }> = {
+  recovery: { title: "Reset your password", text: "Click below to choose a new password.", button: "Continue to reset password" },
+  signup: { title: "Confirm your email", text: "Click below to confirm your email and open your account.", button: "Confirm my email" },
+  invite: { title: "Join the FayFort team", text: "Click below to accept your invitation and set a password.", button: "Accept invitation" },
+  email_change: { title: "Confirm your new email", text: "Click below to confirm this email address.", button: "Confirm email" },
+  magiclink: { title: "Sign in to FayFort", text: "Click below to finish signing in.", button: "Sign in" },
+  unknown: { title: "Continue to FayFort", text: "Click below to continue.", button: "Continue" },
+};
+
 /**
  * /auth/callback (and the /worker/accept alias) — finishes every Supabase Auth email link and OAuth return:
  * sign-up verification, worker invitation, password recovery, email change and magic links.
  */
 export function AuthCallbackPage() {
-  const [info] = useState(() => parseAuthCallback(window.location));
+  const [info] = useState(() =>
+    // Prefer the address as first opened; supabase-js may already have cleared its #… part.
+    parseAuthCallback(openedAt.pathname === window.location.pathname && openedAt.hash ? openedAt : window.location),
+  );
   const [session, setSession] = useState<Session | null | undefined>(info.errorCode ? null : undefined);
   const [recovery, setRecovery] = useState(info.type === "recovery");
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [home, setHome] = useState<Landing | null>(null);
+  // FayFort's email links carry a one-time code that is used only when the person clicks Continue, so email
+  // scanners that open links can't use it up, and the link works in any browser or on any device.
+  const [codeStep, setCodeStep] = useState<"waiting" | "checking" | "done">(info.tokenHash ? "waiting" : "done");
+  const [codeError, setCodeError] = useState("");
 
   useEffect(() => {
     if (!supabaseClient || info.errorCode) {
@@ -74,9 +90,30 @@ export function AuthCallbackPage() {
     };
   }, [info.errorCode]);
 
+  async function confirmCode() {
+    if (!supabaseClient) return;
+    setCodeStep("checking");
+    setCodeError("");
+    const otpType: EmailOtpType = info.type === "unknown" || info.type === "oauth" ? "email" : (info.type as EmailOtpType);
+    const { data, error } = await supabaseClient.auth.verifyOtp({ token_hash: info.tokenHash, type: otpType });
+    // The code is single-use: take it out of the address bar either way.
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("token_hash");
+    window.history.replaceState(null, "", clean.pathname + clean.search);
+    if (error || !data.session) {
+      setCodeError(friendlyAuthError(error, "This link is no longer valid."));
+      setSession(null);
+      setCodeStep("done");
+      return;
+    }
+    if (info.type === "recovery") setRecovery(true);
+    setSession(data.session);
+    setCodeStep("done");
+  }
+
   const { audience, type } = info;
   const settled = session !== undefined;
-  const finishesSignIn = !recovery && type !== "invite";
+  const finishesSignIn = !recovery && type !== "invite" && codeStep === "done";
 
   useEffect(() => {
     // Where this account belongs is worked out from the account, not from the link (one sign-in for everyone).
@@ -94,10 +131,26 @@ export function AuthCallbackPage() {
   }, [settled, session, home, finishesSignIn, type]);
 
   if (!dashboardAuthConfigured) return <SetupScreen />;
+  if (codeStep !== "done") {
+    const wording = CODE_STEP_WORDING[type] || CODE_STEP_WORDING.unknown;
+    return (
+      <AuthCard audience={audience} title={wording.title}>
+        <p>{wording.text}</p>
+        <button
+          type="button"
+          className="primary-button auth-link-button"
+          disabled={codeStep === "checking"}
+          onClick={() => void confirmCode()}
+        >
+          {codeStep === "checking" ? "One moment…" : wording.button}
+        </button>
+      </AuthCard>
+    );
+  }
   if (!settled)
     return (
       <AuthCard audience={audience} title="One moment">
-        <p role="status">Checking your link…</p>
+        <FayfortLoader label="Checking your link…" />
       </AuthCard>
     );
 
@@ -105,9 +158,11 @@ export function AuthCallbackPage() {
     return (
       <AuthCard audience={audience} title="This link can't be used">
         <p role="alert">
-          {info.errorCode
-            ? friendlyAuthError(`${info.errorCode} ${info.errorDescription}`, "This link is no longer valid.")
-            : "This link has expired or was already used, or it was opened in a different browser."}
+          {codeError
+            ? codeError
+            : info.errorCode
+              ? friendlyAuthError(`${info.errorCode} ${info.errorDescription}`, "This link is no longer valid.")
+              : "This link has expired or was already used. Links work once, and only the newest one you asked for works."}
         </p>
         {type === "invite" ? (
           <p>Ask a FayFort platform administrator to resend your invitation. If you already set a password, sign in.</p>

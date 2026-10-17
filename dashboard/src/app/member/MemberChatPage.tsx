@@ -27,6 +27,8 @@ import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 import { MEMBER_TOUR, MemberTour, ProfileMeter, type ProfileCompletion, type TourStep } from "./accountExtras";
 import { SavedPanel } from "./ShopPanels";
 import { AdSlot, AdsProvider } from "./ads";
+import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
+import { claimPendingSiteChat } from "./siteChatCarryOver";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
@@ -288,8 +290,8 @@ export function MemberChatPage() {
     setProducts(result.products || []);
   }, []);
   const openRequestedChat = useCallback(
-    async (accessToken: string, rows: MemberChat[]) => {
-      const requestedId = new URLSearchParams(window.location.search).get("conversation");
+    async (accessToken: string, rows: MemberChat[], carriedId: string | null = null) => {
+      const requestedId = carriedId || new URLSearchParams(window.location.search).get("conversation");
       const selected = rows.find((chat) => chat.id === requestedId) || rows[0];
       if (selected) await openChat(accessToken, selected);
     },
@@ -354,9 +356,10 @@ export function MemberChatPage() {
         setProfile(me.profile);
         applyMe(me);
         setVerified(true);
+        const carriedId = await claimPendingSiteChat(accessToken, data.session);
         const rows = await loadChats(accessToken);
         await loadRequests(accessToken);
-        await openRequestedChat(accessToken, rows);
+        await openRequestedChat(accessToken, rows, carriedId);
         void loadShop(accessToken);
       } catch (reason) {
         if (mounted) setError(reason instanceof Error ? reason.message : "Member chat could not be loaded.");
@@ -382,9 +385,10 @@ export function MemberChatPage() {
             setProfile(me.profile);
             applyMe(me);
             setVerified(true);
+            const carriedId = await claimPendingSiteChat(accessToken, session);
             const rows = await loadChats(accessToken);
             await loadRequests(accessToken);
-            await openRequestedChat(accessToken, rows);
+            await openRequestedChat(accessToken, rows, carriedId);
             void loadShop(accessToken);
           })
           .catch((reason) => {
@@ -705,11 +709,11 @@ export function MemberChatPage() {
     return (
       <main className="mapp-gate">
         <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
-          <span className="brand-mark">F</span>
+          <BrandMark />
           <span>FayFort</span>
         </a>
         {authLoading ? (
-          <p role="status">Checking your member sign-in…</p>
+          <FayfortLoader label="Checking your member sign-in…" />
         ) : !token ? (
           <div className="member-chat-empty">
             <h1>Sign in to start a chat</h1>
@@ -736,7 +740,7 @@ export function MemberChatPage() {
       >
         <div className="mapp-sidebar-head">
           <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
-            <span className="brand-mark">F</span>
+            <BrandMark />
             <span>FayFort</span>
           </a>
           {!isDesktop && (
@@ -1814,7 +1818,7 @@ export function MemberWorkspacePanel({
         </p>
       )}
       {loading ? (
-        <p role="status">Loading products…</p>
+        <FayfortLoader label="Loading products…" />
       ) : products.length === 0 ? (
         <p className="empty-copy">
           {mode === "saved" ? "You have no saved products yet." : "No active products match your search."}

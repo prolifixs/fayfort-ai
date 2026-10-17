@@ -7,6 +7,7 @@ import { Countdown, HotRails, PriceLine, ProductTile, TrendTile } from "./ShopCo
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
 import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
 import { AdSlot } from "./ads";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 /** Browse grid positions (0-based) after which an in-feed ad may appear. */
 const FEED_AD_AFTER = new Set([7, 23]);
@@ -83,7 +84,7 @@ export function ProductPanel({
         </p>
       )}
       {!detail ? (
-        !error && <p role="status">Loading product…</p>
+        !error && <FayfortLoader label="Loading product…" />
       ) : (
         <>
           <div className="shop-gallery">
@@ -701,7 +702,7 @@ export function BrowsePanel({
         </p>
       )}
       {loading && !result ? (
-        <p role="status">Loading products…</p>
+        <FayfortLoader label="Loading products…" />
       ) : result && !result.products.length ? (
         <p className="empty-copy">Nothing matches yet. Ask in the chat or paste a link and FayFort will source it.</p>
       ) : (
@@ -752,7 +753,7 @@ export function SavedPanel({
         </p>
       )}
       {!cards ? (
-        !error && <p role="status">Loading saved products…</p>
+        !error && <FayfortLoader label="Loading saved products…" />
       ) : !cards.length ? (
         <div className="empty-copy shop-saved-empty">
           <p>You haven't saved anything yet. Tap the heart on any product to keep it here.</p>

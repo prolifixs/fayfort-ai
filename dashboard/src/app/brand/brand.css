@@ -1,0 +1,66 @@
+/* FayFort logo and loading animation. */
+.ff-logo { display: block; width: 100%; height: 100%; overflow: visible; }
+.ff-logo-shell { fill: var(--ff-logo-shell, #07276c); }
+.ff-logo-f { fill: var(--ff-logo-f, #ff1a7a); }
+.ff-logo--on-dark { --ff-logo-shell: #ffffff; }
+.ff-logo--mono { --ff-logo-shell: currentColor; --ff-logo-f: currentColor; }
+
+/* One loop is 2.2 s: the shell draws in, fills, the F slides up, a shine sweeps across, then a short rest. */
+.ff-logo--animated .ff-logo-shell {
+  stroke: var(--ff-logo-shell, #07276c); stroke-width: 16; stroke-linejoin: round;
+  stroke-dasharray: 1 1; stroke-dashoffset: 1;
+  animation: ff-logo-shell 2.2s cubic-bezier(.55, .1, .35, 1) infinite;
+}
+.ff-logo--animated .ff-logo-f {
+  transform-box: fill-box; transform-origin: center;
+  animation: ff-logo-f 2.2s cubic-bezier(.2, .8, .25, 1) infinite;
+}
+.ff-logo--animated .ff-logo-shine { animation: ff-logo-shine 2.2s ease-in-out infinite; }
+
+@keyframes ff-logo-shell {
+  0% { stroke-dashoffset: 1; fill-opacity: 0; opacity: 1; }
+  34% { stroke-dashoffset: 0; fill-opacity: 0; }
+  48% { stroke-dashoffset: 0; fill-opacity: 1; }
+  88% { stroke-dashoffset: 0; fill-opacity: 1; opacity: 1; }
+  100% { stroke-dashoffset: 0; fill-opacity: 1; opacity: 0; }
+}
+@keyframes ff-logo-f {
+  0%, 36% { transform: translateY(14%); opacity: 0; }
+  56% { transform: translateY(0); opacity: 1; }
+  88% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes ff-logo-shine {
+  0%, 56% { transform: translateX(0) skewX(-18deg); }
+  82%, 100% { transform: translateX(1700px) skewX(-18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-logo--animated .ff-logo-shell, .ff-logo--animated .ff-logo-f, .ff-logo--animated .ff-logo-shine { animation: none; }
+  .ff-logo--animated .ff-logo-shell { stroke: none; stroke-dashoffset: 0; }
+  .ff-logo--animated .ff-logo-shine { display: none; }
+  .ff-logo--animated { animation: ff-logo-breathe 2.4s ease-in-out infinite; }
+}
+@keyframes ff-logo-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Loader */
+.ff-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 28px 16px; text-align: center; color: var(--color-text-muted, #5b6672); }
+.ff-loader-mark { display: block; width: 44px; height: 46px; }
+.ff-loader--sm { flex-direction: row; gap: 10px; padding: 10px 0; justify-content: flex-start; }
+.ff-loader--sm .ff-loader-mark { width: 24px; height: 25px; }
+.ff-loader--lg .ff-loader-mark { width: 76px; height: 80px; }
+.ff-loader-label { font-size: 14px; line-height: 1.4; }
+.ff-loader--page { min-height: 100vh; min-height: 100dvh; box-sizing: border-box; }
+.ff-loader--dark { color: rgba(255, 255, 255, .78); }
+.ff-loader--lg .ff-loader-label { font-size: 15px; letter-spacing: .01em; }
+
+/* The real logo in place of the old "F" square (beats the older square styles). */
+.brand-mark.brand-mark-logo,
+.member-theme-runtime .brand-mark.brand-mark-logo,
+.staff-sidebar .brand-mark.brand-mark-logo,
+.auth-logo .brand-mark.brand-mark-logo {
+  display: inline-grid; place-items: center; width: 34px; height: 36px; padding: 0 !important;
+  background: transparent !important; border: 0; border-radius: 0; box-shadow: none; color: inherit !important;
+  line-height: 0; flex: none;
+}
+.brand-mark.brand-mark-logo .ff-logo { width: 100%; height: 100%; }

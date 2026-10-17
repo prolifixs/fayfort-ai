@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { FayfortLoader } from "./brand/FayfortLogo";
 
 type Faq = {
   id: string;
@@ -132,7 +133,7 @@ export function KnowledgeDocuments({ accessToken, businessId, canManage }: {
     {error && <p className="form-error" role="alert">{error}</p>}
     {notice && <p className="quiet-note" role="status">{notice}</p>}
     {editing === "new" && form}
-    {loading ? <p role="status">Loading knowledge…</p> : groups.map(group => {
+    {loading ? <FayfortLoader label="Loading knowledge…" /> : groups.map(group => {
       const rows = docs.filter(doc => (doc.source_type === "guide" ? "guide" : "manual") === group.key);
       return <div className="knowledge-group" key={group.key}>
         <h3>{group.title} <span className="status-pill">{rows.length}</span></h3>
@@ -271,7 +272,7 @@ function FaqPanel({ accessToken, businessId, canManage }: {
       <div className="record-actions"><button className="primary-button" disabled={busy}>{busy ? "Saving…" : revisionFor ? "Save new draft version" : "Create FAQ draft"}</button>{revisionFor && <button type="button" disabled={busy} onClick={() => { setRevisionFor(""); setQuestion(""); setAnswer(""); }}>Cancel revision</button>}</div>
     </form>}
     {!canManage && <p className="quiet-note">You can read FAQ versions. Only a business owner or admin can create, revise, approve, or archive them.</p>}
-    {loading ? <p role="status">Loading FAQs…</p> : faqs.length === 0 ? <p className="empty-copy">No FAQ drafts or approved answers yet.</p> : <div className="record-list">{faqs.map(faq => <div className="record" key={faq.id}>
+    {loading ? <FayfortLoader label="Loading FAQs…" /> : faqs.length === 0 ? <p className="empty-copy">No FAQ drafts or approved answers yet.</p> : <div className="record-list">{faqs.map(faq => <div className="record" key={faq.id}>
       <div><strong>{faq.question}</strong><small>Version {faq.version} · {faq.status}</small><p>{faq.answer}</p><small>Created {new Date(faq.created_at).toLocaleString()} · author {faq.created_by}</small>{faq.approved_at && <small>Approved {new Date(faq.approved_at).toLocaleString()} · reviewer {faq.approved_by}</small>}</div>
       <div className="record-actions">{faq.status === "draft" && canManage && <button disabled={busy} onClick={() => void review(faq, "approve")}>Approve</button>}{["draft", "approved"].includes(faq.status) && canManage && <button disabled={busy} onClick={() => beginRevision(faq)}>Create revision</button>}{["draft", "approved"].includes(faq.status) && canManage && <button disabled={busy} onClick={() => void review(faq, "archive")}>Archive version</button>}<button onClick={() => void toggleEvents(faq)}>{events[faq.id] ? "Hide review history" : "Review history"}</button></div>
       {events[faq.id] && <div className="record-list" aria-label={`${faq.question} review history`}>{events[faq.id].length ? events[faq.id].map(item => <div className="record" key={item.id}><div><strong>{item.event_type}</strong><small>{new Date(item.created_at).toLocaleString()} · actor {item.actor_id}</small></div></div>) : <p className="empty-copy">No history for this version.</p>}</div>}

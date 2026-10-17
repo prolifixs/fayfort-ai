@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useLayoutEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { MemberDialog } from "./MemberAccountDialogs";
 import { memberCountryOptions } from "./memberShared";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 /** A saved delivery address. Members keep up to two; one is the default. */
 export type MemberAddress = {
@@ -226,7 +227,7 @@ export function AddressBook({ accessToken, onChange }: { accessToken: string; on
         Save up to two addresses. You'll choose one before paying for an order, so we know where to deliver.
       </p>
       {!book.loaded ? (
-        <p role="status">Loading your addresses…</p>
+        <FayfortLoader label="Loading your addresses…" />
       ) : (
         <div className="member-address-list">
           {book.addresses.map((address) =>
@@ -385,7 +386,7 @@ export function AddressPickerDialog({
         Choose the address for <strong>{invoice.title}</strong>. It's added to your invoice before you pay.
       </p>
       {!book.loaded ? (
-        <p role="status">Loading your addresses…</p>
+        <FayfortLoader label="Loading your addresses…" />
       ) : adding ? (
         <AddressForm
           busy={book.busy}

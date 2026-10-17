@@ -11,6 +11,8 @@ export interface AuthCallbackInfo {
   audience: AuthAudience;
   errorCode: string;
   errorDescription: string;
+  /** Present on FayFort's own email links: the one-time code, used only when the person clicks Continue. */
+  tokenHash: string;
 }
 
 const KNOWN_TYPES: AuthLinkType[] = ["signup", "invite", "recovery", "email_change", "magiclink"];
@@ -35,6 +37,7 @@ export function parseAuthCallback(location: Pick<Location, "pathname" | "search"
     audience,
     errorCode: read("error_code") || read("error"),
     errorDescription: read("error_description").replace(/\+/g, " "),
+    tokenHash: query.get("token_hash") || "",
   };
 }
 

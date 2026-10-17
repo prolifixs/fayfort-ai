@@ -44,11 +44,13 @@ class PublicAddressSettingsTests(unittest.TestCase):
         config = self.config(APP_PUBLIC_URL="https://app.fayfort.com/", ALLOWED_ORIGINS="https://www.fayfort.com, https://app.fayfort.com,")
         self.assertEqual(cors_allowed_origins(config), [
             "http://127.0.0.1:5173", "http://localhost:5173", "https://app.fayfort.com", "https://www.fayfort.com",
+            "https://fayfort.com",
         ])
 
-    def test_default_cors_is_local_dashboard_only(self):
+    def test_default_cors_is_local_dashboard_and_public_website(self):
         from app.config.settings import cors_allowed_origins
-        self.assertEqual(cors_allowed_origins(self.config()), ["http://127.0.0.1:5173", "http://localhost:5173"])
+        self.assertEqual(cors_allowed_origins(self.config()), [
+            "http://127.0.0.1:5173", "http://localhost:5173", "https://www.fayfort.com", "https://fayfort.com"])
 
     def test_worker_invite_redirect_follows_app_url_unless_overridden(self):
         from app.config.settings import worker_invite_redirect_url

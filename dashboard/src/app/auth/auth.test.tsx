@@ -14,6 +14,7 @@ const auth = vi.hoisted(() => ({
   signInWithOAuth: vi.fn(),
   signOut: vi.fn(),
   getUserIdentities: vi.fn(),
+  verifyOtp: vi.fn(),
 }));
 const mfa = vi.hoisted(() => ({
   getAuthenticatorAssuranceLevel: vi.fn(),
@@ -22,7 +23,7 @@ const mfa = vi.hoisted(() => ({
   unenroll: vi.fn(),
   challengeAndVerify: vi.fn(),
 }));
-vi.mock("../../lib/supabase", () => ({ dashboardAuthConfigured: true, supabaseClient: { auth: { ...auth, mfa } } }));
+vi.mock("../../lib/supabase", () => ({ dashboardAuthConfigured: true, openedAt: { pathname: "", search: "", hash: "" }, supabaseClient: { auth: { ...auth, mfa } } }));
 
 import { App } from "../App";
 import { AccountSecuritySection } from "./MemberSecuritySection";
@@ -210,6 +211,52 @@ describe("auth callback", () => {
   });
 });
 
+describe("email links with a one-time code", () => {
+  it("uses the code only after the click, then asks for the new password", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: { access_token: "fresh", user: { email: "member@example.com" } } },
+      error: null,
+    });
+    window.history.replaceState({}, "", "/auth/callback?type=recovery&token_hash=abc123");
+    render(<App />);
+    const button = await screen.findByRole("button", { name: "Continue to reset password" });
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(await screen.findByRole("heading", { name: "Set a new password" })).toBeInTheDocument();
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ token_hash: "abc123", type: "recovery" });
+    expect(window.location.search).not.toContain("token_hash");
+  });
+
+  it("ignores another account already signed in on this browser until the link is confirmed", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: { access_token: "old", user: { email: "other@example.com" } } }, error: null });
+    window.history.replaceState({}, "", "/auth/callback?type=recovery&token_hash=abc123");
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Continue to reset password" })).toBeInTheDocument();
+    expect(screen.queryByText(/other@example.com/)).not.toBeInTheDocument();
+  });
+
+  it("explains an expired code and offers a new link", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    auth.verifyOtp.mockResolvedValue({ data: { session: null }, error: Object.assign(new Error("Token has expired or is invalid"), { code: "otp_expired" }) });
+    window.history.replaceState({}, "", "/auth/callback?type=recovery&token_hash=old");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to reset password" }));
+    expect(await screen.findByRole("heading", { name: "This link can't be used" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("expired");
+    expect(screen.getByRole("button", { name: "Email me a reset link" })).toBeInTheDocument();
+  });
+
+  it("confirms a new member's email with the signup code", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    auth.verifyOtp.mockResolvedValue({ data: { session: { access_token: "fresh", user: { email: "m@example.com" } } }, error: null });
+    window.history.replaceState({}, "", "/auth/callback?type=signup&token_hash=s1");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm my email" }));
+    await waitFor(() => expect(auth.verifyOtp).toHaveBeenCalledWith({ token_hash: "s1", type: "signup" }));
+  });
+});
+
 describe("member sign-up", () => {
   it("requires a strong, confirmed password and sends verification through the callback", async () => {
     window.history.replaceState({}, "", "/member/signup");
@@ -226,6 +273,23 @@ describe("member sign-up", () => {
       }),
     );
     expect(await screen.findByText("Didn't get the verification email?")).toBeInTheDocument();
+  });
+
+  it("carries a fayfort.com chat into the new account", async () => {
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/member/signup?site_chat=abcdefghijklmnopqrstuvwx");
+    render(<App />);
+    expect(screen.getByText(/Your chat with FayFort AI will be waiting/)).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+    expect(window.localStorage.getItem("ff_site_chat_code")).toBe("abcdefghijklmnopqrstuvwx");
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "member-pass-2026" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "member-pass-2026" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create member account" }));
+    await waitFor(() =>
+      expect(auth.signUp.mock.calls[0][0].options.data).toEqual({ site_chat_code: "abcdefghijklmnopqrstuvwx" }),
+    );
+    window.localStorage.clear();
   });
 });
 

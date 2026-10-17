@@ -4,7 +4,7 @@ import { MemberPhotoReviewQueue } from "./staff/MemberPhotoReview";
 import { App,DashboardWorkspace,WorkerInvitationAcceptancePage,WorkerPasswordResetPage,WorkerProvisioningPage } from "./App";
 
 const authMocks=vi.hoisted(()=>({updateUser:vi.fn(),getSession:vi.fn(),onAuthStateChange:vi.fn(),signInWithOAuth:vi.fn(),getUserIdentities:vi.fn(),linkIdentity:vi.fn()}));
-vi.mock("../lib/supabase",()=>({dashboardAuthConfigured:true,supabaseClient:{auth:{updateUser:authMocks.updateUser,getSession:authMocks.getSession,onAuthStateChange:authMocks.onAuthStateChange,signInWithOAuth:authMocks.signInWithOAuth,getUserIdentities:authMocks.getUserIdentities,linkIdentity:authMocks.linkIdentity,mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:"aal2",nextLevel:"aal2"},error:null})}}}}));
+vi.mock("../lib/supabase",()=>({dashboardAuthConfigured:true,openedAt:{pathname:"",search:"",hash:""},supabaseClient:{auth:{updateUser:authMocks.updateUser,getSession:authMocks.getSession,onAuthStateChange:authMocks.onAuthStateChange,signInWithOAuth:authMocks.signInWithOAuth,getUserIdentities:authMocks.getUserIdentities,linkIdentity:authMocks.linkIdentity,mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:"aal2",nextLevel:"aal2"},error:null})}}}}));
 
 afterEach(()=>{cleanup();window.history.replaceState({},"","/");});
 const business = { business_id:"business-1", name:"FayFort Test Workspace" };

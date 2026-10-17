@@ -7,6 +7,7 @@ import type { ProductCategory } from "../workspace/types";
 import { SetupScreen } from "../SetupScreen";
 import { ProductMediaPreview } from "../workspace/DirectoryPages";
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
+import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
 
 export function MemberProductsPage() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -112,13 +113,13 @@ export function MemberProductsPage() {
   return (
     <div className="auth-page member-catalog-page">
       <section className="auth-card member-catalog-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT MEMBER CATALOG</label>
         <h1>Products</h1>
         <p>Browse active products and save items you want to find again.</p>
         <MemberNotificationsBar accessToken={verified ? accessToken : null} />
         {authLoading ? (
-          <p role="status">Checking your member sign-in…</p>
+          <FayfortLoader label="Checking your member sign-in…" />
         ) : !accessToken ? (
           <p role="status">
             Sign in to a verified member account to browse and save products.{" "}
@@ -177,7 +178,7 @@ export function MemberProductsPage() {
               </p>
             )}
             {loading ? (
-              <p role="status">Loading products…</p>
+              <FayfortLoader label="Loading products…" />
             ) : products.length === 0 ? (
               <p className="empty-copy">
                 {savedOnly ? "You have no saved products yet." : "No active products match your search."}

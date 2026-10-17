@@ -1,6 +1,6 @@
 # Public site rebuild (www.fayfort.com): plan for review
 
-Status: decisions taken 2026-10-16 (section 9); build in progress. Source: the live site, `web/` (Next.js 16) and the project plans
+Status: decisions taken 2026-10-16 (section 9); site live. Website chat (section 10) built 2026-10-17. Source: the live site, `web/` (Next.js 16) and the project plans
 (PLATFORM_CONSOLIDATION_PLAN, MEMBERSHIP_PLAN, KNOWLEDGE_BASE_DRAFT).
 
 ## 1. What's wrong with the current site
@@ -187,3 +187,51 @@ Changes to the sections above that follow from these:
 - Home section 2 (proof strip) is followed by the Instagram rail.
 - Section 7: no `GET /public/plans`. New: `GET /public/site/instagram` (curated posts), and the Control Center page to
   manage them.
+
+## 10. FayFort AI chat help (owner decisions, 2026-10-17)
+
+**Decisions**
+1. **"Talk to a person" (A)**: the website chat never opens a staff handoff. It offers **Join free** (the team replies in
+   the member chat) and **WhatsApp**.
+2. **Carry-over**: when a visitor joins free or signs in from the chat, the conversation is copied into their member
+   chat, titled "From fayfort.com: …".
+3. **Welcome bubble**: shown automatically on desktop, about 5 seconds after the page loads, once per visit. Phones show
+   only the chat button.
+
+**What was built**
+- **Website** (`web/src/app/(site)/chat/`):
+  - The chat sits on every page that uses the site layout. LANDED has its own layout and has no chat.
+  - The chat button shows the logo on navy. The panel has a header with minimise (–) and close (×); minimised, it
+    becomes a small bar showing the last reply, and it stays open or minimised when the visitor moves between pages.
+  - Starter questions: How does it work? · Is it free to join? · Do you ship to my country? · Talk to a person.
+  - While FayFort AI replies, the animated logo shows with "FayFort AI is typing…".
+  - Buttons under replies: Join free / I have an account (both carry a one-time code) and WhatsApp us.
+  - On phones the panel is a sheet covering most of the screen.
+- **API** (`app/site/chat.py`):
+  - Public: `GET /public/site-chat`, `POST /public/site-chat/messages`, `POST /public/site-chat/handoff`.
+  - Member: `POST /members/site-chat/claim`.
+  - Control Center (platform admin): `GET /platform/site/chat`, `GET /platform/site/chat/{id}`,
+    `PUT /platform/site/chat/settings`.
+  - Answers come from the same Knowledge and answer checks as the member chat. Website wording: no "dear", and the
+    fallback answers point to joining free.
+  - The visitor's token travels in a header; only its SHA-256 hash is stored. The CORS allow-list includes
+    `https://www.fayfort.com` and `https://fayfort.com`.
+- **Limits** (adjustable in Control Center → Website): 20 messages per visitor a day, 60 per network a day and 400 AI
+  replies a day for the whole site. When a limit is reached, the reply offers Join free and WhatsApp without calling
+  the AI.
+- **Database**: migration `20261017150000_site_chat.sql`.
+  - Tables: `site_chat_settings`, `site_chat_conversations` and `site_chat_messages`, reachable by the API only.
+  - Function: `claim_site_chat`, which runs once per code and refuses codes that have expired or belong to another
+    member.
+- **Carry-over**:
+  - The code from `?site_chat=` is kept in the browser and saved in the new account's sign-up details. So it still
+    works when the verification email is opened in another browser.
+  - The member chat claims the code on load and opens the copied conversation.
+- **Control Center → Website**: a "FayFort AI on the website" section, with the on/off switch, the three limits,
+  today's count, and the recent visitor chats (read only) marked "Joined".
+- **Tests**:
+  - API: 11 tests.
+  - Dashboard: the claim and the sign-up code, plus the Website section.
+  - Website: the chat is not on LANDED, and the CSP allows the API.
+  - A browser check of the flow: the bubble, a starter, the typing state, talking to a person, minimise, moving to
+    another page, Join free with the code, the phone sheet and LANDED.

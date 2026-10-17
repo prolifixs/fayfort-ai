@@ -826,6 +826,9 @@ from app.ads.router import create_ads_router  # noqa: E402
 app.include_router(create_ads_router())
 from app.site.router import create_site_router  # noqa: E402
 app.include_router(create_site_router())
+from app.site.chat import create_site_chat_router  # noqa: E402
+from app.commerce.member_router import verified_member as _site_chat_member  # noqa: E402
+app.include_router(create_site_chat_router(_site_chat_member))
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

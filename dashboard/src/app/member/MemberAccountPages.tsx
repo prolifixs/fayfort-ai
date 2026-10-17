@@ -15,6 +15,8 @@ import { formatMemberTier } from "./memberShared";
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { MemberPlanComparison } from "./MemberAccountDialogs";
 import { PlanBilling } from "./PlanBilling";
+import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
+import { rememberSiteChatCode } from "./siteChatCarryOver";
 
 export function MemberRoutePage() {
   if (window.location.pathname === "/member/notifications") return <MemberNotificationsPage />;
@@ -35,6 +37,8 @@ export function MemberAccountPage() {
   const [mode, setMode] = useState<"signup" | "signin">(
     window.location.pathname === "/member/signup" ? "signup" : "signin",
   );
+  // Arriving from FayFort AI on fayfort.com (?site_chat=…): that conversation follows the member into their chat.
+  const [siteChatCode] = useState(() => rememberSiteChatCode());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState<PasswordPair>({ password: "", confirm: "" });
@@ -118,7 +122,12 @@ export function MemberAccountPage() {
         const { error: authError } = await supabaseClient.auth.signUp({
           email: email.trim(),
           password: newPassword.password,
-          options: { emailRedirectTo: authCallbackUrl("member", "signup"), captchaToken: captcha.captchaToken },
+          options: {
+            emailRedirectTo: authCallbackUrl("member", "signup"),
+            captchaToken: captcha.captchaToken,
+            // A conversation started with FayFort AI on fayfort.com follows the new member into their chat.
+            data: siteChatCode ? { site_chat_code: siteChatCode } : undefined,
+          },
         });
         if (authError) throw authError;
         setNewPassword({ password: "", confirm: "" });
@@ -173,7 +182,7 @@ export function MemberAccountPage() {
   return (
     <AuthPage>
       <section className="auth-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>{mode === "signup" && !profile ? "FAYFORT MEMBER ACCOUNT" : "FAYFORT ACCOUNT"}</label>
         <h1>{profile ? "Your member account" : mode === "signup" ? "Create your account" : "Sign in"}</h1>
         <p>
@@ -183,6 +192,9 @@ export function MemberAccountPage() {
               ? "Free to join. Use email and password; we’ll send a verification link before your account is enabled."
               : "Members and the FayFort team use the same sign-in."}
         </p>
+        {siteChatCode && !profile && (
+          <p className="quiet-note site-chat-carry-note">Your chat with FayFort AI will be waiting in your FayFort chat.</p>
+        )}
         {!profile && (
           <>
             <div className="member-social-auth" aria-label="Social sign-in options">
@@ -298,7 +310,7 @@ export function MemberSettingsPage() {
   return (
     <div className="auth-page member-settings-page">
       <section className="auth-card member-settings-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT MEMBER</label>
         <h1>Settings</h1>
         <p>Manage your sign-in methods, profile appearance, and membership options.</p>
@@ -343,12 +355,12 @@ export function MemberMembershipPage() {
   return (
     <div className="auth-page member-settings-page">
       <section className="auth-card member-membership-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT MEMBER</label>
         <h1>Member plans</h1>
         <p>Plans belong to your member account. The internal Client account tools are for FayFort staff only.</p>
         {loading ? (
-          <p role="status">Loading member plan…</p>
+          <FayfortLoader label="Loading member plan…" />
         ) : !token ? (
           <p role="status">
             Sign in to view your member plan. <a href="/member/account">Member sign in</a>

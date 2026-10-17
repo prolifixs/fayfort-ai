@@ -230,6 +230,17 @@ class WorkforceApiTests(unittest.TestCase):
         self.db.client.auth.reset_password_for_email.assert_not_called()
         self.assertEqual(self.audit_actions(), ["password_reset_sent"])
 
+    def test_password_reset_link_uses_the_click_to_continue_code(self):
+        self.db.client.auth.admin.generate_link.return_value = SimpleNamespace(
+            properties=SimpleNamespace(action_link="https://x.supabase.co/auth/v1/verify?token=secret", hashed_token="h4sh"))
+        with patch("app.workforce.router.send_immediately") as send:
+            response = self.client.post(f"/platform/workers/{WORKER}/password-reset", headers=AUTH)
+        self.assertEqual(response.status_code, 200)
+        html = send.call_args.kwargs["rendered"].html
+        self.assertIn("/auth/callback?audience=staff", html)
+        self.assertIn("token_hash=h4sh", html)
+        self.assertNotIn("verify?token=secret", html)
+
     def test_mfa_reset_removes_every_factor(self):
         self.db.client.auth.admin.mfa.list_factors.return_value = SimpleNamespace(
             factors=[SimpleNamespace(id="11111111-1111-1111-1111-111111111111"), SimpleNamespace(id="22222222-2222-2222-2222-222222222222")])

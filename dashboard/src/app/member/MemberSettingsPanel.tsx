@@ -7,6 +7,7 @@ import { MemberSecuritySection } from "../auth/MemberSecuritySection";
 import { MemberEmailPreferences } from "./MemberEmailPreferences";
 import { formatMemberTier } from "./memberShared";
 import { AddressBook, ProfileCompletionCard, type ProfileCompletion } from "./accountExtras";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 /** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
 export function MemberSettingsPanel({
@@ -135,7 +136,7 @@ export function MemberSettingsPanel({
     if (profile && onProfileChange) onProfileChange(profile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
-  if (loading) return <p role="status">Checking your member sign-in…</p>;
+  if (loading) return <FayfortLoader label="Checking your member sign-in…" />;
   if (!token)
     return (
       <p role="status">

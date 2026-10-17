@@ -36,6 +36,7 @@ import {
 } from "./operations/FlowPanels";
 import { GUIDES, guideKeyFor, playbookSteps } from "./operations/playbooks";
 import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
+import { FayfortLoader } from "./brand/FayfortLogo";
 
 type View = "queue" | "archive" | "guide" | "team" | "reports";
 
@@ -196,7 +197,7 @@ export function OperationsCenterPage() {
         )}
       </header>
       {authLoading ? (
-        <p role="status">Checking your FayFort staff sign-in…</p>
+        <FayfortLoader label="Checking your FayFort staff sign-in…" />
       ) : !token ? (
         <section className="operations-empty">
           <h2>Staff sign-in required</h2>

@@ -23,6 +23,7 @@ import { OperationalModulePage } from "./OperationalModulePage";
 import { AnalyticsPage } from "./AnalyticsPage";
 import { InfrastructurePage } from "../staff/InfrastructurePage";
 import { StaffThemeToggle, useStaffTheme } from "../staff/staffTheme";
+import { BrandMark } from "../brand/FayfortLogo";
 
 export const modules = [
   ["Overview", "Workspace"],
@@ -356,7 +357,7 @@ export function DashboardWorkspace({
       >
         <div className="staff-sidebar-head">
           <a className="brand" href="#overview" onClick={() => go("Overview")}>
-            <b className="brand-mark">F</b>
+            <BrandMark />
             <span>
               <strong>FayFort</strong>
               <small>CONTROL CENTER</small>

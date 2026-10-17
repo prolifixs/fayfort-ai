@@ -120,6 +120,8 @@ settings = Settings()
 
 
 LOCAL_DASHBOARD_ORIGINS = ("http://127.0.0.1:5173", "http://localhost:5173")
+# The public website calls the website chat API from the browser.
+PUBLIC_SITE_ORIGINS = ("https://www.fayfort.com", "https://fayfort.com")
 
 
 def _origin(url: str) -> str:
@@ -132,7 +134,7 @@ def _origin(url: str) -> str:
 def cors_allowed_origins(config: "Settings | None" = None) -> list[str]:
     """Local dashboard origins plus the app's public origin and any ALLOWED_ORIGINS, de-duplicated."""
     config = config or settings
-    candidates = [*LOCAL_DASHBOARD_ORIGINS, _origin(config.APP_PUBLIC_URL)]
+    candidates = [*LOCAL_DASHBOARD_ORIGINS, _origin(config.APP_PUBLIC_URL), *PUBLIC_SITE_ORIGINS]
     candidates += [_origin(item) for item in config.ALLOWED_ORIGINS.split(",")]
     return list(dict.fromkeys(origin for origin in candidates if origin))
 
@@ -140,6 +142,20 @@ def cors_allowed_origins(config: "Settings | None" = None) -> list[str]:
 def staff_recovery_redirect_url(config: "Settings | None" = None) -> str:
     config = config or settings
     return config.APP_PUBLIC_URL.rstrip("/") + "/auth/callback?audience=staff&type=recovery"
+
+
+def click_to_continue_link(generated, redirect_url: str) -> str | None:
+    """Builds FayFort's own email link from a Supabase generate_link result.
+
+    The link opens /auth/callback with the hashed one-time code; the page uses it only when the person clicks
+    Continue, so email scanners can't use it up and it works in any browser. Falls back to Supabase's own link.
+    """
+    properties = getattr(generated, "properties", None)
+    hashed = getattr(properties, "hashed_token", None)
+    if hashed:
+        separator = "&" if "?" in redirect_url else "?"
+        return f"{redirect_url}{separator}token_hash={hashed}"
+    return getattr(properties, "action_link", None)
 
 
 def worker_invite_redirect_url(config: "Settings | None" = None) -> str:

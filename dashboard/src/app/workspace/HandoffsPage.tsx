@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { ConversationRow, Handoff, HandoffAgent, HandoffEvent, MessageRow } from "./types";
 import { StaffChatThread, fromBusinessMessage } from "../staff/StaffChatThread";
 import { readable } from "../staff/StaffChrome";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export function AgentAvailabilityPanel({ accessToken, businessId }: { accessToken: string; businessId: string }) {
   const [availability, setAvailability] = useState<"available" | "away" | "offline">("offline");
@@ -424,7 +425,7 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
                 {historyOpen[item.id] && (
                   <div className="handoff-history" aria-label="Handoff history">
                     {historyBusy[item.id] ? (
-                      <p role="status">Loading handoff history…</p>
+                      <FayfortLoader label="Loading handoff history…" />
                     ) : (history[item.id] || []).length === 0 ? (
                       <p className="quiet-note">No state changes recorded for this handoff.</p>
                     ) : (

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { API_BASE } from "../lib/api";
+import { BrandMark } from "./brand/FayfortLogo";
 
 const LABELS: Record<string, string> = {
   conversations: "chat reply emails",
@@ -42,7 +43,7 @@ export function EmailUnsubscribePage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT EMAIL</label>
         {state === "working" && (
           <>

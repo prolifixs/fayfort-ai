@@ -3,6 +3,7 @@ import { apiRequest } from "../../lib/api";
 import { useCallback, useEffect, useState } from "react";
 import { SetupScreen } from "../SetupScreen";
 import type { MemberCatalogProduct, MemberChatMessage } from "../member/memberShared";
+import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
 
 export function MemberPhotoReviewApp({ platformAdmin }: { platformAdmin: boolean }) {
   const [token, setToken] = useState<string | null>(null);
@@ -24,16 +25,14 @@ export function MemberPhotoReviewApp({ platformAdmin }: { platformAdmin: boolean
     <main className="auth-page member-chat-page">
       <section className="member-chat-shell">
         <header className="member-chat-header">
-          <a className="brand-mark" href="/member/account">
-            F
-          </a>
+          <BrandMark href="/member/account" label="Member account" />
           <div>
             <small>FAYFORT STAFF</small>
             <h1>Member photo reviews</h1>
           </div>
         </header>
         {loading ? (
-          <p role="status">Checking staff sign-in…</p>
+          <FayfortLoader label="Checking staff sign-in…" />
         ) : !token ? (
           <p role="status">Sign in to a FayFort staff account to view the review queue.</p>
         ) : (

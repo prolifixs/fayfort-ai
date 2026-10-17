@@ -3,6 +3,7 @@ import { apiRequest } from "../lib/api";
 import { dashboardAuthConfigured, supabaseClient } from "../lib/supabase";
 import { playMemberSound } from "./memberSound";
 import { useDismiss } from "./ui/useDismiss";
+import { BrandMark, FayfortLoader } from "./brand/FayfortLogo";
 
 export type MemberNotification = {
   id: string;
@@ -186,13 +187,13 @@ export function MemberNotificationsPage() {
   }
   if (!dashboardAuthConfigured) return <main className="auth-page"><section className="auth-card"><h1>Member sign-in is not configured</h1><p>Set up the member authentication environment before viewing notifications.</p></section></main>;
   return <main className="auth-page member-chat-page"><section className="member-chat-shell member-notifications-page">
-    <header className="member-chat-header"><a className="brand-mark" href="/member/account" aria-label="Member account">F</a><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/products">Back to dashboard</a></header>
+    <header className="member-chat-header"><BrandMark href="/member/account" label="Member account" /><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/products">Back to dashboard</a></header>
     {!accessToken && !loading ? <div className="member-chat-empty"><h2>Sign in to view notifications</h2><a className="primary-button" href="/member/account">Member sign in</a></div> : <>
       <MemberNotificationsBar accessToken={accessToken} />
       <section className="member-notification-inbox" aria-label="Your notifications">
         <div className="member-notification-heading"><div><h2>Your activity</h2><p>{data.unread_count ? `${data.unread_count} unread` : "You’re all caught up."}</p></div><button type="button" disabled={busy || loading || data.unread_count === 0} onClick={() => void markAllRead()}>Mark all read</button></div>
         {error && <p className="form-error" role="alert">{error}</p>}
-        {loading ? <p role="status">Loading notifications…</p> : data.notifications.length === 0 ? <p className="member-chat-empty">No notifications yet. Request milestones and worker replies will appear here.</p> : <ol className="member-notification-list">{data.notifications.map(item => <li key={item.id} className={item.read_at ? "is-read" : "is-unread"}>
+        {loading ? <FayfortLoader label="Loading notifications…" /> : data.notifications.length === 0 ? <p className="member-chat-empty">No notifications yet. Request milestones and worker replies will appear here.</p> : <ol className="member-notification-list">{data.notifications.map(item => <li key={item.id} className={item.read_at ? "is-read" : "is-unread"}>
           <a href={item.href} onClick={event => { event.preventDefault(); void open(item); }}><span className="member-notification-dot" aria-hidden="true"/><span><strong>{item.title}</strong><small>{item.body}</small><time>{new Date(item.created_at).toLocaleString()}</time></span></a>
           {!item.read_at && <button type="button" disabled={busy} onClick={() => void markRead(item)}>Mark read</button>}
         </li>)}</ol>}

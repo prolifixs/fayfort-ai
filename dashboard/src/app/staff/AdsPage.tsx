@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, API_BASE, apiRequest } from "../../lib/api";
 import { CustomAd, type AdCreative, type AdShape } from "../member/ads";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 /** Control Center → Ads (docs/ADS_PLAN.md): Google AdSense, placements, FayFort's own ads and their results. */
 
@@ -103,7 +104,7 @@ export function AdsPage({ accessToken }: { accessToken: string }) {
         </p>
       )}
       {!data ? (
-        !error && <p role="status">Loading ads…</p>
+        !error && <FayfortLoader label="Loading ads…" />
       ) : tab === "settings" ? (
         <SettingsPanel accessToken={accessToken} data={data} onSaved={load} />
       ) : tab === "placements" ? (

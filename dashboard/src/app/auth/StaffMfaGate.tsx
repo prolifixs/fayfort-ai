@@ -2,6 +2,7 @@ import { AuthPage } from "./AuthPage";
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { friendlyAuthError } from "./authLinks";
+import { BrandMark } from "../brand/FayfortLogo";
 
 // AD2: two-step verification (authenticator app, TOTP) is required for every FayFort team account.
 // The API enforces the same rule once STAFF_MFA_REQUIRED is switched on.
@@ -154,7 +155,7 @@ export function StaffMfaGate({ signedIn, email, children }: { signedIn: boolean;
   return (
     <AuthPage staff>
       <section className="auth-card staff-mfa-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT TEAM ACCOUNT</label>
         {state.kind === "checking" && (
           <>

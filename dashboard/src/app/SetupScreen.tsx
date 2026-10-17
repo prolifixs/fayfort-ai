@@ -1,8 +1,9 @@
+import { BrandMark } from "./brand/FayfortLogo";
 export function SetupScreen() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <b className="brand-mark">F</b>
+        <BrandMark />
         <label>FAYFORT CONTROL CENTER</label>
         <h1>Dashboard setup needed</h1>
         <p>

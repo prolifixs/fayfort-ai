@@ -10,6 +10,7 @@ import {
   type MemberPlanSummary,
   formatMoney,
 } from "./membershipApi";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 const STATUS_LABEL: Record<Consultation["status"], string> = {
   awaiting_payment: "Waiting for payment",
@@ -366,7 +367,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
         </p>
       )}
       {results === null ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !results.length ? (
         <p className="empty-copy">
           {type === "mine" ? "Contacts you unlock are kept here for good." : "Nothing matched. Try a product, market or city."}

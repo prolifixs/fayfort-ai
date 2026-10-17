@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 type Tab = "overview" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders" | "billing";
 
@@ -292,7 +293,7 @@ function TrendsPanel({ accessToken }: { accessToken: string }) {
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="email-delivery ok" role="status">{notice}</p>}
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !(data?.trends || []).length ? (
         <p className="empty-copy">Nothing here yet. Links members paste or share appear here.</p>
       ) : (
@@ -523,7 +524,7 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
       {notice && <p className="email-delivery ok" role="status">{notice}</p>}
       <h3 className="newsletter-history-title">Deposits due</h3>
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : (
         <DepositsDue
           rows={data.deposits_due || []}
@@ -538,7 +539,7 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
       )}
       <h3 className="newsletter-history-title">Ready to invoice</h3>
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !(data?.ready_to_invoice || []).length ? (
         <p className="empty-copy">No chosen options waiting for an invoice.</p>
       ) : (
@@ -772,7 +773,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
         <button className="primary-button" disabled={busy === "new"}>Create giveaway</button>
       </form>
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !(data?.giveaways || []).length ? (
         <p className="empty-copy">No giveaways yet.</p>
       ) : (
@@ -858,7 +859,7 @@ function MappingPanel({ accessToken }: { accessToken: string }) {
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !(data?.products || []).length ? (
         <p className="empty-copy">Every store product has a category.</p>
       ) : (
@@ -920,7 +921,7 @@ function OrdersPanel({ accessToken }: { accessToken: string }) {
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !(data?.orders || []).length ? (
         <p className="empty-copy">No orders yet.</p>
       ) : (
@@ -981,7 +982,7 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {!data ? (
-        <p role="status">Loading…</p>
+        <FayfortLoader label="Loading…" />
       ) : !data.configured ? (
         <div className="empty-copy">
           Stripe isn't connected. Add <code>STRIPE_SECRET_KEY</code> to the API server's settings and restart it; setup

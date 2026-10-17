@@ -41,7 +41,8 @@ p, h1, h2, h3, blockquote { margin-top: 0; }
 .brand { align-items: center; display: inline-flex; gap: 11px; }
 .brand-mark { align-items: center; background: var(--pink); color: var(--paper); display: flex; font-family: var(--serif); font-size: 22px; font-style: italic; height: 36px; justify-content: center; width: 36px; }
 .brand-logo { display: block; flex: 0 0 auto; height: 40px; }
-.brand-logo img { display: block; height: 100%; width: auto; }
+.brand-logo img, .brand-logo svg { display: block; height: 100%; width: auto; }
+.brand-logo { aspect-ratio: 995 / 1043; }
 .footer-brand .brand-logo { background: var(--paper); border-radius: 8px; height: 48px; padding: 6px; }
 .footer-brand small { color: #a3a3a3; }
 .brand > span:last-child { display: flex; flex-direction: column; }

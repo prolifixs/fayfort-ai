@@ -10,6 +10,8 @@ const SCREENS = [
   { name: "signin", path: "/member/account", heading: "Sign in" },
   { name: "signup", path: "/member/signup", heading: "Create your account" },
   { name: "forgot", path: "/auth/forgot?audience=member", heading: "Reset your password" },
+  // A reset email link: the one-time code is used only when the person clicks Continue.
+  { name: "reset-link", path: "/auth/callback?type=recovery&token_hash=e2e-code", heading: "Reset your password" },
 ];
 
 for (const size of SIZES) {

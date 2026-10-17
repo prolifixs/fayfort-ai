@@ -1,6 +1,7 @@
 import { apiRequest } from "../../lib/api";
 import { useCallback, useEffect, useState } from "react";
 import type { OperationalRecord } from "./types";
+import { FayfortLoader } from "../brand/FayfortLogo";
 
 export const operationalRoutes: Record<string, { path: string; collection?: string }> = {
   "Directory & Tools": { path: "directory/tools", collection: "tools" },
@@ -71,7 +72,7 @@ export function OperationalModulePage({
         </p>
       )}
       {loading ? (
-        <p role="status">Loading {module.toLowerCase()}…</p>
+        <FayfortLoader label={`Loading ${module.toLowerCase()}…`} />
       ) : (
         <>
           {module === "Settings" && settingsBusiness && (
