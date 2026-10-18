@@ -55,7 +55,8 @@ def _catalog_matches(text: str) -> list[dict[str, Any]]:
     # Search a bounded safe projection locally so name, description, and
     # category can all contribute without interpolating user text into filters.
     rows = (supabase.table("directory_products")
-        .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
+        .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source,source,"
+            "price_min,price_max,currency,min_order,lead_time_min_days,lead_time_max_days")
         .eq("active", True).order("name").limit(500).execute().data or [])
     scored = []
     for row in rows:
@@ -86,17 +87,41 @@ def _referenced_product(product_id: uuid.UUID | None) -> dict[str, Any] | None:
     if not product_id:
         return None
     rows = (supabase.table("directory_products")
-        .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
+        .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source,source,"
+            "price_min,price_max,currency,min_order,lead_time_min_days,lead_time_max_days")
         .eq("id", str(product_id)).eq("active", True).limit(1).execute().data or [])
     if not rows:
         return None
     return _with_commerce_cards(rows)[0]
 
 
+def _sourcing_facts(product: dict[str, Any]) -> list[str]:
+    """Sourcing items carry a price guide, a minimum order and a lead time (docs/CATALOG_MERCHANDISING_PLAN.md §3).
+    The guide is an estimate: the member gets a real quote once FayFort sources it."""
+    if product.get("source") == "shopify":
+        return []
+    parts = []
+    low, high = product.get("price_min"), product.get("price_max")
+    if low is not None:
+        currency = product.get("currency") or "USD"
+        span = f"{low}" if high in (None, low) else f"{low} to {high}"
+        parts.append(f"Price guide (estimate, the real quote comes after sourcing): {span} {currency}")
+    if product.get("min_order"):
+        parts.append(f"Minimum order: {product['min_order']} units")
+    shortest, longest = product.get("lead_time_min_days"), product.get("lead_time_max_days")
+    if shortest is not None or longest is not None:
+        span = f"{shortest}" if longest in (None, shortest) else f"{shortest or 0} to {longest}"
+        parts.append(f"Lead time: {span} days to source")
+    return parts
+
+
 def _product_facts(product: dict[str, Any]) -> str:
     price = product.get("sale_price") or product.get("price")
     parts = [f"Name: {product.get('name')}", f"Category: {product.get('category_ref') or 'unlisted'}"]
-    if price is not None:
+    sourcing = _sourcing_facts(product)
+    if sourcing:
+        parts.extend(sourcing)
+    elif price is not None:
         parts.append(f"Price: {price} {product.get('currency') or ''}".strip())
     if product.get("in_stock") is not None:
         parts.append("In stock" if product.get("in_stock") else "Out of stock")
@@ -365,7 +390,8 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             products = []
             if product_ids:
                 products = (supabase.table("directory_products")
-                    .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
+                    .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source,source,"
+            "price_min,price_max,currency,min_order,lead_time_min_days,lead_time_max_days")
                     .eq("active", True).in_("id", product_ids).execute().data or [])
                 products = _with_commerce_cards(products)
             return {"messages": rows, "products": products}
@@ -427,7 +453,8 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                              + list(find_result.get("alternatives") or [])]
                 by_id = {str(item["id"]): item for item in matches}
                 extra = [] if not found_ids else (supabase.table("directory_products")
-                    .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source")
+                    .select("id,name,category_ref,description,availability_status,media_url,media_type,media_source,source,"
+            "price_min,price_max,currency,min_order,lead_time_min_days,lead_time_max_days")
                     .eq("active", True).in_("id", found_ids).execute().data or [])
                 for item in extra:
                     by_id.setdefault(str(item["id"]), item)
@@ -435,7 +462,9 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                 matches = (ordered + [m for m in matches if str(m["id"]) not in found_ids])[:5]
             catalog_facts = "\n".join(
                 f"- Product {item['id']}: {item['name']}; category {item.get('category_ref') or 'unlisted'}; "
-                f"catalog status {item.get('availability_status') or 'unknown'}; details {item.get('description') or 'not provided'}"
+                f"catalog status {item.get('availability_status') or 'unknown'}; "
+                + "".join(f"{fact}; " for fact in _sourcing_facts(item))
+                + f"details {item.get('description') or 'not provided'}"
                 for item in matches)
             business_facts, business_guide = _fayfort_knowledge()
             system = ("You are the FayFort team's assistant in the member dashboard. Help members find products and answer "

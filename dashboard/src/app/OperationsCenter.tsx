@@ -37,8 +37,11 @@ import {
 import { GUIDES, guideKeyFor, playbookSteps } from "./operations/playbooks";
 import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
 import { FayfortLoader } from "./brand/FayfortLogo";
+import { ProductsWorkspace } from "./operations/StoreTeam";
+import { SchedulePanel } from "./operations/SchedulePanel";
 
-type View = "queue" | "archive" | "guide" | "team" | "reports";
+type View = "queue" | "products" | "schedule" | "archive" | "guide" | "team" | "reports";
+const VIEWS: View[] = ["queue", "products", "schedule", "archive", "guide", "team", "reports"];
 
 const SOURCE_LABEL: Record<string, string> = {
   shopify_order: "From a shop order",
@@ -50,12 +53,21 @@ const SOURCE_LABEL: Record<string, string> = {
   invoice: "From an invoice that didn't send",
   invoice_void: "From a cancelled request's invoice",
   paid_after_cancel: "From a payment after a cancellation",
+  store_listing: "From the Store team's Products workspace",
+  unmapped_product: "From a Shopify product with no category",
+  retire_product: "From a listing nobody has wanted lately",
+  merch_section: "From a store section on Browse",
+  campaign_giveaway: "From a scheduled giveaway",
+  campaign_sale: "From a scheduled flash sale",
 };
 
 export function OperationsCenterPage() {
   const ops = useOperationsCenter();
   const [staffTheme, setStaffTheme] = useStaffTheme();
-  const [view, setView] = useState<View>("queue");
+  const [view, setView] = useState<View>(() => {
+    const wanted = new URLSearchParams(window.location.search).get("view") as View | null;
+    return wanted && VIEWS.includes(wanted) ? wanted : "queue";
+  });
   const [help, setHelp] = useState<string | null>(null);
   const detailRef = useRef<HTMLElement>(null);
   const [firstWeek, setFirstWeek] = useFirstWeek(ops.canManage);
@@ -130,8 +142,28 @@ export function OperationsCenterPage() {
       }
     }
   }
+  const storeTeam = canManage || departmentsForUser.includes("store_team");
+  function openWorkItem(id: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("workItem", id);
+    url.searchParams.delete("view");
+    window.history.replaceState(null, "", url.toString());
+    openView("queue");
+    const found = ops.items.find((item) => item.id === id);
+    if (found) ops.setSelected(found);
+    else if (token) void refresh(token);
+  }
+  function openOperationsHref(href: string) {
+    const url = new URL(href, window.location.origin);
+    window.history.replaceState(null, "", url.pathname + url.search);
+    const next = url.searchParams.get("view") as View | null;
+    if (next && VIEWS.includes(next)) openView(next);
+  }
+  const params = new URLSearchParams(window.location.search);
   const tabs: [View, string][] = [
     ["queue", "Queue"],
+    ...(storeTeam ? ([["products", "Products"]] as [View, string][]) : []),
+    ["schedule", "Schedule"],
     ["archive", "Archive"],
     ["guide", "Guide"],
     ...(canManage
@@ -227,6 +259,25 @@ export function OperationsCenterPage() {
             </section>
           )}
           {view === "guide" && <GuideTab firstWeek={firstWeek} setFirstWeek={setFirstWeek} />}
+          {view === "products" && storeTeam && (
+            <ProductsWorkspace
+              key={params.get("listing") || params.get("tab") || "products"}
+              token={token}
+              canManage={canManage}
+              initialTab={(["store", "sourcing", "listings", "sections"].includes(params.get("tab") || "") ? params.get("tab") : params.get("listing") ? "listings" : "store") as "store"}
+              initialListing={params.get("listing")}
+              onOpenWorkItem={openWorkItem}
+            />
+          )}
+          {view === "schedule" && (
+            <SchedulePanel
+              token={token}
+              canManage={canManage}
+              myDepartments={departmentsForUser}
+              onOpenWorkItem={openWorkItem}
+              onOpenProducts={openOperationsHref}
+            />
+          )}
           {(view === "queue" || view === "archive") && (
             <>
               {view === "queue" ? <QueueFilters ops={ops} /> : <ArchiveControls ops={ops} />}

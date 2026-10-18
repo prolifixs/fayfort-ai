@@ -76,7 +76,8 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path === `${b}/handoffs`) return { handoffs, total: 2, has_more: false };
   if (path === `${b}/handoffs/agents`) return { agents: [{ user_id: "staff-1", status: "active", role: "agent", handoff_availability: "available", handoff_max_active: 3 }, { user_id: "staff-2", status: "active", role: "agent", handoff_availability: "away" }] };
   if (path === "/operations/pending-count") return { pending: 14, overdue: 3 };
-  if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"], can_manage: true };
+  if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
+  if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };
   if (path === "/operations/work-items") return { work_items: workItems };
   if (path === "/operations/work-items/w4/source-context") return { source_type: "shopify_order", flow: { kind: "shopify_order", metadata: workItems[2].metadata, member_name: "Amaka Obi", order: { order_name: "#1042", total: "184.00", currency: "USD", financial_status: "paid", fulfillment_status: null, line_items: [{ title: "Body wave wig 22 inch", quantity: 1, variant_title: "Natural black" }, { title: "Edge control", quantity: 2 }] } } };
@@ -112,4 +113,59 @@ export async function signedInStaff(page: Page) {
     const url = new URL(route.request().url());
     return route.fulfill({ json: fixture(url.pathname, url.searchParams) });
   });
+}
+
+// ---- Store team (docs/CATALOG_MERCHANDISING_PLAN.md) ------------------------------------------
+const photo = (n: number) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="hsl(${n * 47},55%,70%)"/></svg>`)}`;
+const storeCategories = [
+  { source_ref: "HAIR-WIG", category: "Lace front wigs", group_name: "Hair", product_type: "Wig" },
+  { source_ref: "FAB-ANK", category: "Ankara", group_name: "Fabrics", product_type: "Fabric" },
+];
+const storeProducts = [
+  { id: "sp1", name: "Body wave lace front wig 22 inch", source: "shopify", category_ref: "HAIR-WIG", price_min: 120, currency: "USD", in_stock: true, state: "live", media_url: photo(1), media_type: "image", shopify_admin_url: "https://admin.shopify.com/store/x/products/1" },
+  { id: "sp2", name: "Kinky curly closure wig", source: "shopify", category_ref: "HAIR-WIG", price_min: 140, currency: "USD", in_stock: false, state: "sold_out", media_url: photo(2), media_type: "image" },
+  { id: "sp3", name: "Silk press kit", source: "shopify", category_ref: null, price_min: 35, currency: "USD", in_stock: true, state: "draft", media_url: photo(3), media_type: "image" },
+];
+const sourcingProducts = [
+  { id: "so1", name: "Ankara print fabric, 6 yards", source: "fayfort", category_ref: "FAB-ANK", price_min: 12, price_max: 18, min_order: 50, lead_time_min_days: 10, lead_time_max_days: 20, currency: "USD", state: "live", media_url: photo(4), media_type: "image" },
+];
+const storeListing = {
+  id: "l1", kind: "store_product", action: "create", status: "changes_requested", product_id: null, shopify_product_id: "gid://shopify/Product/9", trend_item_id: null,
+  title: "Straight bob wig with bangs", description: "Soft straight bob with full bangs.\n\n180% density, glueless cap.", category_ref: "HAIR-WIG",
+  option_name: "Length", option_values: ["10 inch", "12 inch"], price: 80, compare_at_price: 110, cost: 38, currency: "USD", price_guide_min: null, price_guide_max: null,
+  min_order: null, lead_time_min_days: null, lead_time_max_days: null, availability_status: "sourcing", media: [1, 2, 3].map((n) => ({ media_type: "image", url: photo(n + 4), source: "upload" })),
+  planned_live_at: iso(-60 * 24 * 2), review_note: "Use a brighter first photo, please.", error: null, submitted_at: iso(60), published_at: null, updated_at: iso(30),
+  missing: [], steps: { details: true, media: true, price: true },
+};
+const sections = [
+  { id: "sec1", title: "Dollar deals", hook: "From $18", style: "deal", accent: "pink", category_ref: null, starts_at: iso(60 * 24), ends_at: iso(-60 * 30), priority: 10, min_items: 3, status: "published", state: "live", live_count: 3,
+    items: [1, 2, 3].map((n) => ({ id: `i${n}`, name: `Item ${n}`, media_url: photo(n), media_type: "image", live: true })) },
+  { id: "sec2", title: "Wig week", hook: "Up to 20% off", style: "trend", accent: "navy", category_ref: null, starts_at: iso(60 * 24), ends_at: null, priority: 20, min_items: 3, status: "published", state: "hidden", live_count: 2,
+    items: [4, 5, 6].map((n) => ({ id: `i${n}`, name: `Wig ${n}`, media_url: photo(n), media_type: "image", live: n !== 6 })) },
+];
+function scheduleEntries() {
+  const day = (offsetDays: number, hour: number) => { const d = new Date(); d.setDate(d.getDate() + offsetDays); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
+  return [
+    { id: "deadline:w4", type: "deadline", title: "Pack and ship #1042", at: day(0, 15), status: "scheduled", href: "/operations?workItem=w4", detail: "", work_item_id: "w4", department: "fulfillment", worker_id: null },
+    { id: "deadline:w9", type: "deadline", title: "List a store product: Straight bob wig", at: day(-1, 11), status: "overdue", href: "/operations?workItem=w9", detail: "", work_item_id: "w9", department: "store_team", worker_id: null },
+    { id: "giveaway:g1:start", type: "giveaway", title: "Giveaway starts: Wig week", at: day(1, 10), status: "scheduled", href: "/?page=shop&tab=giveaways", detail: "", work_item_id: null, department: null, worker_id: null },
+    { id: "giveaway:g1:draw", type: "giveaway", title: "Draw winners: Wig week", at: day(8, 10), status: "scheduled", href: "/?page=shop&tab=giveaways", detail: "", work_item_id: null, department: null, worker_id: null },
+    { id: "sale:s1:start", type: "sale", title: "Flash sale starts: Weekend drop", at: day(2, 9), status: "scheduled", href: "/?page=shop&tab=sales", detail: "", work_item_id: null, department: null, worker_id: null },
+    { id: "section:sec1:refresh", type: "section", title: "Refresh due: Dollar deals", at: day(3, 9), status: "scheduled", href: "/operations?view=products&tab=sections&section=sec1", detail: "", work_item_id: null, department: null, worker_id: null },
+    { id: "launch:l1", type: "launch", title: "Launch: Straight bob wig", at: day(2, 12), status: "scheduled", href: "/operations?view=products&listing=l1", detail: "", work_item_id: null, department: null, worker_id: null },
+    { id: "recurring:r1", type: "recurring", title: "Recurring order comes due", at: day(4, 8), status: "scheduled", href: "/operations?view=queue", detail: "monthly", work_item_id: null, department: "sourcing", worker_id: null },
+  ];
+}
+function storeFixture(path: string, search: URLSearchParams): unknown {
+  if (path === "/operations/store/categories") return { categories: storeCategories };
+  if (path === "/operations/store/products") {
+    const tab = search.get("tab");
+    if (tab === "listings") return { listings: [storeListing], can_publish: true };
+    return { products: tab === "sourcing" ? sourcingProducts : storeProducts, can_publish: true, shopify_connected: true };
+  }
+  if (path === "/operations/store/listings/l1") return { listing: storeListing, work_item: null, can_edit: true, can_publish: true };
+  if (path === "/operations/store/sections") return { sections };
+  if (path === "/operations/store/section-candidates") return { products: [] };
+  if (path === "/operations/schedule") return { entries: scheduleEntries(), can_plan: true, workers: [{ user_id: "staff-2", label: "ada@fayfort.com" }] };
+  return {};
 }

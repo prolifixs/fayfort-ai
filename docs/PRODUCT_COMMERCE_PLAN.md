@@ -201,6 +201,10 @@ The member front page is deliberately modelled on ChatGPT: a chat history sideba
 `member/Shop.test.tsx`); production build passes. The migration was verified on PostgreSQL 16 locally, then applied to
 production (17 tables, RLS on all, migration recorded).
 
+**2026-10-18:** catalog work moved into the Operations Center as the Store team (docs/CATALOG_MERCHANDISING_PLAN.md):
+listings with administrator review, AliExpress-style store sections on Browse, badges, sourcing price guides, the Schedule,
+and the campaign lifecycle for giveaways and flash sales. The Directory & Tools product form now links there.
+
 ### Issues log (address at the end of the phase)
 
 | ID | Issue | Plan |

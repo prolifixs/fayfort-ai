@@ -20,6 +20,15 @@ Status: approved 2026-10-16 and built. Decisions: archive shows 30 days by defau
 - Members can cancel a request until it is paid (submitted, under review, sourcing, needs input, options sent). Unpaid invoices are cancelled and their Shopify draft orders deleted. If Shopify refuses, staff get a "Delete a cancelled invoice" task. If an old link is paid anyway, staff get an urgent "Refund" task.
 - Migration: supabase/migrations/20261017110000_deadlines_eta_and_cancel.sql (existing live tasks with no deadline get created time + 24 hours, or the request's ETA).
 
+## Store team, Products, Schedule (added 2026-10-18, docs/CATALOG_MERCHANDISING_PLAN.md)
+
+- A sixth department, **Store team**, for catalog work: listing store products and sourcing items, choosing categories,
+  retiring listings, refreshing store sections and preparing giveaways and flash sales.
+- New tabs: **Products** (Store team and administrators) and **Schedule** (everyone).
+- The Guide has a guide per Store team work type, a Tools section (Products workspace, store sections, Schedule) and
+  new glossary words.
+- Migrations: `20261019100000_store_team.sql`, `20261019110000_store_sections.sql`, `20261019120000_campaigns.sql`.
+
 ## Known gaps (not code)
 
 - A member who already paid a deposit cannot cancel from the dashboard; they are told to message us in chat.

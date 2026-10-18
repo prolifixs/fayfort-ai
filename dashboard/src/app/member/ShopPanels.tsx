@@ -1,9 +1,9 @@
 import { FormEvent, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../ui/useDismiss";
 import { apiRequest } from "../../lib/api";
-import type { Cart, ProductDetail, Rail, ShopCard, TrendCard, Giveaway } from "./commerceApi";
+import type { Cart, ProductDetail, ShopCard, ShopHome, StoreSectionTile, TrendCard, Giveaway } from "./commerceApi";
 import { money, shopSessionId, trackIntent } from "./commerceApi";
-import { Countdown, HotRails, PriceLine, ProductTile, TrendTile } from "./ShopComponents";
+import { CategoryBar, Countdown, HotRails, PriceLine, ProductTile, SectionTiles, TrendTile } from "./ShopComponents";
 import { MemberRequestsPanel, type RequestSummary } from "./MemberRequestsPanel";
 import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
 import { AdSlot } from "./ads";
@@ -141,7 +141,7 @@ export function ProductPanel({
               {detail.product.sale.title} · <Countdown endsAt={detail.product.sale.ends_at} />
             </p>
           ) : null}
-          {detail.product.buyable || detail.variants.length ? (
+          {(detail.product.buyable || detail.variants.length) && !detail.product.held_for_giveaway ? (
             <div className="shop-buy">
               {detail.variants.length > 1 && (
                 <label>
@@ -182,7 +182,42 @@ export function ProductPanel({
             </div>
           ) : (
             <>
-              <p className="shop-sale-note">This listing is sourced on request. Ask about it in the chat or use Source it.</p>
+              <p className="shop-sale-note">
+                {detail.product.held_for_giveaway
+                  ? "This one is a giveaway prize right now, so it's held back. Ask in the chat if you'd like one."
+                  : "This listing is sourced on request. Ask about it in the chat or use Source it."}
+              </p>
+              {detail.product.source !== "shopify" && (detail.product.min_order || detail.product.lead_time) ? (
+                <dl className="shop-sourcing-facts">
+                  {detail.product.price_guide && detail.product.price ? (
+                    <div>
+                      <dt>Price guide</dt>
+                      <dd>
+                        From {money(detail.product.price, detail.product.currency)}
+                        {detail.product.price_max && detail.product.price_max > detail.product.price ? ` to ${money(detail.product.price_max, detail.product.currency)}` : ""}
+                        <small> · your quote comes after we source it</small>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {detail.product.min_order ? (
+                    <div>
+                      <dt>Minimum order</dt>
+                      <dd>{detail.product.min_order}</dd>
+                    </div>
+                  ) : null}
+                  {detail.product.lead_time ? (
+                    <div>
+                      <dt>Usually takes</dt>
+                      <dd>
+                        {detail.product.lead_time.max && detail.product.lead_time.max !== detail.product.lead_time.min
+                          ? `${detail.product.lead_time.min ?? 0}–${detail.product.lead_time.max}`
+                          : detail.product.lead_time.min ?? detail.product.lead_time.max}{" "}
+                        days to source
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
               {onAsk && (
                 <button type="button" className="secondary-button product-ask-button" onClick={onAsk}>
                   Ask in chat
@@ -703,6 +738,8 @@ export function OrdersPanel({
 type BrowseResponse = {
   products: ShopCard[];
   total: number;
+  has_more?: boolean;
+  offset?: number;
   groups: { name: string; count: number }[];
   categories: { source_ref: string; category: string; group_name?: string | null; product_type: string }[];
 };
@@ -721,8 +758,11 @@ export function BrowsePanel({
   onWant: (trend: TrendCard) => void;
   onEnter: (giveaway: Giveaway) => void;
   busyId?: string;
-  home: { rails: Rail[]; giveaways: Giveaway[] } | null;
+  home: ShopHome | null;
 }) {
+  const [openSection, setOpenSection] = useState<StoreSectionTile | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
   const [category, setCategory] = useState("");
@@ -753,6 +793,35 @@ export function BrowsePanel({
   useEffect(() => {
     void load("", "", "", "for_you", false);
   }, [load]);
+  // "More to explore": the grid keeps loading as the member scrolls, inside the same filters.
+  const loadMore = useCallback(async () => {
+    if (!result?.has_more || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ sort, offset: String(result.products.length) });
+      if (query.trim()) params.set("q", query.trim());
+      if (group) params.set("group", group);
+      if (category) params.set("category_ref", category);
+      if (inStock) params.set("in_stock", "true");
+      const next = await apiRequest<BrowseResponse>(`/members/shop/products?${params}`, accessToken);
+      setResult((current) =>
+        current ? { ...current, products: [...current.products, ...next.products.filter((p) => !current.products.some((c) => c.id === p.id))], has_more: next.has_more } : next,
+      );
+    } catch {
+      /* the member can scroll again to retry */
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [result, loadingMore, sort, query, group, category, inStock, accessToken]);
+  useEffect(() => {
+    const target = moreRef.current;
+    if (!target || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "400px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loadMore]);
   function search(event: FormEvent) {
     event.preventDefault();
     if (query.trim()) trackIntent(accessToken, [{ event_type: "search", query: query.trim().slice(0, 200) }]);
@@ -776,9 +845,31 @@ export function BrowsePanel({
         <h2>Browse</h2>
         <p>What's moving right now, then everything by category.</p>
       </header>
+      <CategoryBar items={home?.category_bar || []} group={group} category={category} onGroup={chooseGroup} onCategory={chooseCategory} />
       {!filtering && home ? (
-        <HotRails rails={home.rails} giveaways={home.giveaways} onOpen={onOpen} onWant={onWant} onEnter={onEnter} busyId={busyId} accessToken={accessToken} />
+        <>
+          <SectionTiles
+            sections={home.sections || []}
+            giveaways={home.giveaways}
+            onOpenSection={setOpenSection}
+            onOpenProduct={onOpen}
+            onEnter={onEnter}
+            busyId={busyId}
+          />
+          <HotRails
+            rails={home.rails}
+            giveaways={home.giveaways.filter((giveaway) => giveaway.status !== "open")}
+            onOpen={onOpen}
+            onWant={onWant}
+            onEnter={onEnter}
+            busyId={busyId}
+            accessToken={accessToken}
+          />
+        </>
       ) : null}
+      {openSection && (
+        <SectionSheet section={openSection} accessToken={accessToken} onOpen={(card) => { setOpenSection(null); onOpen(card); }} onClose={() => setOpenSection(null)} />
+      )}
       {!filtering && <AdSlot placement="browse_top" />}
       <form className="member-product-filters member-workspace-filters shop-filters" onSubmit={search}>
         <label>
@@ -859,16 +950,83 @@ export function BrowsePanel({
       ) : result && !result.products.length ? (
         <p className="empty-copy">Nothing matches yet. Ask in the chat or paste a link and FayFort will source it.</p>
       ) : (
-        <section className="shop-grid" aria-label="Available products">
-          {(result?.products || []).map((card, index) => (
-            <Fragment key={card.id}>
-              <ProductTile card={card} onOpen={onOpen} accessToken={accessToken} />
-              {FEED_AD_AFTER.has(index) && index < (result?.products.length || 0) - 1 && <AdSlot placement="browse_feed" />}
-            </Fragment>
-          ))}
-        </section>
+        <>
+          {!filtering && <h3 className="shop-more-title">More to explore</h3>}
+          <section className="shop-grid" aria-label="Available products">
+            {(result?.products || []).map((card, index) => (
+              <Fragment key={card.id}>
+                <ProductTile card={card} onOpen={onOpen} accessToken={accessToken} />
+                {FEED_AD_AFTER.has(index) && index < (result?.products.length || 0) - 1 && <AdSlot placement="browse_feed" />}
+              </Fragment>
+            ))}
+          </section>
+          {result?.has_more && (
+            <div ref={moreRef} className="shop-more">
+              <button type="button" className="secondary-button" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore ? "Loading…" : "Show more"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+/** Every product in one store section, opened from its tile. */
+function SectionSheet({
+  section,
+  accessToken,
+  onOpen,
+  onClose,
+}: {
+  section: StoreSectionTile;
+  accessToken: string;
+  onOpen: (card: ShopCard) => void;
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<ShopCard[]>(section.items);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    apiRequest<{ section: StoreSectionTile }>(`/members/shop/sections/${encodeURIComponent(section.id)}`, accessToken)
+      .then((data) => alive && setItems(data.section.items))
+      .catch((reason) => alive && setError(reason instanceof Error ? reason.message : "This section could not be loaded."));
+    return () => {
+      alive = false;
+    };
+  }, [section.id, accessToken]);
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+  return (
+    <div className="shop-section-sheet-scrim" onClick={onClose}>
+      <section
+        className={`shop-section-sheet accent-${section.accent}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={section.title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <h2>{section.title}</h2>
+            {section.hook && <span className="shop-section-hook">{section.hook}</span>}
+          </div>
+          <button type="button" className="shop-section-close" aria-label="Close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="shop-grid">
+          {items.map((card) => (
+            <ProductTile key={card.id} card={card} onOpen={onOpen} accessToken={accessToken} />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 

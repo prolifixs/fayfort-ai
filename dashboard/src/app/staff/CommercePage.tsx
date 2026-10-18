@@ -718,7 +718,7 @@ interface GiveawayRow {
 
 function GiveawaysPanel({ accessToken }: { accessToken: string }) {
   const { data, error, load, setError } = useLoad<{ giveaways: GiveawayRow[] }>("/platform/commerce/giveaways", accessToken);
-  const [form, setForm] = useState({ title: "", prize: "", product: "", starts: "", ends: "", winners: "1", description: "" });
+  const [form, setForm] = useState({ title: "", prize: "", product: "", starts: "", ends: "", winners: "1", description: "", draft: false });
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   async function act(path: string, init: RequestInit, message: string, key: string) {
@@ -749,9 +749,12 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
           starts_at: toIso(form.starts),
           ends_at: toIso(form.ends),
           winner_count: Number(form.winners) || 1,
+          status: form.draft ? "draft" : "open",
         }),
       },
-      "Giveaway saved as a draft. Open it when you're ready.",
+      form.draft
+        ? "Giveaway saved as a draft. Open it when you're ready."
+        : "Giveaway scheduled. It opens and closes by itself, and the Store team got a task to prepare it.",
       "new",
     );
   }
@@ -770,7 +773,8 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
         <label>Starts<input required type="datetime-local" value={form.starts} onChange={(event) => setForm({ ...form, starts: event.target.value })} /></label>
         <label>Ends<input required type="datetime-local" value={form.ends} onChange={(event) => setForm({ ...form, ends: event.target.value })} /></label>
         <label>Winners<input type="number" min={1} max={50} value={form.winners} onChange={(event) => setForm({ ...form, winners: event.target.value })} /></label>
-        <button className="primary-button" disabled={busy === "new"}>Create giveaway</button>
+        <label className="inline-check"><input type="checkbox" checked={form.draft} onChange={(event) => setForm({ ...form, draft: event.target.checked })} /> Keep as a draft</label>
+        <button className="primary-button" disabled={busy === "new"}>{form.draft ? "Save draft" : "Schedule giveaway"}</button>
       </form>
       {!data ? (
         <FayfortLoader label="Loading…" />
@@ -781,7 +785,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
           {(data?.giveaways || []).map((giveaway) => (
             <div className="record" key={giveaway.id}>
               <div>
-                <strong>{giveaway.title} · {giveaway.status}</strong>
+                <strong>{giveaway.title} · {giveawayState(giveaway)}</strong>
                 <small>
                   {giveaway.prize_text} · {giveaway.entries} entries · {giveaway.winner_count} winner(s) · ends {new Date(giveaway.ends_at).toLocaleString()}
                 </small>
@@ -826,6 +830,14 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
 
 interface CategoryOption { source_ref: string; category: string; group_name?: string | null; product_type: string }
 interface MappingProduct { id: string; name: string; product_type: string | null; price_min: number | null; currency: string | null; shopify_admin_url: string | null }
+
+/** Draft, Scheduled (open, not started), Live, Ended (waiting for the draw), Drawn, Cancelled. */
+function giveawayState(giveaway: { status: string; starts_at?: string; ends_at: string }) {
+  if (giveaway.status !== "open") return giveaway.status === "drawn" ? "drawn" : giveaway.status;
+  const now = Date.now();
+  if (giveaway.starts_at && new Date(giveaway.starts_at).getTime() > now) return "scheduled";
+  return new Date(giveaway.ends_at).getTime() > now ? "live" : "ended · draw winners";
+}
 
 function MappingPanel({ accessToken }: { accessToken: string }) {
   const { data, error, load, setError } = useLoad<{ products: MappingProduct[]; categories: CategoryOption[] }>(

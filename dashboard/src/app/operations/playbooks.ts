@@ -358,6 +358,138 @@ function invoiceFailedSteps(input: PlaybookInput): Step[] {
   ];
 }
 
+// ---------------------------------------------------------------------------------------------
+// Store team (docs/CATALOG_MERCHANDISING_PLAN.md)
+// ---------------------------------------------------------------------------------------------
+function listingSteps(input: PlaybookInput): Step[] {
+  const listing = input.flow?.listing;
+  const store = (listing?.kind || input.item.metadata?.listing_kind) === "store_product";
+  const status = listing?.status || "draft";
+  const sent = ["in_review", "published"].includes(status);
+  const live = status === "published" || FINISHED.includes(input.item.status);
+  return [
+    claimStep(input),
+    {
+      id: "details",
+      title: "Details",
+      how: store
+        ? "Write a clear title and description and choose the FayFort category. If it comes in sizes or colours, add one option (for example Size) with its values."
+        : "Write a clear title and description and choose the FayFort category. Say what it's made of and what it's for: the AI uses this text to answer members.",
+      done: Boolean(listing?.steps?.details) || sent || live,
+      target: "ops-listing-details",
+    },
+    {
+      id: "media",
+      title: "Photos and video",
+      how: "Upload up to 10 photos or short videos, best first. Bright, square photos on a plain background sell best. The first one is the card members see.",
+      done: Boolean(listing?.steps?.media) || sent || live,
+      target: "ops-listing-media",
+    },
+    {
+      id: "price",
+      title: store ? "Price" : "Price guide",
+      how: store
+        ? "Enter the price members pay. Add a crossed-out price only if it was really sold for more. Cost is staff-only and shows the margin."
+        : "Enter the price guide (from–to) a member can expect, the minimum order and the lead time. It's an estimate: the member still gets a real quote.",
+      done: Boolean(listing?.steps?.price) || sent || live,
+      target: "ops-listing-price",
+    },
+    {
+      id: "send",
+      title: "Send for review",
+      how: store
+        ? "Press Send for review. FayFort creates the product in Shopify as a draft (customers can't see it) and an administrator checks it."
+        : "Press Send for review. An administrator checks the listing before members see it.",
+      done: sent || live,
+      target: "ops-listing-actions",
+    },
+    {
+      id: "review",
+      title: input.canManage ? "Review and publish" : "Administrator review",
+      how: input.canManage
+        ? "Check the preview: photos, title, price and category. Publish it, or send it back with a note saying exactly what to change."
+        : "An administrator checks the preview, then publishes it or sends it back with a note. If it comes back, the note is at the top.",
+      done: live,
+      waitingOn: status === "in_review" && !input.canManage ? "administrator" : undefined,
+      target: "ops-listing-actions",
+    },
+    finishStep(input, store ? "Closes when it's published. Stock is entered in Shopify by the administrator." : "Closes when it's published.", true),
+  ];
+}
+
+function mapSteps(input: PlaybookInput): Step[] {
+  const done = FINISHED.includes(input.item.status) || Boolean(input.flow?.product?.category_ref && !input.flow?.product?.category_needs_mapping);
+  return [
+    claimStep(input),
+    { id: "choose", title: "Choose the category", how: "Search the FayFort categories and pick the closest one. Members browse by these, and the AI uses them to suggest products.", done, target: "ops-flow" },
+    finishStep(input, "Closes as soon as the category is saved. It's also written back to Shopify as a hidden field.", true),
+  ];
+}
+
+function retireSteps(input: PlaybookInput): Step[] {
+  const meta = input.item.metadata || {};
+  const asked = Boolean(meta.retire_requested_by);
+  return [
+    claimStep(input),
+    { id: "look", title: "Check the listing", how: String(meta.reason || "Look at why it was flagged.") + " Check whether it's seasonal or coming back.", done: asked || FINISHED.includes(input.item.status), target: "ops-flow" },
+    {
+      id: "decide",
+      title: "Retire or keep",
+      how: meta.store_product
+        ? "Keep it with a reason (it won't be flagged again for 30 days), or retire it. Retiring a store product archives it in Shopify, so an administrator confirms."
+        : "Keep it with a reason (it won't be flagged again for 60 days), or retire it. A retired sourcing item disappears from Browse and can come back with an edit.",
+      done: FINISHED.includes(input.item.status),
+      waitingOn: asked && !input.canManage && input.item.status === "waiting" ? "administrator" : undefined,
+      target: "ops-flow",
+    },
+    finishStep(input, "Closes when it's kept or retired.", true),
+  ];
+}
+
+function sectionSteps(input: PlaybookInput): Step[] {
+  const done = FINISHED.includes(input.item.status);
+  return [
+    claimStep(input),
+    { id: "check", title: "Check the section", how: "See which products dropped out (sold out or retired) and when it ends.", done, target: "ops-flow" },
+    { id: "swap", title: "Swap products or dates", how: "Open the section, replace the missing products with live ones, and set new dates if it should run longer. Keep the hook true (for example 'From $5').", done, target: "ops-flow" },
+    finishStep(input, "Saving the section finishes this work.", true),
+  ];
+}
+
+function campaignSteps(input: PlaybookInput): Step[] {
+  const prep = input.flow?.prep;
+  const giveaway = (input.item.metadata?.campaign_kind || prep?.kind) === "giveaway";
+  return [
+    claimStep(input),
+    {
+      id: "prize",
+      title: giveaway ? "Prize ready" : "Products ready",
+      how: giveaway
+        ? "Check the prize is in stock (or arranged) for every winner. A store-product prize is held back from what members can buy until the giveaway wraps up."
+        : "Check every sale product is in stock and has good photos. A sold-out product in a sale disappoints people.",
+      done: Boolean(prep?.prize_ready_at) || FINISHED.includes(input.item.status),
+      target: "ops-flow",
+    },
+    {
+      id: "section",
+      title: giveaway ? "Giveaway on Browse" : "Flash sale section",
+      how: giveaway
+        ? "The giveaway shows on Browse by itself while it's live. Check its title and prize text read well, and add a matching store section if it helps."
+        : "The Flash sale section fills itself while the sale runs. Check it looks right, and refresh any section that clashes.",
+      done: Boolean(prep?.section_ready_at) || FINISHED.includes(input.item.status),
+      target: "ops-flow",
+    },
+    {
+      id: "announce",
+      title: "Announcement",
+      how: "Write the post or message announcing it (Instagram, TikTok, WhatsApp). Keep the dates and the prize or discount exact.",
+      done: Boolean(prep?.announcement) || FINISHED.includes(input.item.status),
+      target: "ops-flow",
+    },
+    finishStep(input, "Closes once all three are ready. Do it before the start date; the deadline is a day before.", true),
+  ];
+}
+
 export function playbookSteps(input: PlaybookInput): Step[] {
   const { item } = input;
   switch (item.work_type) {
@@ -388,6 +520,17 @@ export function playbookSteps(input: PlaybookInput): Step[] {
       return invoiceVoidSteps(input);
     case "refund_after_cancel":
       return refundSteps(input);
+    case "list_store_product":
+    case "list_sourcing_item":
+      return listingSteps(input);
+    case "map_product":
+      return mapSteps(input);
+    case "retire_listing":
+      return retireSteps(input);
+    case "refresh_section":
+      return sectionSteps(input);
+    case "prepare_campaign":
+      return campaignSteps(input);
     default:
       return [
         claimStep(input),
@@ -620,6 +763,141 @@ export const GUIDES: Record<string, Guide> = {
   },
 };
 
+Object.assign(GUIDES, {
+  list_store_product: {
+    title: "Listing a store product",
+    department: "store_team",
+    what: "Adding something FayFort holds in stock to the shop, or changing one that's already there.",
+    why: "Store products are what members can buy straight away, here and on TikTok and Instagram. A clear listing sells; a vague one doesn't.",
+    appears: "When you press New store product (or Edit on a product) in Products, or an administrator asks for one.",
+    steps: sample(listingSteps, { work_type: "list_store_product", department: "store_team", metadata: { listing_kind: "store_product" } }),
+    screen: [
+      { name: "Preview", meaning: "How the card and price will look to members. Check it before sending." },
+      { name: "Details", meaning: "Title, description, category and one option (Size, Colour) with its values." },
+      { name: "Photos and video", meaning: "Up to 10. Drag the best one first: it's the card's picture. Instagram links can't go to Shopify; upload the file." },
+      { name: "Price", meaning: "Price, an optional crossed-out price, and cost (staff only)." },
+      { name: "Send for review", meaning: "Creates the Shopify draft and hands it to an administrator. You can't edit while it's with them." },
+      ...COMMON_SCREEN,
+    ],
+    finishes: "When an administrator publishes it. They also enter the stock in Shopify.",
+    outside: "Shopify, only for the administrator: stock and sales channels.",
+  },
+  list_sourcing_item: {
+    title: "Listing a sourcing item",
+    department: "store_team",
+    what: "Adding something FayFort can find for members but doesn't keep in stock.",
+    why: "Members see it in Browse with Request this item, and the AI can answer questions about it. It turns 'can you get this?' into a request.",
+    appears: "When you press New sourcing item, or by itself when 3 or more members share the same trend link.",
+    steps: sample(listingSteps, { work_type: "list_sourcing_item", department: "store_team", metadata: { listing_kind: "sourcing_item" } }),
+    screen: [
+      { name: "Price guide", meaning: "From–to price a member can expect. Shown as 'From $12', never as a fixed price." },
+      { name: "Minimum order and lead time", meaning: "The smallest order the supplier accepts and how many days sourcing usually takes." },
+      { name: "Availability", meaning: "Sourced on request, Quick to source, or Not available now. None of them shows a Buy button." },
+      ...COMMON_SCREEN,
+    ],
+    finishes: "When an administrator publishes it. A trend it came from links to it, so people who shared it see it.",
+  },
+  map_product: {
+    title: "Choosing a category",
+    department: "store_team",
+    what: "A product came from Shopify without a FayFort category.",
+    why: "Without a category it's hard to find in Browse and the AI can't suggest it.",
+    appears: "When a Shopify product is added or changed without the FayFort category field.",
+    steps: sample(mapSteps, { work_type: "map_product", department: "store_team" }),
+    screen: [{ name: "Category search", meaning: "Type a word (wig, lace, ankara) to find the category." }, ...COMMON_SCREEN],
+    finishes: "As soon as the category is saved.",
+  },
+  retire_listing: {
+    title: "Retiring a listing",
+    department: "store_team",
+    what: "A listing nobody wants any more: no views or requests for 60 days, or sold out for 30 days.",
+    why: "Old listings make Browse feel stale and waste members' time.",
+    appears: "By itself when a listing meets one of those rules.",
+    steps: sample(retireSteps, { work_type: "retire_listing", department: "store_team" }),
+    screen: [{ name: "Retire or keep", meaning: "Keep needs a reason. Retire hides it; a store product is archived in Shopify after an administrator confirms." }, ...COMMON_SCREEN],
+    finishes: "When it's kept or retired.",
+  },
+  refresh_section: {
+    title: "Refreshing a store section",
+    department: "store_team",
+    what: "A store section on Browse is ending soon, or has lost products and is hidden.",
+    why: "Sections are the shop window. They should always be full and current.",
+    appears: "Two days before a section ends, or when it has fewer live products than its minimum.",
+    steps: sample(sectionSteps, { work_type: "refresh_section", department: "store_team" }),
+    screen: [{ name: "Section", meaning: "Its products (greyed out if they're not live), its dates and its hook." }, ...COMMON_SCREEN],
+    finishes: "When you save the section.",
+  },
+  prepare_campaign: {
+    title: "Preparing a giveaway or flash sale",
+    department: "store_team",
+    what: "A giveaway or flash sale is scheduled and has to be ready before it starts.",
+    why: "A campaign that starts with a missing prize or no announcement wastes the attention it gets.",
+    appears: "When an administrator schedules a giveaway or a flash sale. Due a day before it starts.",
+    steps: sample(campaignSteps, { work_type: "prepare_campaign", department: "store_team" }),
+    screen: [
+      { name: "Campaign", meaning: "Dates, prize or discount, and the products with their stock." },
+      { name: "Checklist", meaning: "Prize or products ready, Browse section ready, announcement written. All three finish the task." },
+      ...COMMON_SCREEN,
+    ],
+    finishes: "When all three are ticked.",
+  },
+} satisfies Record<string, Guide>);
+
+/** Guides for the Operations tools that aren't a work type. */
+export const TOOL_GUIDES: Record<string, Omit<Guide, "department"> & { department?: Department }> = {
+  products_workspace: {
+    title: "The Products workspace",
+    what: "Everything in the shop in one place: store products from Shopify, sourcing items, listings in progress and store sections.",
+    why: "The Store team keeps the catalog fresh here without leaving the Operations Center.",
+    appears: "Products tab, for the Store team and administrators.",
+    steps: [
+      { title: "Find a product", how: "Pick Store or Sourcing and search by name. The label shows its state: Live, Sold out, Draft in Shopify, Waiting for review, Retired." },
+      { title: "Change it", how: "Press Edit. It opens a listing with the current details; send it for review like a new one." },
+      { title: "Add something new", how: "New store product or New sourcing item. It opens a Store team work item claimed by you." },
+    ],
+    screen: [
+      { name: "Store", meaning: "Products from Shopify. 'Open in Shopify' is for administrators: stock and sales channels." },
+      { name: "Sourcing", meaning: "Items FayFort can find but doesn't stock." },
+      { name: "In progress", meaning: "Listings being prepared, waiting for review, or sent back." },
+      { name: "Sections", meaning: "The themed tiles on Browse." },
+    ],
+    finishes: "—",
+  },
+  store_sections: {
+    title: "Building a store section",
+    what: "A themed tile on Browse, like 'Dollar deals · 3 from $0.99', with 3 to 12 products and its own dates.",
+    why: "Members arriving from TikTok and Instagram scan the tiles first. Fresh, honest tiles make Browse feel like a shop.",
+    appears: "Products → Sections → New section.",
+    steps: [
+      { title: "Name it and write the hook", how: "A short title and a hook that's true for every product in it: 'From $5', 'Up to 40% off', 'New this week'. Use Suggest to work one out from the prices." },
+      { title: "Pick the products", how: "Choose 3 to 12 live products. Sold-out products drop out by themselves; if it falls under its minimum it hides and asks for a refresh." },
+      { title: "Set the dates", how: "When it goes live and, if it should, when it ends. Two days before the end you get a refresh task." },
+    ],
+    screen: [
+      { name: "Style", meaning: "Deal (prices and discounts), Trend (what's new or viral) or Category (one category)." },
+      { name: "Priority", meaning: "Lower numbers show first." },
+      { name: "Minimum", meaning: "How many live products it needs to show." },
+    ],
+    finishes: "—",
+  },
+  schedule: {
+    title: "Reading the Schedule",
+    what: "One calendar of what's coming: giveaways, flash sales, sections, product launches, your deadlines and recurring orders.",
+    why: "So nothing starts unprepared and nothing slips past its deadline.",
+    appears: "Schedule tab, for everyone. Workers see the shop calendar plus their own work and the open work in their departments.",
+    steps: [
+      { title: "Pick the view", how: "Week, Month, or the list on a phone. Today is one tap away." },
+      { title: "Filter", how: "Untick what you don't need. Administrators can also pick a person or a department." },
+      { title: "Open an entry", how: "Every entry opens the work item or page that owns it. You change things there, not in the calendar." },
+      { title: "Plan (administrators)", how: "Press + on a day to schedule a giveaway or a store section. A 'Prepare a campaign' task opens for the Store team." },
+    ],
+    screen: [
+      { name: "Colours", meaning: "Pink giveaways, gold sales, navy sections, green launches, grey recurring orders. Red means overdue." },
+    ],
+    finishes: "—",
+  },
+};
+
 export function guideKeyFor(item: Pick<WorkItem, "work_type" | "department">): string {
   if (item.work_type === "member_request") return item.department === "fulfillment" ? "fulfillment_request" : "sourcing_request";
   if (item.work_type === "business_conversation") return "human_handoff";
@@ -632,6 +910,7 @@ export const DEPARTMENT_GUIDES: Record<Department, string> = {
   fulfillment: "Everything paid that has to be packed and shipped: sourced requests and shop orders.",
   disputes: "Problems after purchase: damage, wrong items, delays, refunds.",
   member_support: "Photo reviews, giveaways, failed payments and invoices.",
+  store_team: "The shop itself: listing products, choosing categories, store sections, retiring old listings and preparing campaigns.",
 };
 
 export const GLOSSARY: { term: string; meaning: string }[] = [
@@ -651,4 +930,18 @@ export const GLOSSARY: { term: string; meaning: string }[] = [
   { term: "Handoff", meaning: "The AI passing a customer conversation to a person." },
   { term: "Milestone", meaning: "A stage on the member's request timeline (Under review, Shipped...). Members see every one." },
   { term: "Due", meaning: "When the work should be done by. Overdue work is flagged and notified." },
+  { term: "Listing", meaning: "A store product or sourcing item being prepared or edited by the Store team. It goes live only when an administrator publishes it." },
+  { term: "Draft (Shopify)", meaning: "A product that exists in Shopify but customers can't see. Store team listings become drafts when they're sent for review." },
+  { term: "Publish", meaning: "An administrator's approval that puts a listing live. Workers never publish." },
+  { term: "Sent back", meaning: "An administrator asked for changes. The note is at the top of the listing; fix it and send it again." },
+  { term: "Store product", meaning: "Something FayFort holds in stock with a fixed price. Members buy it straight away (Shopify checkout)." },
+  { term: "Sourcing item", meaning: "Something FayFort can find but doesn't stock. Members request it and get a quote. Its price is a guide, never a fixed price." },
+  { term: "Price guide", meaning: "The from–to price a member can expect for a sourcing item." },
+  { term: "Store section", meaning: "A themed tile on Browse (title, hook, 3 to 12 products, dates)." },
+  { term: "Hook", meaning: "The short line on a section tile, such as 'From $5' or 'Up to 40% off'. It must be true for the products in it." },
+  { term: "Retire", meaning: "Take a listing out of Browse. A store product is archived in Shopify after an administrator confirms." },
+  { term: "Campaign", meaning: "A giveaway or flash sale. The Store team prepares it before it starts." },
+  { term: "Prize hold", meaning: "Stock of a giveaway prize kept back from what members can buy until the giveaway wraps up. Winners can still check out." },
+  { term: "Wrap up", meaning: "A week after a giveaway's draw, once every prize is handled: its results are saved and the prize hold ends." },
+  { term: "Schedule", meaning: "The calendar tab: campaigns, sections, launches, deadlines and recurring orders in one view." },
 ];

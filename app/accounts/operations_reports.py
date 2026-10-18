@@ -12,7 +12,7 @@ MAX_ROWS = 20000
 TERMINAL_WORK = {"completed", "cancelled"}
 TERMINAL_REQUEST = {"delivered", "cancelled"}
 TERMINAL_DISPUTE = {"resolved", "closed"}
-DEPARTMENTS = ("conversation_intake", "sourcing", "fulfillment", "disputes", "member_support")
+DEPARTMENTS = ("conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team")
 
 
 def _all_rows(table: str, fields: str, order_by: str | tuple[str, ...] = "id") -> list[dict[str, Any]]:

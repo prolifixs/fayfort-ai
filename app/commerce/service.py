@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 PRODUCT_FIELDS = ("id,name,category_ref,description,availability_status,media_url,media_type,media_source,source,"
                   "shopify_product_id,shopify_handle,vendor,product_type,tags,price_min,price_max,compare_at_max,"
-                  "currency,in_stock,total_inventory,restocked_at,online_store_url,active,created_at")
+                  "currency,in_stock,total_inventory,restocked_at,online_store_url,active,created_at,min_order,"
+                  "lead_time_min_days,lead_time_max_days")
 TREND_FIELDS = ("id,canonical_url,platform,title,description,image_url,author_name,site_name,preview_status,"
                 "linked_product_id,status,pool_target,pool_price,pool_currency,pool_deadline,pool_note,share_count,"
                 "want_count,first_shared_at,last_shared_at")
@@ -112,8 +113,42 @@ def media_for(product_ids: list[str]) -> dict[str, list[dict]]:
     return grouped
 
 
+def prize_holds(member_id: str | None = None) -> dict[str, int]:
+    """Units held back for giveaway winners (docs/CATALOG_MERCHANDISING_PLAN.md §6). Cached briefly for lists; a
+    member's own product panel asks with their id so a winner can still check out with their code."""
+    from app.commerce import campaigns
+    if member_id:
+        return campaigns.held_units(member_id)
+    return _cached("prize_holds", 30, lambda: campaigns.held_units(None))
+
+
+def card_badges(product: dict, *, price: float | None, sale: dict | None, sale_price: float | None,
+                compare: float | None, buyable: bool, held: bool, now: datetime | None = None) -> list[dict]:
+    """Badges are worked out from the data, never typed in (docs/CATALOG_MERCHANDISING_PLAN.md §4)."""
+    now = now or now_utc()
+    badges: list[dict] = []
+    was = price if sale_price is not None else compare
+    current = sale_price if sale_price is not None else price
+    if was and current and was > current:
+        percent = round((1 - current / was) * 100)
+        if percent >= 5:
+            badges.append({"key": "discount", "label": f"-{percent}%"})
+    if sale and ranking.parse_time(sale["ends_at"]) - now <= timedelta(hours=72):
+        badges.append({"key": "ending", "label": "Ending soon"})
+    if held:
+        badges.append({"key": "prize", "label": "Giveaway prize"})
+    elif buyable:
+        badges.append({"key": "ships", "label": "Ships now"})
+    elif product.get("source") != "shopify":
+        badges.append({"key": "sourced", "label": "Sourced on request"})
+    created = product.get("created_at")
+    if created and ranking.parse_time(created) >= now - timedelta(days=7):
+        badges.append({"key": "new", "label": "New"})
+    return badges
+
+
 def card(product: dict, *, sales: dict[str, dict], heat: dict[str, float], groups: dict[str, str],
-         saved: set[str] | None = None) -> dict:
+         saved: set[str] | None = None, holds: dict[str, int] | None = None) -> dict:
     """The one product card shape used by the chat, rails, browse, cart suggestions and Find It."""
     product_id = str(product["id"])
     sale = sales.get(product_id)
@@ -121,6 +156,12 @@ def card(product: dict, *, sales: dict[str, dict], heat: dict[str, float], group
     price = float(price) if price is not None else None
     sale_price = ranking.sale_price(price, sale)
     compare = product.get("compare_at_max")
+    store = product.get("source") == "shopify"
+    held_units = int((holds or {}).get(product_id) or 0)
+    inventory = product.get("total_inventory")
+    held = bool(held_units and isinstance(inventory, int) and inventory - held_units <= 0)
+    buyable = store and bool(product.get("in_stock")) and not held
+    compare_value = float(compare) if compare is not None and price is not None and float(compare) > price else None
     return {
         "id": product_id,
         "name": product.get("name"),
@@ -143,13 +184,21 @@ def card(product: dict, *, sales: dict[str, dict], heat: dict[str, float], group
                           and 0 < product["total_inventory"] <= 5),
         "heat": round(heat.get(product_id, 0.0), 2),
         "saved": product_id in saved if saved is not None else None,
-        "buyable": product.get("source") == "shopify" and bool(product.get("in_stock")),
+        "buyable": buyable,
+        "held_for_giveaway": held,
+        "price_guide": (not store) and price is not None,
+        "min_order": product.get("min_order"),
+        "lead_time": ({"min": product.get("lead_time_min_days"), "max": product.get("lead_time_max_days")}
+                      if product.get("lead_time_min_days") is not None or product.get("lead_time_max_days") is not None else None),
+        "badges": card_badges(product, price=price, sale=sale, sale_price=sale_price, compare=compare_value,
+                              buyable=buyable, held=held),
     }
 
 
-def cards(products: list[dict], *, saved: set[str] | None = None) -> list[dict]:
+def cards(products: list[dict], *, saved: set[str] | None = None, member_id: str | None = None) -> list[dict]:
     sales, heat, groups = active_sales(), heat_map(), category_groups()
-    return [card(p, sales=sales, heat=heat, groups=groups, saved=saved) for p in products]
+    holds = prize_holds(member_id)
+    return [card(p, sales=sales, heat=heat, groups=groups, saved=saved, holds=holds) for p in products]
 
 
 def saved_ids(member_id: str) -> set[str]:
@@ -189,9 +238,10 @@ def member_intent(member_id: str, now: datetime | None = None) -> ranking.Intent
 def ranked(products: list[dict], intent: ranking.Intent, *, query_terms: list[str] | None = None,
            saved: set[str] | None = None, diversify: bool = True) -> list[dict]:
     sales, heat, groups = active_sales(), heat_map(), category_groups()
+    holds = prize_holds()
     scored = []
     for product in products:
-        item = card(product, sales=sales, heat=heat, groups=groups, saved=saved)
+        item = card(product, sales=sales, heat=heat, groups=groups, saved=saved, holds=holds)
         enriched = {**product, "group_name": item["group_name"], "sale": item["sale"],
                     "sale_price": (item["sale"] or {}).get("sale_price")}
         item["score"] = round(ranking.score(enriched, intent, heat=heat.get(item["id"], 0.0), query_terms=query_terms), 4)
@@ -419,7 +469,36 @@ def rails(member_id: str, now: datetime | None = None) -> dict:
         if hot:
             result.append({"key": "popular", "title": "Popular on FayFort this week", "items": hot[:10]})
     giveaways = open_giveaways(member_id, now)
-    return {"rails": result, "giveaways": giveaways, "intent": intent.summary()}
+    from app.commerce import merch_sections
+    try:
+        sections = merch_sections.member_sections(lambda found: cards(found, saved=saved), now)
+    except Exception:
+        logger.exception("Could not load store sections")
+        sections = []
+    return {"rails": result, "giveaways": giveaways, "intent": intent.summary(), "sections": sections,
+            "category_bar": category_bar(products)}
+
+
+def category_bar(products: list[dict] | None = None, limit: int = 12) -> list[dict]:
+    """The category bar on Browse: the groups, then the categories with the most live products."""
+    products = products if products is not None else load_products()
+    groups = category_groups()
+    names = {str(c["source_ref"]): c for c in categories()}
+    by_group: dict[str, int] = {}
+    by_category: dict[str, int] = {}
+    for product in products:
+        ref = str(product.get("category_ref") or "")
+        if not ref:
+            continue
+        by_category[ref] = by_category.get(ref, 0) + 1
+        group = groups.get(ref)
+        if group:
+            by_group[group] = by_group.get(group, 0) + 1
+    bar = [{"kind": "group", "key": g, "label": g, "count": n} for g, n in sorted(by_group.items(), key=lambda x: (-x[1], x[0]))]
+    top = sorted(by_category.items(), key=lambda x: (-x[1], x[0]))[:limit]
+    bar += [{"kind": "category", "key": ref, "label": str((names.get(ref) or {}).get("category") or ref), "count": n,
+             "group": groups.get(ref)} for ref, n in top]
+    return bar
 
 
 def pairs_with(product_ids: list[str], *, exclude: set[str], limit: int = 3) -> list[dict]:

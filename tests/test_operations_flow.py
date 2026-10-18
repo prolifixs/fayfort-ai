@@ -189,7 +189,8 @@ class FlowTests(unittest.TestCase):
 
     def test_sweep_leaves_recurring_orders_to_the_database_scheduler(self):
         summary = flow.sweep()
-        self.assertEqual(set(summary), {"giveaways", "billing", "group_buys"})
+        self.assertEqual(set(summary), {"giveaways", "billing", "group_buys", "map_products", "retire",
+                                        "trend_listings", "sections", "campaigns"})
         self.assertEqual(self.db.rpc_calls, [])
 
     def test_cancel_deletes_unpaid_shopify_invoices_and_falls_back_to_staff(self):

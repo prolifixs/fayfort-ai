@@ -1,4 +1,4 @@
-export type Department = "conversation_intake" | "sourcing" | "fulfillment" | "disputes" | "member_support";
+export type Department = "conversation_intake" | "sourcing" | "fulfillment" | "disputes" | "member_support" | "store_team";
 export type WorkStatus = "open" | "claimed" | "waiting" | "blocked" | "completed" | "cancelled";
 export type WorkItem = {
   id: string;
@@ -216,6 +216,13 @@ export type FlowContext = {
     conversation_id: string | null;
     messages: { id: string; sender_type: "member" | "assistant" | "worker"; content: string; created_at: string }[];
   } | null;
+  /** Store team work (docs/CATALOG_MERCHANDISING_PLAN.md). */
+  listing?: import("./storeTypes").StoreListing | null;
+  product?: import("./storeTypes").CatalogProduct | null;
+  section?: import("./storeTypes").StoreSection | null;
+  prep?: import("./storeTypes").CampaignPrep | null;
+  campaign?: import("./storeTypes").Campaign | null;
+  products?: import("./storeTypes").CatalogProduct[];
 };
 export type RequestPayments = {
   invoices: {
@@ -338,6 +345,7 @@ export const departments: Department[] = [
   "fulfillment",
   "disputes",
   "member_support",
+  "store_team",
 ];
 export const departmentLabel: Record<Department, string> = {
   conversation_intake: "Conversation intake",
@@ -345,6 +353,7 @@ export const departmentLabel: Record<Department, string> = {
   fulfillment: "Fulfillment",
   disputes: "Disputes",
   member_support: "Member support",
+  store_team: "Store team",
 };
 export const statuses: WorkStatus[] = ["open", "claimed", "waiting", "blocked", "completed", "cancelled"];
 export const fulfillmentNextStages: Record<string, string[]> = {

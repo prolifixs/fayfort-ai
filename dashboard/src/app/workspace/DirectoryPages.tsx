@@ -397,7 +397,7 @@ export function DirectoryProductsPanel({ accessToken, businessId }: { accessToke
         <div>
           <h3>Products</h3>
           <p>
-            Products in this directory. Media can be a direct URL, an Instagram post or Reel, or an upload.
+            What the AI and members can find. Read-only here.
           </p>
         </div>
         <button
@@ -421,126 +421,10 @@ export function DirectoryProductsPanel({ accessToken, businessId }: { accessToke
           {notice}
         </p>
       )}
-      {canManage && (
-        <form className="inline-form" onSubmit={save}>
-          <label>
-            Product name
-            <input
-              required
-              minLength={1}
-              maxLength={160}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Product name"
-            />
-          </label>
-          <label>
-            Existing category
-            <select required value={categoryRef} onChange={(event) => setCategoryRef(event.target.value)}>
-              <option value="">Choose category</option>
-              {categories.map((category) => (
-                <option key={category.source_ref} value={category.source_ref}>
-                  {category.category} · {category.product_type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Availability
-            <select
-              value={availability}
-              onChange={(event) => setAvailability(event.target.value as DirectoryProduct["availability_status"])}
-            >
-              <option value="available">Available</option>
-              <option value="sourcing">Sourcing</option>
-              <option value="unavailable">Unavailable</option>
-            </select>
-          </label>
-          <label>
-            Description
-            <textarea
-              maxLength={2000}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Optional product details"
-            />
-          </label>
-          <label>
-            Media source
-            <select
-              value={mediaSource}
-              onChange={(event) => {
-                setMediaSource(event.target.value as typeof mediaSource);
-                setMediaUrl("");
-                setMediaFile(null);
-              }}
-            >
-              <option value="url">Direct image or video URL</option>
-              <option value="instagram">Instagram post or Reel</option>
-              <option value="upload">Upload to FayFort</option>
-            </select>
-          </label>
-          <label>
-            Media type
-            <select value={mediaType} onChange={(event) => setMediaType(event.target.value as typeof mediaType)}>
-              <option value="image">Image</option>
-              <option value="video">Video</option>
-            </select>
-          </label>
-          {mediaSource === "upload" ? (
-            <label>
-              Choose {mediaType}
-              <input
-                type="file"
-                accept={mediaType === "image" ? "image/jpeg,image/png,image/webp,image/gif" : "video/mp4,video/webm"}
-                onChange={(event) => {
-                  setMediaFile(event.target.files?.[0] || null);
-                  setMediaUrl("");
-                }}
-                required={!editing}
-              />
-              <small>Images up to 15 MB; videos up to 100 MB.</small>
-            </label>
-          ) : (
-            <label>
-              {mediaSource === "instagram" ? "Public Instagram post/Reel URL" : "Image/video URL"}
-              <input
-                type="url"
-                maxLength={2000}
-                value={mediaUrl}
-                onChange={(event) => setMediaUrl(event.target.value)}
-                placeholder={mediaSource === "instagram" ? "https://www.instagram.com/p/..." : "https://…"}
-              />
-            </label>
-          )}
-          {mediaUrl && (
-            <ProductMediaPreview
-              product={{
-                id: "draft",
-                name: name || "Product",
-                category_ref: categoryRef,
-                description,
-                availability_status: availability,
-                active: true,
-                media_url: mediaUrl,
-                media_type: mediaType,
-                media_source: mediaSource,
-                updated_at: "",
-              }}
-            />
-          )}
-          <div className="record-actions">
-            <button className="primary-button" disabled={busy || !categoryRef}>
-              {busy ? "Saving…" : editing ? "Save product" : "Add product"}
-            </button>
-            {editing && (
-              <button type="button" disabled={busy} onClick={clearForm}>
-                Cancel edit
-              </button>
-            )}
-          </div>
-        </form>
-      )}
+      <p className="quiet-note directory-products-moved">
+        Products are added and edited by the Store team in{" "}
+        <a href="/operations?view=products&tab=sourcing">Operations Center → Products</a>, where an administrator reviews and publishes them.
+      </p>
       {loading ? (
         <FayfortLoader label="Loading products…" />
       ) : products.length === 0 ? (
@@ -564,12 +448,9 @@ export function DirectoryProductsPanel({ accessToken, businessId }: { accessToke
               </div>
               {canManage && (
                 <div className="record-actions">
-                  <button type="button" disabled={busy} onClick={() => edit(product)}>
-                    Edit
-                  </button>
-                  <button type="button" disabled={busy} onClick={() => void setActive(product)}>
-                    {product.active ? "Hide" : "Activate"}
-                  </button>
+                  <a className="secondary-button" href="/operations?view=products&tab=sourcing">
+                    Edit in Products
+                  </a>
                 </div>
               )}
             </article>

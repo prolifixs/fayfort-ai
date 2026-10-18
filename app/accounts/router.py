@@ -23,6 +23,7 @@ from app.accounts.member_notifications import create_member_notifications_router
 from app.accounts.member_theme_admin import create_member_theme_admin_router
 from app.accounts.member_profile_photo import create_member_profile_photo_router, _signed_url as signed_member_photo_url
 from app.accounts.operations import create_operations_router
+from app.accounts.store_team_router import create_store_team_router
 
 logger = logging.getLogger(__name__)
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -337,6 +338,7 @@ def create_accounts_router() -> APIRouter:
     router.include_router(create_member_profile_photo_router(require_verified_member))
     router.include_router(create_member_theme_admin_router(trusted_platform_admin))
     router.include_router(create_operations_router(trusted_fayfort_staff))
+    router.include_router(create_store_team_router(trusted_fayfort_staff))
 
     def event_projection(event: dict) -> dict:
         return {"id": event["id"], "sequence_no": event["sequence_no"], "stage": event["stage"],

@@ -95,6 +95,8 @@ class SaleInput(BaseModel):
 
 class GiveawayInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    # Scheduled by default: it opens and closes by itself on its dates. "draft" keeps it hidden until opened.
+    status: Literal["open", "draft"] = "open"
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=2000)
     prize_text: str = Field(min_length=1, max_length=300)
@@ -263,6 +265,15 @@ def create_admin_commerce_router() -> APIRouter:
                 raise shopify_failure(exc) from exc
         db().table("directory_products").update({"category_ref": payload.category_ref, "category_needs_mapping": False}) \
             .eq("id", str(product_id)).execute()
+        try:  # the Store team's "Choose a category" task for this product is done too
+            from app.commerce import store_team
+            open_item = store_team._active_item_for("unmapped_product", str(product_id))
+            if open_item:
+                from app.accounts import operations_flow
+                operations_flow.close_item("unmapped_product", str(open_item["metadata"]["source_id"]),
+                                           reason=f"Category set to {payload.category_ref} in Control Center.")
+        except Exception:
+            logger.exception("Could not close the category task")
         audit(admin_id, "category_mapped", {"product_id": str(product_id), "category_ref": payload.category_ref})
         return {"product_id": str(product_id), "category_ref": payload.category_ref}
 
@@ -513,6 +524,11 @@ def create_admin_commerce_router() -> APIRouter:
         db().table("commerce_flash_sales").update({"shopify_discount_id": discount_id}).eq("id", record["id"]).execute()
         service.clear_cache()
         audit(admin_id, "sale_created", {"sale_id": str(record["id"]), "code": payload.code or ""})
+        try:
+            from app.commerce import campaigns
+            campaigns.ensure_campaign("sale", record)
+        except Exception:
+            logger.exception("Could not open the Prepare a campaign task")
         return {"sale": {**record, "shopify_discount_id": discount_id}}
 
     @router.post("/platform/commerce/sales/{sale_id}/cancel")
@@ -528,6 +544,11 @@ def create_admin_commerce_router() -> APIRouter:
                 raise shopify_failure(exc) from exc
         db().table("commerce_flash_sales").update({"status": "cancelled"}).eq("id", str(sale_id)).execute()
         service.clear_cache()
+        try:
+            from app.accounts import operations_flow
+            operations_flow.close_item("campaign_sale", str(sale_id), status="cancelled", reason="The sale was cancelled.")
+        except Exception:
+            logger.exception("Could not close the sale's campaign task")
         audit(admin_id, "sale_cancelled", {"sale_id": str(sale_id)})
         return {"sale_id": str(sale_id), "status": "cancelled"}
 
@@ -562,8 +583,14 @@ def create_admin_commerce_router() -> APIRouter:
             "prize_text": payload.prize_text.strip(),
             "prize_product_id": str(payload.prize_product_id) if payload.prize_product_id else None,
             "starts_at": _iso(payload.starts_at), "ends_at": _iso(payload.ends_at),
-            "winner_count": payload.winner_count, "created_by": admin_id}).execute())
+            "winner_count": payload.winner_count, "status": payload.status, "created_by": admin_id}).execute())
         audit(admin_id, "giveaway_created", {"giveaway_id": str((record or {}).get("id"))})
+        if record and payload.status == "open":
+            try:
+                from app.commerce import campaigns
+                campaigns.ensure_campaign("giveaway", record)
+            except Exception:
+                logger.exception("Could not open the Prepare a campaign task")
         return {"giveaway": record}
 
     @router.put("/platform/commerce/giveaways/{giveaway_id}/status")
@@ -578,6 +605,17 @@ def create_admin_commerce_router() -> APIRouter:
         db().table("commerce_giveaways").update({"status": payload.status,
                                                  "updated_at": datetime.now(timezone.utc).isoformat()}) \
             .eq("id", str(giveaway_id)).execute()
+        try:
+            from app.commerce import campaigns
+            from app.accounts import operations_flow
+            if payload.status == "open":
+                full = one(db().table("commerce_giveaways").select("*").eq("id", str(giveaway_id)).maybe_single().execute())
+                campaigns.ensure_campaign("giveaway", full or {})
+            else:
+                operations_flow.close_item("campaign_giveaway", str(giveaway_id), status="cancelled",
+                                           reason="The giveaway was cancelled.")
+        except Exception:
+            logger.exception("Could not update the giveaway's campaign task")
         audit(admin_id, f"giveaway_{payload.status}", {"giveaway_id": str(giveaway_id)})
         return {"giveaway_id": str(giveaway_id), "status": payload.status}
 

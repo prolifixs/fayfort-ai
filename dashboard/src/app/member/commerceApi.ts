@@ -21,7 +21,28 @@ export type ShopCard = {
   heat?: number;
   saved?: boolean | null;
   buyable?: boolean;
+  /** Sourcing items: the price is a from–to guide, never a fixed price. */
+  price_guide?: boolean;
+  min_order?: number | null;
+  lead_time?: { min: number | null; max: number | null } | null;
+  held_for_giveaway?: boolean;
+  badges?: { key: "discount" | "ending" | "prize" | "ships" | "sourced" | "new"; label: string }[];
 };
+
+/** A store section tile on Browse (docs/CATALOG_MERCHANDISING_PLAN.md §4). */
+export type StoreSectionTile = {
+  id: string;
+  title: string;
+  hook: string;
+  style: "deal" | "trend" | "category";
+  accent: "pink" | "navy" | "gold" | "green" | "purple";
+  ends_at?: string | null;
+  built_in?: "flash_sale" | "new_this_week" | null;
+  total: number;
+  items: ShopCard[];
+};
+
+export type CategoryBarItem = { kind: "group" | "category"; key: string; label: string; count: number; group?: string | null };
 
 export type TrendCard = {
   id: string;
@@ -54,7 +75,13 @@ export type Giveaway = {
   prize_code?: string | null;
 };
 
-export type ShopHome = { rails: Rail[]; giveaways: Giveaway[]; intent: { active: boolean } };
+export type ShopHome = {
+  rails: Rail[];
+  giveaways: Giveaway[];
+  intent: { active: boolean };
+  sections?: StoreSectionTile[];
+  category_bar?: CategoryBarItem[];
+};
 
 export type FindItResult = {
   kind: "link" | "words";

@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { StaffChatThread, fromMemberMessage } from "../staff/StaffChatThread";
 import { MemberPhotoReviewQueue } from "../staff/MemberPhotoReview";
-import { currentStepIndex, DEPARTMENT_GUIDES, GLOSSARY, GUIDES, type Guide, type Step } from "./playbooks";
+import { StoreFlowPanel } from "./StoreTeam";
+import { currentStepIndex, DEPARTMENT_GUIDES, GLOSSARY, GUIDES, TOOL_GUIDES, type Guide, type Step } from "./playbooks";
 import { departmentLabel, departments, requestNextStages, statusLabel, type FlowContext, type WorkItem } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
 import { formatSpan, shortDate, toLocalInput, useNow, workClock } from "./clock";
@@ -524,6 +525,19 @@ export function FlowPanel({ ops, selected }: { ops: OperationsState; selected: S
   }, [flow?.trend?.pool_price, flow?.trend?.pool_currency, selected.id]);
   if (!flow) return <p className="operations-muted">Loading details…</p>;
   const meta = flow.metadata || {};
+  if (["store_listing", "unmapped_product", "retire_product", "merch_section", "campaign_giveaway", "campaign_sale"].includes(flow.kind)) {
+    return ops.token ? (
+      <StoreFlowPanel
+        token={ops.token}
+        item={selected}
+        flow={flow}
+        canAct={act}
+        canManage={ops.canManage}
+        onClaim={() => void ops.claim(selected)}
+        onChanged={() => ops.token && void ops.refresh(ops.token)}
+      />
+    ) : null;
+  }
   switch (flow.kind) {
     case "shopify_order": {
       const order = flow.order;
@@ -813,10 +827,10 @@ export function ReopenForm({ ops }: { ops: OperationsState }) {
 // ---------------------------------------------------------------------------------------------
 // Guides
 // ---------------------------------------------------------------------------------------------
-export function GuideArticle({ guide }: { guide: Guide }) {
+export function GuideArticle({ guide }: { guide: Omit<Guide, "department"> & { department?: Guide["department"] } }) {
   return (
     <article className="ops-guide-article">
-      <small>{departmentLabel[guide.department]}</small>
+      <small>{guide.department ? departmentLabel[guide.department] : "Tools"}</small>
       <h2>{guide.title}</h2>
       <p className="ops-guide-lead">{guide.what}</p>
       <dl className="ops-guide-facts">
@@ -848,8 +862,8 @@ export function GuideArticle({ guide }: { guide: Guide }) {
 }
 
 export function GuideTab({ firstWeek, setFirstWeek }: { firstWeek: boolean; setFirstWeek: (value: boolean) => void }) {
-  const [open, setOpen] = useState<string>("sourcing_request");
-  const guide = GUIDES[open];
+  const [open, setOpen] = useState<string>(() => new URLSearchParams(window.location.search).get("guide") || "sourcing_request");
+  const guide = GUIDES[open] || TOOL_GUIDES[open];
   return (
     <div className="ops-guide">
       <aside className="ops-guide-index" aria-label="Guides">
@@ -875,6 +889,15 @@ export function GuideTab({ firstWeek, setFirstWeek }: { firstWeek: boolean; setF
             </section>
           );
         })}
+        <section>
+          <h3>Tools</h3>
+          <p>The Products workspace, store sections and the Schedule.</p>
+          {Object.entries(TOOL_GUIDES).map(([key, value]) => (
+            <button key={key} type="button" aria-pressed={open === key} onClick={() => setOpen(key)}>
+              {value.title}
+            </button>
+          ))}
+        </section>
         <section>
           <h3>Words we use</h3>
           <button type="button" aria-pressed={open === "glossary"} onClick={() => setOpen("glossary")}>
@@ -912,7 +935,7 @@ export function HelpSheet({ guideKey, onClose }: { guideKey: string; onClose: ()
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
-  const guide = GUIDES[guideKey];
+  const guide = GUIDES[guideKey] || TOOL_GUIDES[guideKey];
   return (
     <div className="ops-sheet-scrim" onClick={onClose}>
       <aside className="ops-sheet" role="dialog" aria-modal="true" aria-label="How this work is done" onClick={(event) => event.stopPropagation()}>

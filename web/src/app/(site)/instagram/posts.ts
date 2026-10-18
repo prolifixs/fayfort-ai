@@ -4,11 +4,11 @@ export type InstagramPost = { id: string; kind: 'p' | 'reel'; shortcode: string;
 
 const API = (process.env.FAYFORT_API_URL || 'https://api.fayfort.com').replace(/\/$/, '')
 
-/** Reads the curated posts from the API. Cached for 10 minutes; an unreachable API shows no rail, never an error. */
+/** Reads the curated posts from the API. Cached for 1 minute, so Control Center changes show quickly; an unreachable API shows no rail, never an error. */
 export async function getInstagramPosts(): Promise<InstagramPost[]> {
   try {
     const response = await fetch(`${API}/public/site/instagram`, {
-      next: { revalidate: 600 },
+      next: { revalidate: 60 },
       signal: AbortSignal.timeout(4000),
     })
     if (!response.ok) return []

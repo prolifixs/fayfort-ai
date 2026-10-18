@@ -74,8 +74,19 @@ const fixtures: Record<string, unknown> = {
     ],
     giveaways: [{ id: "g1", title: "Win a lace front wig", description: "", prize_text: "Body wave wig", ends_at: soon, status: "open", entered: false, won: false }],
     intent: { active: true },
+    category_bar: [
+      { kind: "group", key: "Hair", label: "Hair", count: 3 }, { kind: "group", key: "Fabrics", label: "Fabrics", count: 1 },
+      { kind: "group", key: "Beauty", label: "Beauty", count: 1 }, { kind: "category", key: "hair-wigs", label: "Lace front wigs", count: 3 },
+      { kind: "category", key: "fabric-ankara", label: "Ankara", count: 1 }, { kind: "category", key: "hair-tools", label: "Hair tools", count: 1 },
+    ],
+    sections: [
+      { id: "s1", title: "Dollar deals", hook: "From $18", style: "deal", accent: "pink", total: 4,
+        items: [products[3], products[4], products[1]].map((p) => ({ ...p, badges: [{ key: "discount", label: "-30%" }], compare_at_price: (p.price || 0) * 1.4 })) },
+      { id: "s2", title: "Wig week", hook: "Up to 20% off", style: "trend", accent: "navy", total: 3, ends_at: soon, items: products.slice(0, 3) },
+    ],
   },
-  "/members/shop/products": { products, categories: [] },
+  "/members/shop/sections/s1": { section: { id: "s1", title: "Dollar deals", hook: "From $18", style: "deal", accent: "pink", total: 4, items: products.slice(1, 5) } },
+  "/members/shop/products": { products, categories: [], has_more: false },
   "/members/cart": { lines: [{ variant_id: "v1", quantity: 1, unit_price: 96, variant_title: "22 inch", available: true, product: products[0] }], subtotal: 96, currency: "USD", impulse: { pairs_with: [products[4]], ending_soon: [] } },
   "/members/notifications": {
     unread_count: 2,

@@ -165,7 +165,7 @@ def upsert_product(node: dict, refs: set[str] | None = None, by_type: dict[str, 
         refs, by_type = category_lookup()
     mapped = map_product(node, refs, by_type)
     product = mapped["product"]
-    existing = one(db().table("directory_products").select("id,in_stock,category_ref,category_needs_mapping")
+    existing = one(db().table("directory_products").select("id,in_stock,category_ref,category_needs_mapping,sold_out_since")
                    .eq("shopify_product_id", product["shopify_product_id"]).maybe_single().execute())
     if existing and existing.get("category_ref") and product["category_ref"] is None and product["category_needs_mapping"]:
         # A category staff mapped in FayFort survives until Shopify's metafield catches up.
@@ -173,6 +173,11 @@ def upsert_product(node: dict, refs: set[str] | None = None, by_type: dict[str, 
         product["category_needs_mapping"] = False
     if existing and existing.get("in_stock") is False and product["in_stock"]:
         product["restocked_at"] = now_iso()
+    # The Store team's retire rule counts days sold out (docs/CATALOG_MERCHANDISING_PLAN.md).
+    if product["in_stock"]:
+        product["sold_out_since"] = None
+    elif not (existing and existing.get("sold_out_since")):
+        product["sold_out_since"] = now_iso()
     if existing:
         db().table("directory_products").update(product).eq("id", existing["id"]).execute()
         product_id = str(existing["id"])

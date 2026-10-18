@@ -266,6 +266,141 @@ def admin_product_url(product_gid: str) -> str:
 
 
 # ---------------------------------------------------------------------------------------------
+# Store team listings (docs/CATALOG_MERCHANDISING_PLAN.md): a worker's listing becomes a DRAFT product; only an
+# administrator's Publish sets it ACTIVE. Stock is tracked from zero: the administrator enters it in Shopify.
+# ---------------------------------------------------------------------------------------------
+def _listing_media(media: list[dict]) -> list[dict]:
+    out = []
+    for item in media[:10]:
+        url = str(item.get("url") or "")
+        if not url.startswith("https://") or item.get("source") == "instagram":
+            continue  # Shopify can't import an Instagram embed; those stay FayFort-only
+        out.append({"originalSource": url, "alt": str(item.get("alt") or "")[:512],
+                    "mediaContentType": "VIDEO" if item.get("media_type") == "video" else "IMAGE"})
+    return out
+
+
+def _variant_inputs(listing: dict) -> list[dict]:
+    price = f"{float(listing['price']):.2f}"
+    compare = f"{float(listing['compare_at_price']):.2f}" if listing.get("compare_at_price") else None
+    item: dict[str, Any] = {"tracked": True}
+    if listing.get("cost") is not None:
+        item["cost"] = f"{float(listing['cost']):.2f}"
+    values = [v for v in (listing.get("option_values") or []) if str(v).strip()]
+    base = {"price": price, "inventoryItem": item, **({"compareAtPrice": compare} if compare else {})}
+    if listing.get("option_name") and values:
+        return [{**base, "optionValues": [{"optionName": listing["option_name"], "name": str(value)[:255]}]}
+                for value in values]
+    return [base]
+
+
+def create_listing_product(listing: dict, *, client: httpx.Client | None = None) -> str:
+    """Create the Shopify DRAFT for a Store team listing: title, description, FayFort category, options, prices,
+    cost and media. Returns the product gid. Nothing is visible to customers until it is published."""
+    product_input: dict[str, Any] = {"title": str(listing["title"])[:255],
+                                     "descriptionHtml": _plain_to_html(listing.get("description") or ""),
+                                     "status": "DRAFT"}
+    if listing.get("category_ref"):
+        product_input["metafields"] = [{"namespace": "fayfort", "key": "category_ref",
+                                        "type": "single_line_text_field", "value": listing["category_ref"]}]
+    values = [v for v in (listing.get("option_values") or []) if str(v).strip()]
+    if listing.get("option_name") and values:
+        product_input["productOptions"] = [{"name": listing["option_name"],
+                                            "values": [{"name": str(v)[:255]} for v in values]}]
+    data = admin_graphql(
+        "mutation Create($product: ProductCreateInput!, $media: [CreateMediaInput!]) { "
+        "productCreate(product: $product, media: $media) { product { id } userErrors { field message } } }",
+        {"product": product_input, "media": _listing_media(listing.get("media") or []) or None}, client=client)
+    payload = data.get("productCreate") or {}
+    problem = user_errors(payload)
+    if problem:
+        raise ShopifyError(problem)
+    product_gid = str((payload.get("product") or {}).get("id") or "")
+    if not product_gid:
+        raise ShopifyError("Shopify didn't return the new product.")
+    result = admin_graphql(
+        "mutation Variants($productId: ID!, $variants: [ProductVariantsBulkInput!]!) { "
+        "productVariantsBulkCreate(productId: $productId, variants: $variants, strategy: REMOVE_STANDALONE_VARIANT) { "
+        "userErrors { field message } } }",
+        {"productId": product_gid, "variants": _variant_inputs(listing)}, client=client)
+    problem = user_errors(result.get("productVariantsBulkCreate"))
+    if problem:
+        logger.warning("Draft product created but its prices could not be set: %s", problem)
+        raise ShopifyError(f"The draft was created but its prices weren't saved: {problem}")
+    return product_gid
+
+
+def update_listing_product(listing: dict, *, client: httpx.Client | None = None) -> None:
+    """Apply an approved edit: title, description, category, price on every variant, and any new media."""
+    product_gid = gid("Product", listing["shopify_product_id"])
+    product_input: dict[str, Any] = {"id": product_gid, "title": str(listing["title"])[:255],
+                                     "descriptionHtml": _plain_to_html(listing.get("description") or "")}
+    if listing.get("category_ref"):
+        product_input["metafields"] = [{"namespace": "fayfort", "key": "category_ref",
+                                        "type": "single_line_text_field", "value": listing["category_ref"]}]
+    data = admin_graphql(
+        "mutation Update($product: ProductUpdateInput!, $media: [CreateMediaInput!]) { "
+        "productUpdate(product: $product, media: $media) { product { id variants(first: 100) { nodes { id } } } "
+        "userErrors { field message } } }",
+        {"product": product_input, "media": _listing_media(listing.get("new_media") or []) or None}, client=client)
+    payload = data.get("productUpdate") or {}
+    problem = user_errors(payload)
+    if problem:
+        raise ShopifyError(problem)
+    if listing.get("price"):
+        nodes = (((payload.get("product") or {}).get("variants") or {}).get("nodes") or [])
+        price = f"{float(listing['price']):.2f}"
+        compare = f"{float(listing['compare_at_price']):.2f}" if listing.get("compare_at_price") else None
+        variants = [{"id": node["id"], "price": price, "compareAtPrice": compare} for node in nodes]
+        if variants:
+            result = admin_graphql(
+                "mutation Price($productId: ID!, $variants: [ProductVariantsBulkInput!]!) { "
+                "productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { field message } } }",
+                {"productId": product_gid, "variants": variants}, client=client)
+            problem = user_errors(result.get("productVariantsBulkUpdate"))
+            if problem:
+                raise ShopifyError(f"The details were saved but the price wasn't: {problem}")
+
+
+def set_product_status(product_gid: str, status: str, *, client: httpx.Client | None = None) -> None:
+    """ACTIVE (publish) or ARCHIVED (retire). Only called from administrator actions."""
+    if status not in ("ACTIVE", "ARCHIVED", "DRAFT"):
+        raise ValueError("Unknown product status")
+    data = admin_graphql(
+        "mutation Status($product: ProductUpdateInput!) { productUpdate(product: $product) { "
+        "product { id status } userErrors { field message } } }",
+        {"product": {"id": gid("Product", product_gid), "status": status}}, client=client)
+    problem = user_errors(data.get("productUpdate"))
+    if problem:
+        raise ShopifyError(problem)
+
+
+def publish_to_sales_channels(product_gid: str, *, client: httpx.Client | None = None) -> bool:
+    """Best effort: put the product on every sales channel (the Headless storefront FayFort sells through, TikTok,
+    Instagram). Needs the app's read_publications and write_publications scopes; without them this returns False and
+    the administrator ticks the sales channels in Shopify instead."""
+    try:
+        found = admin_graphql("query { publications(first: 20) { nodes { id } } }", client=client)
+        ids = [node["id"] for node in ((found.get("publications") or {}).get("nodes") or []) if node.get("id")]
+        if not ids:
+            return False
+        data = admin_graphql(
+            "mutation Publish($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { "
+            "userErrors { field message } } }",
+            {"id": gid("Product", product_gid), "input": [{"publicationId": pid} for pid in ids]}, client=client)
+        return not user_errors(data.get("publishablePublish"))
+    except ShopifyError as exc:
+        logger.info("Could not publish to sales channels (scopes?): %s", exc)
+        return False
+
+
+def _plain_to_html(text: str) -> str:
+    import html as _html
+    paragraphs = [p.strip() for p in str(text).split("\n\n") if p.strip()]
+    return "".join(f"<p>{_html.escape(p).replace(chr(10), '<br>')}</p>" for p in paragraphs)[:20000]
+
+
+# ---------------------------------------------------------------------------------------------
 # Setup (P0): category metafield definition and webhook subscriptions
 # ---------------------------------------------------------------------------------------------
 WEBHOOK_TOPICS = ("PRODUCTS_CREATE", "PRODUCTS_UPDATE", "PRODUCTS_DELETE", "ORDERS_CREATE", "ORDERS_UPDATED",

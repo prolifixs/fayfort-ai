@@ -61,7 +61,7 @@ export function WebsitePage({ accessToken }: { accessToken: string }) {
         setUrl("");
         setLabel("");
       },
-      "Added. It shows on the website within 10 minutes.",
+      "Added. It shows on the website within about 2 minutes.",
     );
   }
 
@@ -85,7 +85,7 @@ export function WebsitePage({ accessToken }: { accessToken: string }) {
           <h2>Instagram on the website</h2>
           <p>
             Posts and reels shown on the www.fayfort.com home page under "From the market floor", in this order (up to 12). Paste the link from
-            Instagram (⋯ → Copy link). Changes appear on the site within 10 minutes. With no posts, the section is hidden.
+            Instagram (⋯ → Copy link). Changes appear on the site within about 2 minutes. With no posts, the section is hidden.
           </p>
         </div>
         {error && (

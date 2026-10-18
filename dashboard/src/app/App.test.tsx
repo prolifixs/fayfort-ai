@@ -71,7 +71,7 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.click(within(nav).getByRole("button",{name:/Shop/}));
   fireEvent.click(await screen.findByRole("tab",{name:"Giveaways"}));
   expect(await screen.findByRole("region",{name:"Giveaways workspace"})).toBeInTheDocument();
-  expect(screen.getByRole("button",{name:"Create giveaway"})).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"Schedule giveaway"})).toBeInTheDocument();
  });
 
  it("explains when the API server hasn't been updated for the Shop",async()=>{

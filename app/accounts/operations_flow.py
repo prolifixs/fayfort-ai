@@ -295,11 +295,20 @@ def withdraw_draft_orders(request_id: str, draft_order_ids: list[str]) -> None:
 # ---------------------------------------------------------------------------------------------
 # Background sweep
 # ---------------------------------------------------------------------------------------------
+def _store_team_steps():
+    """Store team work that comes from time passing (docs/CATALOG_MERCHANDISING_PLAN.md)."""
+    from app.commerce import campaigns, merch_sections, store_team
+    return (("map_products", store_team.sync_unmapped_products), ("retire", store_team.sync_retire_candidates),
+            ("trend_listings", store_team.sync_trend_listings), ("sections", merch_sections.sync_section_refresh),
+            ("campaigns", campaigns.sync_campaigns))
+
+
 def sweep() -> dict:
-    """One pass: group buys, ended giveaways and billing issues. (Recurring orders run on pg_cron in the database.)"""
+    """One pass: group buys, ended giveaways, billing issues and the Store team's timed work. (Recurring orders run
+    on pg_cron in the database.)"""
     summary: dict[str, Any] = {}
     for name, step in (("giveaways", sync_giveaways),
-                       ("billing", sync_billing_issues), ("group_buys", sweep_group_buys)):
+                       ("billing", sync_billing_issues), ("group_buys", sweep_group_buys), *_store_team_steps()):
         try:
             summary[name] = step()
         except Exception:
@@ -337,6 +346,8 @@ def source_context(item: dict) -> dict:
     meta = item.get("metadata") or {}
     kind, source_id = meta.get("source_kind"), str(meta.get("source_id") or "")
     detail: dict[str, Any] = {}
+    if kind in STORE_TEAM_KINDS:
+        return {"source_type": kind, "flow": {"kind": kind, "metadata": meta, **store_team_context(item)}}
     if kind == "shopify_order":
         detail["order"] = one(db().table("commerce_orders").select(
             "id,order_name,member_id,financial_status,fulfillment_status,cancelled_at,total,currency,line_items,"
@@ -374,6 +385,37 @@ def source_context(item: dict) -> dict:
             detail["chat"] = {"conversation_id": chat["id"] if chat else None,
                               "messages": chat_messages(chat["id"]) if chat else []}
     return {"source_type": kind, "flow": {"kind": kind, "metadata": meta, **detail}}
+
+
+STORE_TEAM_KINDS = ("store_listing", "unmapped_product", "retire_product", "merch_section",
+                    "campaign_giveaway", "campaign_sale")
+
+
+def store_team_context(item: dict) -> dict:
+    """Details for Store team work items (docs/CATALOG_MERCHANDISING_PLAN.md)."""
+    from app.commerce import campaigns, merch_sections, store_team
+    meta = item.get("metadata") or {}
+    kind = meta.get("source_kind")
+    if kind == "store_listing":
+        listing = one(db().table("store_listings").select("*").eq("id", str(meta.get("source_id"))).limit(1).execute())
+        return {"listing": store_team.listing_view(listing) if listing else None}
+    if kind in ("unmapped_product", "retire_product"):
+        product = one(db().table("directory_products").select(
+            "id,name,source,shopify_product_id,category_ref,price_min,price_max,currency,in_stock,sold_out_since,"
+            "media_url,media_type,active,created_at,retired_at").eq("id", str(meta.get("product_id"))).limit(1).execute())
+        if product and product.get("shopify_product_id"):
+            try:
+                from app.commerce import shopify
+                product["shopify_admin_url"] = shopify.admin_product_url(product["shopify_product_id"]) if shopify.shop_domain() else None
+            except Exception:
+                product["shopify_admin_url"] = None
+        return {"product": product}
+    if kind == "merch_section":
+        section = next((s for s in merch_sections.staff_sections() if str(s["id"]) == str(meta.get("section_id"))), None)
+        return {"section": section}
+    if kind in ("campaign_giveaway", "campaign_sale"):
+        return campaigns.campaign_context(item)
+    return {}
 
 
 # ---------------------------------------------------------------------------------------------

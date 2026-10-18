@@ -78,7 +78,8 @@ export function DashboardWorkspace({
   onSignOut,
   eventStreaming = true,
 }: WorkspaceProps) {
-  const [active, setActive] = useState("Overview");
+  const linkedPage = new URLSearchParams(window.location.search).get("page");
+  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : "Overview");
   const [conversationTarget, setConversationTarget] = useState<ConversationRow | null>(null);
   const [requestTargetId, setRequestTargetId] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -490,7 +491,12 @@ export function DashboardWorkspace({
           ) : active === "My account" ? (
             <StaffAccountPage accessToken={accessToken} email={signedInEmail || ""} isWorker={activeWorker && !platformAdmin} />
           ) : active === "Shop" && platformAdmin ? (
-            <CommercePage accessToken={accessToken} />
+            <CommercePage
+              accessToken={accessToken}
+              initialTab={(["overview", "products", "trends", "invoices", "sales", "giveaways", "orders", "billing"].includes(new URLSearchParams(window.location.search).get("tab") || "")
+                ? new URLSearchParams(window.location.search).get("tab")
+                : "overview") as "overview"}
+            />
           ) : active === "Ads" && platformAdmin ? (
             <AdsPage accessToken={accessToken} />
           ) : active === "Website" && platformAdmin ? (

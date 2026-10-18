@@ -115,7 +115,8 @@ def create_member_commerce_router() -> APIRouter:
                category_ref: str | None = Query(default=None, max_length=200),
                group: str | None = Query(default=None, max_length=100),
                sort: Literal["for_you", "newest", "price_low", "price_high"] = "for_you",
-               in_stock: bool = False, saved_only: bool = False, limit: int = Query(default=60, ge=1, le=100)):
+               in_stock: bool = False, saved_only: bool = False, limit: int = Query(default=60, ge=1, le=100),
+               offset: int = Query(default=0, ge=0, le=5000)):
         member_id = verified_member(authorization)
         try:
             products = service.load_products()
@@ -146,7 +147,8 @@ def create_member_commerce_router() -> APIRouter:
             for product in service.load_products():
                 counts[groups.get(str(product.get("category_ref") or "")) or ""] += 1
             group_list = sorted({g for g in groups.values() if g})
-            return {"products": cards[:limit], "total": len(cards),
+            return {"products": cards[offset:offset + limit], "total": len(cards), "offset": offset,
+                    "has_more": offset + limit < len(cards),
                     "groups": [{"name": g, "count": counts.get(g, 0)} for g in group_list],
                     "categories": [{"source_ref": c["source_ref"], "category": c["category"],
                                     "group_name": c.get("group_name"), "product_type": c.get("product_type")}
@@ -164,7 +166,7 @@ def create_member_commerce_router() -> APIRouter:
             if not found:
                 raise HTTPException(status_code=404, detail="This product isn't available.")
             product = found[0]
-            card = service.cards([product], saved=service.saved_ids(member_id))[0]
+            card = service.cards([product], saved=service.saved_ids(member_id), member_id=member_id)[0]
             variants = rows(db().table("commerce_variants").select(
                 "id,title,price,compare_at_price,available,options,position,image_url")
                 .eq("product_id", str(product_id)).order("position").execute())
@@ -180,6 +182,22 @@ def create_member_commerce_router() -> APIRouter:
             raise
         except Exception as exc:
             raise _fail("This product could not be loaded.", exc) from exc
+
+    @router.get("/members/shop/sections/{section_id}")
+    def shop_section(section_id: str, authorization: str | None = Header(default=None)):
+        """Every product in one store section (the tile on Browse shows the first three)."""
+        member_id = verified_member(authorization)
+        if len(section_id) > 64:
+            raise HTTPException(status_code=404, detail="This section isn't live.")
+        try:
+            from app.commerce import merch_sections
+            saved = service.saved_ids(member_id)
+            section = merch_sections.member_section(section_id, lambda found: service.cards(found, saved=saved))
+        except Exception as exc:
+            raise _fail("This section could not be loaded.", exc) from exc
+        if not section:
+            raise HTTPException(status_code=404, detail="This section isn't live any more.")
+        return {"section": section}
 
     @router.post("/members/shop/events", status_code=202)
     def intent_events(payload: IntentBatch, authorization: str | None = Header(default=None)):

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FindItResult, Giveaway, Rail, ShopCard, TrendCard } from "./commerceApi";
+import type { CategoryBarItem, FindItResult, Giveaway, Rail, ShopCard, StoreSectionTile, TrendCard } from "./commerceApi";
 import { isTrend, money, timeLeft } from "./commerceApi";
 import { SaveProductButton } from "./accountExtras";
 
@@ -15,6 +15,14 @@ export function Countdown({ endsAt }: { endsAt: string }) {
 export function PriceLine({ card }: { card: ShopCard }) {
   if (card.price === null || card.price === undefined) {
     return <span className="shop-price muted">{card.source === "shopify" ? "" : "Sourced on request"}</span>;
+  }
+  if (card.price_guide) {
+    return (
+      <span className="shop-price is-guide">
+        <strong>From {money(card.price, card.currency)}</strong>
+        {card.min_order ? <small> · min {card.min_order}</small> : null}
+      </span>
+    );
   }
   const salePrice = card.sale?.sale_price ?? null;
   const was = salePrice !== null ? card.price : card.compare_at_price;
@@ -56,7 +64,7 @@ export function ProductTile({
         ) : (
           <span aria-hidden="true">{card.name.slice(0, 1)}</span>
         )}
-        {card.sale ? <b className="shop-badge sale">Sale</b> : card.low_stock ? <b className="shop-badge">Few left</b> : null}
+        <TileBadges card={card} />
       </button>
       {accessToken && (
         <SaveProductButton
@@ -197,6 +205,143 @@ export function GiveawayTile({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/** Badges worked out by the shop (discount, ships now, sourced on request, new...). At most two on a tile. */
+export function TileBadges({ card }: { card: ShopCard }) {
+  const badges = card.badges?.length
+    ? card.badges.filter((badge) => badge.key !== "sourced" && badge.key !== "ships").slice(0, 2)
+    : card.sale
+      ? [{ key: "discount" as const, label: "Sale" }]
+      : [];
+  if (card.low_stock && badges.length < 2) badges.push({ key: "ending" as const, label: "Few left" });
+  if (!badges.length) return null;
+  return (
+    <span className="shop-badges">
+      {badges.map((badge) => (
+        <b key={badge.key + badge.label} className={`shop-badge is-${badge.key}${badge.key === "discount" ? " sale" : ""}`}>
+          {badge.label}
+        </b>
+      ))}
+    </span>
+  );
+}
+
+/** The category bar at the top of Browse: groups first, then the busiest categories. */
+export function CategoryBar({
+  items,
+  group,
+  category,
+  onGroup,
+  onCategory,
+}: {
+  items: CategoryBarItem[];
+  group: string;
+  category: string;
+  onGroup: (value: string) => void;
+  onCategory: (value: string) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <nav className="shop-category-bar" aria-label="Shop by category">
+      <button type="button" aria-pressed={!group && !category} onClick={() => onGroup("")}>
+        All
+      </button>
+      {items.map((item) => (
+        <button
+          key={`${item.kind}-${item.key}`}
+          type="button"
+          className={item.kind === "group" ? "is-group" : ""}
+          aria-pressed={item.kind === "group" ? group === item.key && !category : category === item.key}
+          onClick={() => (item.kind === "group" ? onGroup(item.key) : onCategory(item.key))}
+        >
+          {item.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Store section tiles, AliExpress style: a title, a hook and three products. Tapping opens the whole section. */
+export function SectionTiles({
+  sections,
+  giveaways,
+  onOpenSection,
+  onOpenProduct,
+  onEnter,
+  busyId,
+}: {
+  sections: StoreSectionTile[];
+  giveaways: Giveaway[];
+  onOpenSection: (section: StoreSectionTile) => void;
+  onOpenProduct: (card: ShopCard) => void;
+  onEnter: (giveaway: Giveaway) => void;
+  busyId?: string;
+}) {
+  const live = giveaways.filter((giveaway) => giveaway.status === "open");
+  if (!sections.length && !live.length) return null;
+  return (
+    <div className="shop-sections" aria-label="Store sections">
+      {live.slice(0, 1).map((giveaway) => (
+        <section key={giveaway.id} className="shop-section-tile accent-gold is-giveaway" aria-label={`Giveaway: ${giveaway.title}`}>
+          <header>
+            <h3>Giveaway</h3>
+            <span className="shop-section-hook">
+              <Countdown endsAt={giveaway.ends_at} />
+            </span>
+          </header>
+          <p className="shop-section-giveaway">
+            <strong>{giveaway.title}</strong>
+            <span>{giveaway.prize_text}</span>
+          </p>
+          <button type="button" className="primary-button" disabled={giveaway.entered || busyId === giveaway.id} onClick={() => onEnter(giveaway)}>
+            {giveaway.entered ? "You're in" : "Enter free"}
+          </button>
+        </section>
+      ))}
+      {sections.map((section) => (
+        <section key={section.id} className={`shop-section-tile accent-${section.accent}`} aria-label={section.title}>
+          <header>
+            <button type="button" className="shop-section-title" onClick={() => onOpenSection(section)}>
+              <h3>{section.title}</h3>
+              <span aria-hidden="true">›</span>
+            </button>
+            {section.hook && <span className="shop-section-hook">{section.hook}</span>}
+          </header>
+          <div className="shop-section-items">
+            {section.items.slice(0, 3).map((card) => {
+              const sale = card.sale?.sale_price ?? null;
+              const now = sale ?? card.price;
+              const discount = card.badges?.find((badge) => badge.key === "discount");
+              return (
+                <button key={card.id} type="button" className="shop-section-item" onClick={() => onOpenProduct(card)} aria-label={`Open ${card.name}`}>
+                  <span className="shop-section-media">
+                    {card.media_url && card.media_type !== "video" ? (
+                      <img src={card.media_url} alt="" loading="lazy" />
+                    ) : card.media_url ? (
+                      <video src={card.media_url} muted playsInline preload="metadata" />
+                    ) : (
+                      <span aria-hidden="true">{card.name.slice(0, 1)}</span>
+                    )}
+                    {discount && <b>{discount.label}</b>}
+                  </span>
+                  <strong>
+                    {now !== null && now !== undefined ? `${card.price_guide ? "From " : ""}${money(now, card.currency)}` : "On request"}
+                  </strong>
+                  {sale !== null ? <s>{money(card.price, card.currency)}</s> : card.compare_at_price ? <s>{money(card.compare_at_price, card.currency)}</s> : null}
+                </button>
+              );
+            })}
+          </div>
+          {section.ends_at && (
+            <small className="shop-section-ends">
+              <Countdown endsAt={section.ends_at} />
+            </small>
+          )}
+        </section>
+      ))}
+    </div>
   );
 }
 

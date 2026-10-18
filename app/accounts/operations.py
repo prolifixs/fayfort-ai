@@ -19,7 +19,7 @@ from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
 
 logger = logging.getLogger(__name__)
-Department = Literal["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"]
+Department = Literal["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"]
 WorkStatus = Literal["open", "claimed", "waiting", "blocked", "completed", "cancelled"]
 Priority = Literal["low", "normal", "high", "urgent"]
 SOURCES = {"member_request", "member_conversation", "business_handoff", "business_conversation"}
@@ -211,7 +211,7 @@ class ChecklistCreate(BaseModel):
 
 class WorkerDepartments(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    departments: list[Department] = Field(max_length=5)
+    departments: list[Department] = Field(max_length=6)
 
     @field_validator("departments")
     @classmethod
@@ -393,7 +393,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
     def my_departments(authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
         if staff.get("role") == "platform_admin":
-            return {"user_id": staff["user_id"], "departments": ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support"], "can_manage": True}
+            return {"user_id": staff["user_id"], "departments": ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], "can_manage": True}
         return {"user_id": staff["user_id"], "departments": departments_for(staff["user_id"]), "can_manage": False}
 
     @router.get("/operations/pending-count")

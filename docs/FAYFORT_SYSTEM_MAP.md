@@ -220,10 +220,53 @@ flowchart LR
   FS[Staff: flash sale] --> AD[Shopify automatic discount<br/>start + end] --> CK[Applied at checkout]
   FS --> CD[Countdown + sale price on cards, Ending soon rail]
   IC[Staff: influencer code] --> CDC[Shopify code discount]
-  G[Staff: giveaway draft → open] --> GR[Giveaways rail: Enter once]
+  G[Staff: giveaway scheduled] --> PREP[Store team: Prepare a campaign<br/>due a day before]
+  G --> GR[Giveaway banner on Browse: Enter once]
   GR --> DRAW[Draw after end: recorded seed, sha256 order]
   DRAW --> PRZ[100% one-time Shopify code] --> EM[Winner email]
+  DRAW --> WRAP[Wrap up after 7 days: results saved, prize hold released]
+  FS --> PREP
 ```
+
+Giveaways are scheduled by default: they open and close by themselves on their dates. A store-product prize is held
+back from what members see as available until the giveaway wraps up (a winner still sees it as buyable).
+
+## 11b. Store team, store sections and the Schedule (docs/CATALOG_MERCHANDISING_PLAN.md)
+
+**Job:** keep the shop fresh and every campaign prepared. **Fed by:** workers in the Store team department, the
+Shopify catalog sync, Find It trend shares, flash sales and giveaways. **Feeds:** the Shopify catalog (drafts and
+publishes), the member catalog (`directory_products`, `commerce_media`), Browse sections, the AI's product facts and
+the Schedule.
+
+```mermaid
+flowchart LR
+  W[Worker: New store product / sourcing item] --> L[(store_listings)]
+  TR[Trend shared by 3+ members] --> L
+  L -->|Send for review| D[Shopify DRAFT<br/>store products only]
+  D --> A{Administrator}
+  L --> A
+  A -->|Publish| ACT[Shopify ACTIVE + sales channels] --> SYNC[Catalog sync] --> CAT[(directory_products)]
+  A -->|Publish sourcing item| CAT
+  A -->|Send back + note| W
+  CAT --> SEC[(merch_sections)] --> BR[Browse tiles + category bar]
+  CAT --> AI[AI product facts: price guide, minimum order, lead time]
+  SWEEP[Operations sweep, every 10 min] --> MAP[Map product] & RET[Retire or keep] & REF[Refresh section] & CAMP[Prepare campaign] & TL[Trend listing]
+  SCH[Schedule tab] -.reads.-> SEC & CAMP & L
+```
+
+- **Department:** `store_team`, a sixth Operations department. Work types: `list_store_product`, `list_sourcing_item`,
+  `map_product`, `retire_listing`, `refresh_section`, `prepare_campaign`. Each has steps, a deadline and a guide.
+- **Safety rule:** workers never change what customers see in Shopify. A store product becomes a Shopify DRAFT when
+  sent for review; only an administrator's Publish sets it ACTIVE, and only an administrator archives one.
+- **Retire rules:** sourcing items with no views or requests for 60 days; store products sold out for 30 days.
+  "Keep" needs a reason and snoozes the rule for the same period.
+- **Sections:** 3 to 12 live products, a hook, a style and dates. Under its minimum it hides itself and opens a
+  refresh task; two days before its end it opens one too. Built-in tiles: Flash sale and New this week.
+- **Schedule:** giveaways, sales, sections, launches, deadlines and recurring orders, read from their own tables.
+  Workers see the shop calendar plus their own work and open work in their departments; recurring orders are Sourcing's.
+- **Tables:** `store_listings`, `merch_sections`, `merch_section_items`, `merch_campaign_preps`; new columns on
+  `directory_products` (minimum order, lead time, sold-out date, retire fields) and `commerce_giveaways` (results,
+  wrap-up date).
 
 ## 12a. Member plans: deposits, consultations, supplier contacts
 
