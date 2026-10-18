@@ -119,6 +119,12 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.click(within(menu).getByRole("menuitem",{name:/Hunter · 4/}));
   const tier=await screen.findByRole("dialog",{name:"Member tier"});
   expect(within(tier).getByRole("progressbar",{name:"Rank progress"})).toHaveAttribute("aria-valuenow","14");
+  // Plans moved to Settings → Plan: the tier pop-up has no plan table, only a way there.
+  expect(within(tier).queryByRole("table")).not.toBeInTheDocument();
+  fireEvent.click(within(tier).getByRole("button",{name:"Plans and perks in Settings"}));
+  const planSettings=await screen.findByRole("dialog",{name:"Settings"});
+  expect(await within(planSettings).findByRole("heading",{name:"Plan"})).toBeInTheDocument();
+  expect(within(planSettings).getByRole("row",{name:/Sourcing deposit/})).toBeInTheDocument();
   fireEvent.keyDown(window,{key:"Escape"});
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   menu=await openMenu();

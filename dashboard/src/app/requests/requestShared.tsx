@@ -96,6 +96,8 @@ export type MemberRequestRow = {
   sourcing_options?: MemberSourcingOption[];
   created_at: string;
   events: RequestEvent[];
+  /** The chat kept with this request, if any (it may be archived). */
+  conversation_id?: string | null;
 };
 
 export const requestStageLabels: Record<string, string> = {
@@ -112,6 +114,32 @@ export const requestStageLabels: Record<string, string> = {
   delivered: "Delivered",
   cancelled: "Cancelled",
 };
+
+/** Member-facing words: a short status and one plain line on what happens next (Orders & requests). */
+export const memberStageText: Record<string, { status: string; next: string; tone: "action" | "progress" | "done" | "stopped" }> = {
+  submitted: { status: "We have your request", next: "We'll check the details and give you a delivery estimate within 24 hours.", tone: "progress" },
+  under_review: { status: "Checking the details", next: "We're confirming what you need. Next we contact suppliers.", tone: "progress" },
+  sourcing: { status: "Finding suppliers", next: "We're comparing suppliers. You'll get options to choose from.", tone: "progress" },
+  needs_member_input: { status: "We need a detail from you", next: "Answer our question so we can keep going.", tone: "action" },
+  options_sent: { status: "Options ready for you", next: "Choose the option you prefer. Choosing doesn't charge you.", tone: "action" },
+  purchase_confirmed: { status: "Paid, thank you", next: "We're buying it. Next it arrives at our warehouse to be checked.", tone: "progress" },
+  item_in_warehouse: { status: "At our warehouse, being checked", next: "We're checking it and may add photos. Next it ships to you.", tone: "progress" },
+  shipped: { status: "On its way · shipped", next: "It has left our warehouse. Tracking is in the details.", tone: "progress" },
+  in_transit: { status: "On its way · in transit", next: "The carrier is bringing it to you.", tone: "progress" },
+  out_for_delivery: { status: "On its way · out for delivery", next: "It should arrive very soon.", tone: "progress" },
+  delivered: { status: "Delivered", next: "Delivered. Its chat moves to Archive a few days later.", tone: "done" },
+  cancelled: { status: "Cancelled", next: "This request was cancelled.", tone: "stopped" },
+};
+
+/** Requests that are finished: they go to the Completed tab. */
+export function requestIsDone(stage: string) {
+  return stage === "delivered" || stage === "cancelled";
+}
+
+/** Test tags such as "[SYNTHETIC ACCEPTANCE TEST]" are for the team; members see the plain title. */
+export function memberFacingText(text: string | null | undefined) {
+  return (text || "").replace(/^\s*(\[(?:SYNTHETIC[^\]]*|ACCEPTANCE[^\]]*|TEST)\]\s*)+/i, "").trim() || (text || "");
+}
 
 export const requestProgressStages = [
   "submitted",

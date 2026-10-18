@@ -2,6 +2,9 @@ import { MemberRecurringScheduleList } from "../MemberRecurringScheduleList";
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
+  memberFacingText,
+  memberStageText,
+  requestIsDone,
   type MemberRequestRow,
   RequestSourceSummary,
   requestProgressIndex,
@@ -16,7 +19,39 @@ import { depositNote, useMemberPlan } from "./membershipApi";
 /** Stages before payment: the member can still cancel. */
 const CANCELLABLE = ["submitted", "under_review", "sourcing", "needs_member_input", "options_sent"];
 
-export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
+export type RequestNeed = { id: string; title: string; kind: "answer" | "choose" };
+export type RequestSummary = { active: number; completed: number; needs: RequestNeed[] };
+
+export function MemberRequestsPanel({
+  accessToken,
+  compact = false,
+  view,
+  query = "",
+  showCreate = true,
+  showRecurring = true,
+  onCreated,
+  openId: controlledOpenId,
+  onOpenChange,
+  onSummary,
+  onViewChat,
+}: {
+  accessToken: string;
+  /** Orders & requests: short cards that open into the full detail. The older pages keep everything open. */
+  compact?: boolean;
+  /** Which requests to list: in progress, completed, or none (summary only). Omitted: all. */
+  view?: "active" | "completed" | "none";
+  query?: string;
+  showCreate?: boolean;
+  showRecurring?: boolean;
+  onCreated?: () => void;
+  openId?: string;
+  onOpenChange?: (id: string) => void;
+  onSummary?: (summary: RequestSummary) => void;
+  onViewChat?: (conversationId: string) => void;
+}) {
+  const [ownOpenId, setOwnOpenId] = useState("");
+  const openId = controlledOpenId ?? ownOpenId;
+  const setOpenId = (id: string) => (onOpenChange ? onOpenChange(id) : setOwnOpenId(id));
   const [requests, setRequests] = useState<MemberRequestRow[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -76,6 +111,35 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!onSummary) return;
+    const stageOf = (request: MemberRequestRow) => request.events.at(-1)?.stage || "submitted";
+    const needs: RequestNeed[] = [];
+    for (const request of requests) {
+      const stage = stageOf(request);
+      const title = memberFacingText(request.request_title);
+      if (stage === "needs_member_input") needs.push({ id: request.id, title, kind: "answer" });
+      else if (
+        stage === "options_sent" &&
+        request.sourcing_options?.length &&
+        !request.sourcing_options.some((option) => option.status === "selected")
+      )
+        needs.push({ id: request.id, title, kind: "choose" });
+    }
+    onSummary({
+      active: requests.filter((request) => !requestIsDone(stageOf(request))).length,
+      completed: requests.filter((request) => requestIsDone(stageOf(request))).length,
+      needs,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests]);
+  useEffect(() => {
+    // Opening a request from "Needs you" scrolls it into view.
+    if (!openId) return;
+    window.requestAnimationFrame(() =>
+      document.getElementById(`request-${openId}`)?.scrollIntoView?.({ behavior: "smooth", block: "start" }),
+    );
+  }, [openId]);
   useEffect(() => {
     void loadProductChoices();
   }, [loadProductChoices]);
@@ -181,6 +245,7 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
         });
       }
       setTitle("");
+      onCreated?.();
       setDescription("");
       setBudget("");
       setSourceUrl("");
@@ -253,10 +318,27 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
       setAnswerBusy("");
     }
   }
+  const needle = query.trim().toLowerCase();
+  const visibleRequests = requests.filter((request) => {
+    const stage = request.events.at(-1)?.stage || "submitted";
+    if (view === "active" && requestIsDone(stage)) return false;
+    if (view === "completed" && !requestIsDone(stage)) return false;
+    if (needle && !`${request.request_title} ${request.request_description || ""}`.toLowerCase().includes(needle)) return false;
+    return true;
+  });
   return (
-    <section className="member-requests-panel" id="requests" aria-label="Purchasing and sourcing requests">
-      <h2>Your requests</h2>
-      <p>Track sourcing, warehouse receipt, shipping, and delivery progress. FayFort staff update each milestone.</p>
+    <section
+      className={compact ? "member-requests-panel is-compact" : "member-requests-panel"}
+      id="requests"
+      aria-label="Purchasing and sourcing requests"
+    >
+      {!compact && (
+        <>
+          <h2>Your requests</h2>
+          <p>Track sourcing, warehouse receipt, shipping, and delivery progress. FayFort staff update each milestone.</p>
+        </>
+      )}
+      {showCreate && (
       <form className="member-product-filters member-request-create" onSubmit={submit}>
         <label>
           What are you looking for?
@@ -540,6 +622,7 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
           {busy ? "Saving…" : recurring ? "Create recurring request schedule" : "Submit request"}
         </button>
       </form>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -550,17 +633,68 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
           {notice}
         </p>
       )}
-      <MemberRecurringScheduleList accessToken={accessToken} />
-      {requests.length === 0 ? (
-        <p className="empty-copy">No requests yet.</p>
+      {showRecurring && <MemberRecurringScheduleList accessToken={accessToken} />}
+      {view === "none" ? null : visibleRequests.length === 0 ? (
+        <p className="empty-copy">
+          {query.trim()
+            ? "Nothing matches that search."
+            : view === "completed"
+              ? "Nothing completed yet. Delivered and cancelled requests will appear here."
+              : view === "active"
+                ? "No requests in progress. Start one with New request."
+                : "No requests yet."}
+        </p>
       ) : (
         <div className="member-request-list">
-          {requests.map((request) => {
+          {visibleRequests.map((request) => {
             const latest = request.events.at(-1);
             const stage = latest?.stage || "submitted";
             const progress = requestProgressIndex(stage);
+            const words = memberStageText[stage] || { status: requestStageLabels[stage] || stage, next: "", tone: "progress" };
+            const open = !compact || openId === request.id;
+            const title = memberFacingText(request.request_title);
             return (
-              <article key={request.id} id={`request-${request.id}`} className="member-request-card">
+              <article
+                key={request.id}
+                id={`request-${request.id}`}
+                className={compact ? `member-request-card is-compact${open ? " is-open" : ""} tone-${words.tone}` : "member-request-card"}
+              >
+                {compact && (
+                  <button
+                    type="button"
+                    className="member-request-summary"
+                    aria-expanded={open}
+                    aria-controls={`request-detail-${request.id}`}
+                    onClick={() => setOpenId(open ? "" : request.id)}
+                  >
+                    <span className="member-request-summary-main">
+                      <small className="member-request-kind">Sourcing request</small>
+                      <strong>{title}</strong>
+                      <span className={`member-request-pill tone-${words.tone}`}>{words.status}</span>
+                      <span className="member-request-next">{words.next}</span>
+                    </span>
+                    <span className="member-request-summary-side">
+                      {stage !== "cancelled" && (
+                        <span className="member-request-dots" aria-label={`Step ${Math.min(progress + 1, 8)} of 8`}>
+                          {requestProgressStages.map((step, index) => (
+                            <i key={step} className={index < progress || stage === "delivered" ? "done" : index === progress ? "now" : ""} />
+                          ))}
+                        </span>
+                      )}
+                      {request.eta_at && !requestIsDone(stage) && (
+                        <small>
+                          Arrives about{" "}
+                          {new Date(request.eta_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </small>
+                      )}
+                      <span className="member-request-chevron" aria-hidden="true">
+                        {open ? "Hide details" : "Details"}
+                      </span>
+                    </span>
+                  </button>
+                )}
+                {open && (
+                <div className="member-request-detail" id={`request-detail-${request.id}`}>
                 <div className="member-request-current">
                   <small>Current status</small>
                   <strong>{requestStageLabels[stage] || stage.replaceAll("_", " ")}</strong>
@@ -676,7 +810,18 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
                     Payment is confirmed. The next request milestone will show warehouse receipt.
                   </p>
                 )}
-                <h3>{request.request_title}</h3>
+                <h3>{compact ? title : request.request_title}</h3>
+                {request.conversation_id && (
+                  <p className="member-request-chat-link">
+                    {onViewChat ? (
+                      <button type="button" className="link-button" onClick={() => onViewChat(request.conversation_id!)}>
+                        View chat
+                      </button>
+                    ) : (
+                      <a href={`/member/chat?conversation=${encodeURIComponent(request.conversation_id)}`}>View chat</a>
+                    )}
+                  </p>
+                )}
                 <RequestSourceSummary
                   sourceType={request.source_type}
                   sourceUrl={request.source_url}
@@ -771,6 +916,8 @@ export function MemberRequestsPanel({ accessToken }: { accessToken: string }) {
                     </li>
                   ))}
                 </ol>
+                </div>
+                )}
               </article>
             );
           })}

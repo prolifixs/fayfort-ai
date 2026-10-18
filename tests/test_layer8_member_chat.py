@@ -30,14 +30,61 @@ class Layer8MemberChatTests(unittest.TestCase):
     @patch("app.accounts.member_chat.supabase.table")
     def test_conversation_list_is_filtered_to_verified_member(self, table):
         query = MagicMock()
-        query.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = [
+        listed = query.select.return_value.eq.return_value
+        listed.is_.return_value.order.return_value.limit.return_value.execute.return_value.data = [
             {"id": CONVERSATION, "title": "Shoes", "retention_hold": False}
         ]
+        listed.not_.is_.return_value.execute.return_value = MagicMock(count=2, data=[{}, {}])
         table.return_value = query
         response = self.client.get("/members/conversations", headers={"Authorization": "Bearer member-token"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["conversations"][0]["id"], CONVERSATION)
-        query.select.return_value.eq.assert_called_once_with("member_id", MEMBER)
+        self.assertEqual(response.json()["archived_count"], 2)
+        # The chat list leaves archived chats out.
+        listed.is_.assert_called_once_with("archived_at", "null")
+        query.select.return_value.eq.assert_called_with("member_id", MEMBER)
+
+    @patch("app.accounts.member_chat.supabase.table")
+    def test_archive_lists_only_archived_chats(self, table):
+        query = MagicMock()
+        listed = query.select.return_value.eq.return_value
+        listed.not_.is_.return_value.order.return_value.limit.return_value.execute.return_value.data = [
+            {"id": CONVERSATION, "title": "Shoes", "retention_hold": True, "archived_at": "2026-10-18T00:00:00Z"}
+        ]
+        table.return_value = query
+        response = self.client.get("/members/conversations?archived=true", headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.json()["conversations"][0]["archived_at"], "2026-10-18T00:00:00Z")
+        listed.not_.is_.assert_called_with("archived_at", "null")
+        listed.is_.assert_not_called()
+
+    @patch("app.accounts.member_chat.supabase.table")
+    def test_member_archives_and_restores_a_chat_kept_with_a_request(self, table):
+        query = MagicMock()
+        query.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+            "id": CONVERSATION, "retention_hold": True, "linked_request_id": "00000000-0000-0000-0000-000000000040", "archived_at": None,
+        }
+        query.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"archived_at": "2026-10-18T00:00:00Z"}]
+        table.return_value = query
+        response = self.client.post(f"/members/conversations/{CONVERSATION}/archive", headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 200)
+        values = query.update.call_args.args[0]
+        self.assertEqual(values["archived_by"], "member")
+        self.assertTrue(values["archived_at"])
+        self.client.post(f"/members/conversations/{CONVERSATION}/unarchive", headers={"Authorization": "Bearer member-token"})
+        restored = query.update.call_args.args[0]
+        self.assertEqual((restored["archived_at"], restored["archived_by"]), (None, None))
+        self.assertTrue(restored["unarchived_at"])
+
+    @patch("app.accounts.member_chat.supabase.table")
+    def test_ordinary_chats_are_deleted_not_archived(self, table):
+        query = MagicMock()
+        query.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+            "id": CONVERSATION, "retention_hold": False, "linked_request_id": None, "archived_at": None,
+        }
+        table.return_value = query
+        response = self.client.post(f"/members/conversations/{CONVERSATION}/archive", headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 409)
+        query.update.assert_not_called()
 
     @patch("app.accounts.member_chat.supabase.table")
     def test_cross_member_message_read_is_not_found(self, table):
@@ -135,3 +182,65 @@ class MemberChatRetentionTests(unittest.TestCase):
             prune_expired_member_conversations(now=datetime(2026, 10, 10))
         rpc.assert_not_called()
 
+
+
+class ProductReferenceTests(unittest.TestCase):
+    """"Ask about this product": the message carries the product, the AI is told about it, the history returns it."""
+
+    def setUp(self):
+        from tests.test_commerce import Db
+        product_id = "00000000-0000-0000-0000-0000000000aa"
+        self.product_id = product_id
+        self.db = Db({
+            "member_conversations": [{"id": CONVERSATION, "member_id": MEMBER, "retention_hold": False, "title": "New chat"}],
+            "member_messages": [],
+            "directory_products": [{"id": product_id, "name": "Body wave wig", "category_ref": "hair-wigs", "active": True,
+                                    "description": "22 inch, natural black", "availability_status": "available"}],
+        })
+        self.prompts = []
+
+        def model(*, member_id, messages):
+            self.prompts.append(messages)
+            return "Yes, it comes in natural black.", 0, 0, "m", "p"
+
+        for patcher in (
+            patch("app.accounts.member_chat.supabase", self.db),
+            patch("app.accounts.member_chat._invoke_member_model", side_effect=model),
+            patch("app.accounts.member_chat._fayfort_knowledge", return_value=("", "")),
+            patch("app.accounts.member_chat._find_it_for_message", return_value=None),
+            patch("app.accounts.member_chat._with_commerce_cards",
+                  side_effect=lambda rows: [{**row, "price": 120, "currency": "USD", "in_stock": True} for row in rows]),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        app = FastAPI()
+        app.include_router(create_member_chat_router(lambda authorization: MEMBER))
+        self.client = TestClient(app)
+
+    def test_message_carries_the_product_and_the_ai_knows_it(self):
+        response = self.client.post(f"/members/conversations/{CONVERSATION}/messages",
+                                    json={"content": "Does this come in black?", "product_id": self.product_id},
+                                    headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["member_message"]["product_ref"], self.product_id)
+        self.assertEqual(body["referenced_product"]["name"], "Body wave wig")
+        system = self.prompts[0][0]["content"]
+        self.assertIn("The member is looking at this product", system)
+        self.assertIn("Name: Body wave wig", system)
+        self.assertIn("Price: 120 USD", system)
+        self.assertIn("22 inch, natural black", system)
+
+    def test_without_a_product_nothing_changes(self):
+        self.client.post(f"/members/conversations/{CONVERSATION}/messages", json={"content": "Hello"},
+                         headers={"Authorization": "Bearer member-token"})
+        self.assertNotIn("product_ref", self.db.rows["member_messages"][0])
+        self.assertNotIn("The member is looking at this product", self.prompts[0][0]["content"])
+
+    def test_an_inactive_or_unknown_product_is_ignored(self):
+        self.db.rows["directory_products"][0]["active"] = False
+        response = self.client.post(f"/members/conversations/{CONVERSATION}/messages",
+                                    json={"content": "Is it available?", "product_id": self.product_id},
+                                    headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.json()["referenced_product"])

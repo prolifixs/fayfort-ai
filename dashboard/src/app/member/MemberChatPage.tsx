@@ -29,6 +29,8 @@ import { SavedPanel } from "./ShopPanels";
 import { AdSlot, AdsProvider } from "./ads";
 import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
 import { claimPendingSiteChat } from "./siteChatCarryOver";
+import { CHAT_TOOLS, chatToolLabelsVisible, type ChatToolKey } from "./chatTools";
+import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, type ProductRef } from "./productChat";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
@@ -60,6 +62,8 @@ export function MemberChatPage() {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [completion, setCompletion] = useState<ProfileCompletion | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
+  // Tool names under the icons for a member's first few visits.
+  const [toolLabels] = useState(() => chatToolLabelsVisible());
   const [accountDialog, setAccountDialog] = useState<MemberAccountDialogKind | null>(null);
   const [requestBudget, setRequestBudget] = useState("");
   const { plan: memberPlan, reload: reloadPlan } = useMemberPlan(verified ? token : null);
@@ -80,6 +84,17 @@ export function MemberChatPage() {
   useDismiss(infoOpen, () => setInfoOpen(false), [infoRef]);
   useDismiss(sidebarOpen && !isDesktop, () => setSidebarOpen(false), [sidebarRef]);
   const [chats, setChats] = useState<MemberChat[]>([]);
+  // Archive: finished chats kept as the record, out of the main list.
+  const [archivedCount, setArchivedCount] = useState(0);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archivedChats, setArchivedChats] = useState<MemberChat[] | null>(null);
+  const [archiveSeen, setArchiveSeen] = useState(() => {
+    try {
+      return Number(window.localStorage.getItem("ff_archive_seen_count") || 0);
+    } catch {
+      return 0;
+    }
+  });
   const [activeChat, setActiveChat] = useState<MemberChat | null>(null);
   const [messages, setMessages] = useState<MemberChatMessage[]>([]);
   const [products, setProducts] = useState<MemberCatalogProduct[]>([]);
@@ -96,6 +111,11 @@ export function MemberChatPage() {
   const [home, setHome] = useState<ShopHome | null>(null);
   const [cart, setCart] = useState<Cart | null>(null);
   const [productId, setProductId] = useState(() => new URLSearchParams(window.location.search).get("product") || "");
+  // "Ask about this product": the product open on screen, the one attached to the message box, and the phone sheet.
+  const [viewingProduct, setViewingProduct] = useState<ProductRef | null>(null);
+  const [productRef, setProductRef] = useState<ProductRef | null>(null);
+  const [productSheetOpen, setProductSheetOpen] = useState(false);
+  const [refProducts, setRefProducts] = useState<Record<string, ProductRef>>({});
   const [shopBusyId, setShopBusyId] = useState("");
   const [busy, setBusy] = useState(false);
   // Keep the newest message in view, like a messaging app.
@@ -229,8 +249,17 @@ export function MemberChatPage() {
     }
   }
   const loadChats = useCallback(async (accessToken: string) => {
-    const result = await apiRequest<{ conversations: MemberChat[] }>("/members/conversations", accessToken);
+    const result = await apiRequest<{ conversations: MemberChat[]; archived_count?: number | null }>(
+      "/members/conversations",
+      accessToken,
+    );
     setChats(result.conversations || []);
+    setArchivedCount(Number(result.archived_count) || 0);
+    return result.conversations || [];
+  }, []);
+  const loadArchive = useCallback(async (accessToken: string) => {
+    const result = await apiRequest<{ conversations: MemberChat[] }>("/members/conversations?archived=true", accessToken);
+    setArchivedChats(result.conversations || []);
     return result.conversations || [];
   }, []);
   const loadRequests = useCallback(async (accessToken: string) => {
@@ -278,6 +307,23 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  function rememberRefProducts(items: MemberCatalogProduct[]) {
+    if (!items.length) return;
+    setRefProducts((current) => {
+      const next = { ...current };
+      for (const item of items) {
+        const card = item as MemberCatalogProduct & { price?: number | null; sale_price?: number | null; currency?: string | null };
+        next[item.id] = {
+          id: item.id,
+          name: item.name,
+          price: card.sale_price ?? card.price ?? null,
+          currency: card.currency ?? "USD",
+          image: item.media_type === "image" ? item.media_url || null : null,
+        };
+      }
+      return next;
+    });
+  }
   const openChat = useCallback(async (accessToken: string, chat: MemberChat) => {
     setActiveChat(chat);
     setProducts([]);
@@ -288,14 +334,25 @@ export function MemberChatPage() {
     setMessages(result.messages || []);
     seenMessageIds.current = new Set((result.messages || []).map((message) => message.id));
     setProducts(result.products || []);
+    rememberRefProducts(result.products || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const openRequestedChat = useCallback(
     async (accessToken: string, rows: MemberChat[], carriedId: string | null = null) => {
       const requestedId = carriedId || new URLSearchParams(window.location.search).get("conversation");
-      const selected = rows.find((chat) => chat.id === requestedId) || rows[0];
+      let selected = rows.find((chat) => chat.id === requestedId);
+      if (!selected && requestedId) {
+        // "View chat" on a finished request: its chat may be in the Archive.
+        try {
+          selected = (await loadArchive(accessToken)).find((chat) => chat.id === requestedId);
+        } catch {
+          /* fall back to the newest chat */
+        }
+      }
+      selected = selected || rows[0];
       if (selected) await openChat(accessToken, selected);
     },
-    [openChat],
+    [openChat, loadArchive],
   );
   useEffect(() => {
     if (!token || !activeChat) return;
@@ -445,6 +502,101 @@ export function MemberChatPage() {
       setLoading(false);
     }
   }
+  const askTip = useProductAskTip(activePanel === "product" && !!productId);
+  /** A product page opened: on desktop the product is attached to the message box beside it. */
+  function productLoaded(product: ProductRef) {
+    setViewingProduct(product);
+    if (isDesktop) setProductRef(product);
+  }
+  /** "Ask in chat" / the round Ask button. */
+  function askAboutProduct() {
+    const product = viewingProduct;
+    if (!product) return;
+    askTip.dismiss();
+    if (isDesktop) {
+      setProductRef(product);
+      setChatExpanded(true);
+      // A read-only chat (kept with a request) can't take a new question: start a fresh one.
+      if (!activeChat || activeChat.retention_hold || activeChat.archived_at) void startFreshChat();
+      window.setTimeout(() => composerRef.current?.focus(), 80);
+    } else setProductSheetOpen(true);
+  }
+  /** Picking where to ask: an existing chat, or a new one. The product stays attached. */
+  async function sendProductTo(chat: MemberChat | "new") {
+    const product = viewingProduct || productRef;
+    setProductSheetOpen(false);
+    if (product) setProductRef(product);
+    if (!isDesktop) selectMemberPanel("chat");
+    else setChatExpanded(true);
+    if (chat === "new") await startFreshChat();
+    else await chooseChat(chat);
+    window.setTimeout(() => composerRef.current?.focus(), 80);
+  }
+  /** Always a fresh chat (reuses the current one only when it has no messages yet). */
+  async function startFreshChat() {
+    if (!token) return;
+    if (activeChat && messages.length === 0 && !activeChat.retention_hold && !activeChat.archived_at) return;
+    try {
+      const result = await apiRequest<{ conversation: MemberChat }>("/members/conversations", token, { method: "POST" });
+      setChats((current) => [result.conversation, ...current]);
+      setActiveChat(result.conversation);
+      setMessages([]);
+      setProducts([]);
+      setNotice("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "A new chat could not be started.");
+    }
+  }
+  /** "View chat" on a request: open its chat, from the Archive if it's there. */
+  async function viewChat(conversationId: string) {
+    if (!token) return;
+    let chat = chats.find((item) => item.id === conversationId);
+    if (!chat) {
+      try {
+        chat = (await loadArchive(token)).find((item) => item.id === conversationId);
+      } catch {
+        chat = undefined;
+      }
+    }
+    if (!chat) {
+      setError("That chat could not be found.");
+      return;
+    }
+    if (chat.archived_at) setArchiveOpen(true);
+    await chooseChat(chat);
+  }
+  function openArchive(open: boolean) {
+    setArchiveOpen(open);
+    setChatMenuId("");
+    if (open) {
+      if (token) void loadArchive(token).catch(() => setError("Your archive could not be loaded."));
+      setArchiveSeen(archivedCount);
+      try {
+        window.localStorage.setItem("ff_archive_seen_count", String(archivedCount));
+      } catch {
+        /* the notice simply shows again */
+      }
+    }
+  }
+  async function setChatArchived(chat: MemberChat, archive: boolean) {
+    if (!token) return;
+    setChatMenuId("");
+    setError("");
+    try {
+      const result = await apiRequest<{ archived_at: string | null }>(
+        `/members/conversations/${chat.id}/${archive ? "archive" : "unarchive"}`,
+        token,
+        { method: "POST" },
+      );
+      const updated = { ...chat, archived_at: result.archived_at, archived_by: archive ? ("member" as const) : null };
+      if (activeChat?.id === chat.id) setActiveChat(updated);
+      await loadChats(token);
+      if (archiveOpen || !archive) await loadArchive(token);
+      setNotice(archive ? "Chat moved to Archive. It's kept as your record." : "Chat moved back to your chats.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "That didn't work. Try again.");
+    }
+  }
   async function deleteChat(chat: MemberChat) {
     if (!token || deletingChatId) return;
     if (chat.retention_hold || chat.linked_request_id) {
@@ -590,10 +742,13 @@ export function MemberChatPage() {
         products: MemberCatalogProduct[];
         human_active?: boolean;
         find_it?: FindItResult | null;
+        referenced_product?: (MemberCatalogProduct & { price?: number | null; currency?: string | null }) | null;
       }>(`/members/conversations/${activeChat.id}/messages`, token, {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(productRef ? { content, product_id: productRef.id } : { content }),
       });
+      if (productRef) setRefProducts((current) => ({ ...current, [productRef.id]: productRef }));
+      if (result.referenced_product) rememberRefProducts([result.referenced_product]);
       const reply = result.assistant_message;
       seenMessageIds.current = new Set([...seenMessageIds.current, result.member_message.id, ...(reply ? [reply.id] : [])]);
       const assistant = reply && result.find_it ? { ...reply, find_it: result.find_it } : reply;
@@ -646,16 +801,27 @@ export function MemberChatPage() {
   }
   /** On phones the menu is a drawer: open it for menu steps, close it for the top bar. */
   function prepareTourStep(step: TourStep) {
+    const inChat = step.target.startsWith("tool-") || step.target === "chat-tools" || step.target === "product-ask";
+    // The chat tools live under the message box: show the chat for those steps.
+    if (inChat && activePanel !== "chat" && !isDesktop) selectMemberPanel("chat");
     if (isDesktop) return;
-    setSidebarOpen(!["notifications", "cart"].includes(step.target));
+    setSidebarOpen(!inChat && !["notifications", "cart"].includes(step.target));
   }
   function openAccountDialog(kind: MemberAccountDialogKind) {
     setAccountOpen(false);
     setSidebarOpen(false);
+    setSettingsFocus(undefined);
     setAccountDialog(kind);
   }
   const closeAccountDialog = useCallback(() => setAccountDialog(null), []);
-  const openPlans = useCallback(() => setAccountDialog("tier"), []);
+  // Plans, billing and plan perks live in Settings → Plan.
+  const [settingsFocus, setSettingsFocus] = useState<"plan" | undefined>(undefined);
+  const openPlans = useCallback(() => {
+    setAccountOpen(false);
+    setSidebarOpen(false);
+    setSettingsFocus("plan");
+    setAccountDialog("settings");
+  }, []);
   // Back from Stripe Checkout: thank the member and show their plan once the webhook has updated it.
   useEffect(() => {
     if (!verified || !token) return;
@@ -674,7 +840,7 @@ export function MemberChatPage() {
         })
         .catch(() => undefined);
       reloadPlan();
-      setAccountDialog("tier");
+      openPlans();
     }, 4000);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -774,61 +940,102 @@ export function MemberChatPage() {
             </button>
           ))}
         </nav>
-        <section className="mapp-history" aria-label="Your chats" data-tour="chats">
-          <h2>Chats</h2>
-          {chats.length === 0 ? (
-            <p className="mapp-history-empty">Your chats will appear here.</p>
+        <section className="mapp-history" aria-label={archiveOpen ? "Archived chats" : "Your chats"} data-tour="chats">
+          {archiveOpen ? (
+            <div className="mapp-history-head">
+              <button type="button" className="link-button" onClick={() => openArchive(false)}>
+                ← Chats
+              </button>
+              <h2>Archive</h2>
+            </div>
           ) : (
-            chats.map((chat) => (
-              <div
-                className={activeChat?.id === chat.id && activePanel === "chat" ? "member-chat-row active" : "member-chat-row"}
-                key={chat.id}
-              >
-                <button className="member-chat-list-item" onClick={() => void chooseChat(chat)}>
-                  <strong>{chat.title}</strong>
-                  <small>
-                    {chat.retention_hold
-                      ? "Request linked · retained"
-                      : chat.support_status
-                        ? `Staff support · ${chat.support_status.replaceAll("_", " ")}`
-                        : "Member chat"}
-                  </small>
-                </button>
-                <div className="member-chat-options" ref={chatMenuId === chat.id ? chatMenuRef : undefined}>
-                  <button
-                    type="button"
-                    className="member-chat-options-trigger"
-                    aria-label={"Chat options for " + chat.title}
-                    aria-haspopup="menu"
-                    aria-expanded={chatMenuId === chat.id}
-                    disabled={deletingChatId === chat.id}
-                    onClick={() => setChatMenuId((current) => (current === chat.id ? "" : chat.id))}
-                  >
-                    <svg aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M6 12h.01M12 12h.01M18 12h.01" />
-                    </svg>
+            <h2>Chats</h2>
+          )}
+          {archiveOpen && (
+            <p className="mapp-history-note">Finished chats are kept here as your record. Nothing is deleted.</p>
+          )}
+          {(archiveOpen ? archivedChats || [] : chats).length === 0 ? (
+            <p className="mapp-history-empty">
+              {archiveOpen ? (archivedChats ? "Nothing archived yet." : "Loading…") : "Your chats will appear here."}
+            </p>
+          ) : (
+            (archiveOpen ? archivedChats || [] : chats).map((chat) => {
+              const kept = !!(chat.retention_hold || chat.linked_request_id);
+              return (
+                <div
+                  className={activeChat?.id === chat.id && activePanel === "chat" ? "member-chat-row active" : "member-chat-row"}
+                  key={chat.id}
+                >
+                  <button className="member-chat-list-item" onClick={() => void chooseChat(chat)}>
+                    <strong>{chat.title}</strong>
+                    <small>
+                      {chat.archived_at
+                        ? `Archived ${new Date(chat.archived_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                        : kept
+                          ? "Kept with a request"
+                          : chat.support_status
+                            ? `Staff support · ${chat.support_status.replaceAll("_", " ")}`
+                            : "Member chat"}
+                    </small>
                   </button>
-                  {chatMenuId === chat.id && (
-                    <div className="member-chat-options-menu" role="menu">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={!!chat.retention_hold || !!chat.linked_request_id || deletingChatId === chat.id}
-                        title={
-                          chat.retention_hold || chat.linked_request_id
-                            ? "Chats linked to a sourcing request are retained"
-                            : undefined
-                        }
-                        onClick={() => void deleteChat(chat)}
-                      >
-                        {deletingChatId === chat.id ? "Deleting…" : "Delete chat"}
-                      </button>
-                      {(chat.retention_hold || chat.linked_request_id) && <small>Retained with sourcing request</small>}
-                    </div>
-                  )}
+                  <div className="member-chat-options" ref={chatMenuId === chat.id ? chatMenuRef : undefined}>
+                    <button
+                      type="button"
+                      className="member-chat-options-trigger"
+                      aria-label={"Chat options for " + chat.title}
+                      aria-haspopup="menu"
+                      aria-expanded={chatMenuId === chat.id}
+                      disabled={deletingChatId === chat.id}
+                      onClick={() => setChatMenuId((current) => (current === chat.id ? "" : chat.id))}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M6 12h.01M12 12h.01M18 12h.01" />
+                      </svg>
+                    </button>
+                    {chatMenuId === chat.id && (
+                      <div className="member-chat-options-menu" role="menu">
+                        {chat.archived_at ? (
+                          <button type="button" role="menuitem" onClick={() => void setChatArchived(chat, false)}>
+                            Move back to chats
+                          </button>
+                        ) : kept ? (
+                          <>
+                            <button type="button" role="menuitem" onClick={() => void setChatArchived(chat, true)}>
+                              Archive chat
+                            </button>
+                            <small>Kept as the record for its request, so it can be archived but not deleted.</small>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={deletingChatId === chat.id}
+                            onClick={() => void deleteChat(chat)}
+                          >
+                            {deletingChatId === chat.id ? "Deleting…" : "Delete chat"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
+          )}
+          {!archiveOpen && archivedCount > archiveSeen && (
+            <p className="mapp-archive-notice" role="status">
+              {archivedCount - archiveSeen === 1
+                ? "1 finished chat moved to Archive."
+                : `${archivedCount - archiveSeen} finished chats moved to Archive.`}
+            </p>
+          )}
+          {!archiveOpen && archivedCount > 0 && (
+            <button type="button" className="mapp-archive-link" data-tour="archive" onClick={() => openArchive(true)}>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 7h16v3H4zM5.5 10v8.5h13V10M10 14h4" />
+              </svg>
+              Archive <span>{archivedCount}</span>
+            </button>
           )}
         </section>
         {isDesktop && <AdSlot placement="sidebar" />}
@@ -863,6 +1070,16 @@ export function MemberChatPage() {
               </button>
               <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
                 Settings
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  setTourOpen(true);
+                }}
+              >
+                Show me around
               </button>
               <button
                 type="button"
@@ -909,6 +1126,15 @@ export function MemberChatPage() {
         </div>
       </aside>
       {!isDesktop && sidebarOpen && <div className="mapp-scrim" aria-hidden="true" />}
+      {productSheetOpen && (viewingProduct || productRef) && (
+        <ProductChatSheet
+          product={(viewingProduct || productRef)!}
+          chats={chats}
+          onPick={(chat) => void sendProductTo(chat)}
+          onNew={() => void sendProductTo("new")}
+          onClose={() => setProductSheetOpen(false)}
+        />
+      )}
       {tourOpen && <MemberTour steps={MEMBER_TOUR} onFinish={finishTour} beforeStep={prepareTourStep} />}
       <div className="mapp-main">
         <header className="mapp-topbar">
@@ -1001,11 +1227,13 @@ export function MemberChatPage() {
           accessToken={verified ? token : null}
           plan={memberPlan}
           onPlanChange={reloadPlan}
+          onOpenPlan={openPlans}
           settings={
             <MemberSettingsPanel
               onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
-              onOpenPlans={() => setAccountDialog("tier")}
               onCompletionChange={setCompletion}
+              onPlanChange={reloadPlan}
+              focus={settingsFocus}
             />
           }
         />
@@ -1020,7 +1248,9 @@ export function MemberChatPage() {
                   busyId={shopBusyId}
                 />
               )}
-              {activePanel === "requests" && <OrdersPanel accessToken={token} onAddressChange={refreshCompletion} />}
+              {activePanel === "requests" && (
+                <OrdersPanel accessToken={token} onAddressChange={refreshCompletion} onViewChat={(id) => void viewChat(id)} />
+              )}
               {activePanel === "directory" && <DirectoryPanel accessToken={token} onClose={() => selectMemberPanel("chat")} />}
               {activePanel === "saved" && <SavedPanel accessToken={token} onOpen={openProduct} onBrowse={() => selectMemberPanel("catalog")} />}
               {activePanel === "product" && productId && (
@@ -1030,6 +1260,10 @@ export function MemberChatPage() {
                   onOpen={openProduct}
                   onCartChange={setCart}
                   onClose={() => selectMemberPanel("chat")}
+                  onLoaded={productLoaded}
+                  onAsk={askAboutProduct}
+                  askTip={askTip.show}
+                  onDismissTip={askTip.dismiss}
                 />
               )}
               {showChat && (
@@ -1046,6 +1280,18 @@ export function MemberChatPage() {
                         <path d="M6 12h12" />
                       </svg>
                     </button>
+                  )}
+                  {activeChat?.archived_at && (
+                    <div className="member-chat-archived-banner" role="note">
+                      <span>
+                        Archived{" "}
+                        {new Date(activeChat.archived_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        {" · "}kept as your record
+                      </span>
+                      <button type="button" className="link-button" onClick={() => void setChatArchived(activeChat, false)}>
+                        Move back to chats
+                      </button>
+                    </div>
                   )}
                   {activeChat?.retention_hold && (
                     <div className="member-chat-request-progress-trigger">
@@ -1102,6 +1348,12 @@ export function MemberChatPage() {
                                   ? "FayFort human support"
                                   : "FayFort assistant"}
                             </small>
+                            {message.product_ref && refProducts[message.product_ref] && (
+                              <ProductRefCard
+                                product={refProducts[message.product_ref]}
+                                onOpen={() => openProduct({ id: message.product_ref! })}
+                              />
+                            )}
                             <p>{message.content}</p>
                             {message.find_it && (
                               <FindItBlock
@@ -1484,6 +1736,17 @@ export function MemberChatPage() {
                           );
                         })()}
                       {notice && <p role="status">{notice}</p>}
+                      {productRef && (
+                        <ProductAttachment
+                          product={productRef}
+                          activeChat={activeChat}
+                          chats={chats}
+                          showSendTo={isDesktop}
+                          onPickChat={(chat) => void sendProductTo(chat)}
+                          onNewChat={() => void sendProductTo("new")}
+                          onRemove={() => setProductRef(null)}
+                        />
+                      )}
                       <form className="member-chat-composer" onSubmit={send}>
                         <label className="sr-only" htmlFor="member-chat-message">
                           Message FayFort
@@ -1506,58 +1769,16 @@ export function MemberChatPage() {
                         />
                         <div className="member-chat-composer-footer">
                           {!activeChat.retention_hold && (
-                            <div className="member-chat-tools" aria-label="Chat actions">
-                              <button
-                                type="button"
-                                className="member-chat-tool-button"
-                                title="Paste a link"
-                                aria-label="Paste a link"
-                                onClick={() => void pasteLink()}
-                              >
-                                <svg aria-hidden="true" viewBox="0 0 24 24">
-                                  <path d="M9 4h6v3H9z" />
-                                  <path d="M8 5.5H6.5A1.5 1.5 0 0 0 5 7v12.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V7a1.5 1.5 0 0 0-1.5-1.5H16" />
-                                  <path d="M10.5 15.5 13.5 12.5M9.5 13l-.8.8a2 2 0 0 0 2.8 2.8l.8-.8m2.2-2.6.8-.8a2 2 0 0 0-2.8-2.8l-.8.8" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="member-chat-tool-button"
-                                title="Ask a person to review a photo"
-                                aria-label="Ask a person to review a photo"
-                                onClick={() => setPhotoReviewOpen(true)}
-                              >
-                                <svg aria-hidden="true" viewBox="0 0 24 24">
-                                  <rect x="3" y="4" width="18" height="16" rx="3" />
-                                  <circle cx="8.5" cy="9" r="1.5" />
-                                  <path d="m4 17 5-5 3 3 3-4 5 6" />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="member-chat-tool-button"
-                                title="Create a sourcing request"
-                                aria-label="Create a sourcing request"
-                                onClick={() => beginRequest()}
-                              >
-                                <svg aria-hidden="true" viewBox="0 0 24 24">
-                                  <path d="M5 7.5h14l1 13H4l1-13Z" />
-                                  <path d="M9 8V6a3 3 0 0 1 6 0v2M12 12v4m-2-2h4" />
-                                </svg>
-                              </button>
+                            <div
+                              className={toolLabels ? "member-chat-tools with-labels" : "member-chat-tools"}
+                              aria-label="Chat actions"
+                              data-tour="chat-tools"
+                            >
+                              <ChatToolButton tool="link" onClick={() => void pasteLink()} labels={toolLabels} />
+                              <ChatToolButton tool="photo" onClick={() => setPhotoReviewOpen(true)} labels={toolLabels} />
+                              <ChatToolButton tool="request" onClick={() => beginRequest()} labels={toolLabels} />
                               {requests.length > 0 && (
-                                <button
-                                  type="button"
-                                  className="member-chat-tool-button"
-                                  title="Link an existing request"
-                                  aria-label="Link an existing request"
-                                  onClick={() => setLinkRequestOpen(true)}
-                                >
-                                  <svg aria-hidden="true" viewBox="0 0 24 24">
-                                    <path d="M10 13.5 14 9.5" />
-                                    <path d="M8 16H6a4 4 0 0 1 0-8h4m4 0h4a4 4 0 0 1 0 8h-4" />
-                                  </svg>
-                                </button>
+                                <ChatToolButton tool="attach" onClick={() => setLinkRequestOpen(true)} labels={toolLabels} />
                               )}
                             </div>
                           )}
@@ -1623,6 +1844,47 @@ export function MemberChatPage() {
       </div>
     </div>
     </AdsProvider>
+  );
+}
+
+/** One chat tool: hover (desktop) or a long press (phone) shows its name; names show underneath on the first visits. */
+function ChatToolButton({ tool, onClick, labels }: { tool: ChatToolKey; onClick: () => void; labels: boolean }) {
+  const meta = CHAT_TOOLS[tool];
+  const [peek, setPeek] = useState(false);
+  const holdTimer = useRef<number | undefined>(undefined);
+  const held = useRef(false);
+  useEffect(() => () => window.clearTimeout(holdTimer.current), []);
+  return (
+    <button
+      type="button"
+      className={peek ? "member-chat-tool-button is-peeking" : "member-chat-tool-button"}
+      title={meta.label}
+      aria-label={meta.label}
+      data-tour={`tool-${tool}`}
+      data-label={meta.label}
+      onTouchStart={() => {
+        held.current = false;
+        holdTimer.current = window.setTimeout(() => {
+          held.current = true;
+          setPeek(true);
+          window.setTimeout(() => setPeek(false), 1800);
+        }, 450);
+      }}
+      onTouchEnd={() => window.clearTimeout(holdTimer.current)}
+      onTouchMove={() => window.clearTimeout(holdTimer.current)}
+      onContextMenu={(event) => event.preventDefault()}
+      onClick={() => {
+        // A long press only shows the name; it doesn't also open the tool.
+        if (held.current) {
+          held.current = false;
+          return;
+        }
+        onClick();
+      }}
+    >
+      {meta.icon}
+      {labels && <span className="member-chat-tool-label">{meta.short}</span>}
+    </button>
   );
 }
 

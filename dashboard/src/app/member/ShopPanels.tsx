@@ -4,10 +4,11 @@ import { apiRequest } from "../../lib/api";
 import type { Cart, ProductDetail, Rail, ShopCard, TrendCard, Giveaway } from "./commerceApi";
 import { money, shopSessionId, trackIntent } from "./commerceApi";
 import { Countdown, HotRails, PriceLine, ProductTile, TrendTile } from "./ShopComponents";
-import { MemberRequestsPanel } from "./MemberRequestsPanel";
+import { MemberRequestsPanel, type RequestSummary } from "./MemberRequestsPanel";
 import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
 import { AdSlot } from "./ads";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import type { ProductRef } from "./productChat";
 
 /** Browse grid positions (0-based) after which an in-feed ad may appear. */
 const FEED_AD_AFTER = new Set([7, 23]);
@@ -19,12 +20,22 @@ export function ProductPanel({
   onOpen,
   onCartChange,
   onClose,
+  onLoaded,
+  onAsk,
+  askTip,
+  onDismissTip,
 }: {
   accessToken: string;
   productId: string;
   onOpen: (card: ShopCard) => void;
   onCartChange: (cart: Cart) => void;
   onClose: () => void;
+  /** Tells the chat which product is open, so the member can ask about it. */
+  onLoaded?: (product: ProductRef) => void;
+  /** "Ask about this": the chat sheet on phones, the message box on desktop. */
+  onAsk?: () => void;
+  askTip?: boolean;
+  onDismissTip?: () => void;
 }) {
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [variantId, setVariantId] = useState("");
@@ -44,6 +55,14 @@ export function ProductPanel({
         if (!mounted) return;
         setDetail(result);
         setVariantId(result.variants.find((variant) => variant.available)?.id || result.variants[0]?.id || "");
+        const first = result.variants.find((variant) => variant.available) || result.variants[0];
+        onLoaded?.({
+          id: result.product.id,
+          name: result.product.name,
+          price: first ? (first.sale_price ?? first.price) : result.product.price ?? null,
+          currency: result.product.currency || "USD",
+          image: result.media.find((item) => item.media_type === "image")?.url || result.product.media_url || null,
+        });
         trackIntent(accessToken, [{ event_type: "view", product_id: productId }]);
       })
       .catch((reason) => mounted && setError(reason instanceof Error ? reason.message : "This product could not be loaded."));
@@ -155,9 +174,40 @@ export function ProductPanel({
               >
                 {busy ? "Adding…" : variant && !variant.available ? "Sold out" : "Add to cart"}
               </button>
+              {onAsk && (
+                <button type="button" className="secondary-button product-ask-button" onClick={onAsk}>
+                  Ask in chat
+                </button>
+              )}
             </div>
           ) : (
-            <p className="shop-sale-note">This listing is sourced on request. Ask about it in the chat or use Source it.</p>
+            <>
+              <p className="shop-sale-note">This listing is sourced on request. Ask about it in the chat or use Source it.</p>
+              {onAsk && (
+                <button type="button" className="secondary-button product-ask-button" onClick={onAsk}>
+                  Ask in chat
+                </button>
+              )}
+            </>
+          )}
+          {onAsk && (
+            <button type="button" className="product-ask-fab" onClick={onAsk} aria-label="Ask about this product" data-tour="product-ask">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.7 8.7 0 0 1-3.4-.7L4 20l1.4-3.5A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z" />
+              </svg>
+              <span>Ask</span>
+            </button>
+          )}
+          {onAsk && askTip && (
+            <div className="product-ask-tip" role="status">
+              <p>
+                <strong>Ask about this product.</strong> Tap Ask (or use the card above the message box on a computer) and
+                choose a new chat or one you have. FayFort AI will know which product you mean.
+              </p>
+              <button type="button" className="link-button" onClick={onDismissTip}>
+                Got it
+              </button>
+            </div>
           )}
           {notice && <p role="status">{notice}</p>}
           {detail.product.description && <p className="shop-description">{detail.product.description}</p>}
@@ -365,7 +415,16 @@ function orderStatus(order: MemberOrder) {
 }
 
 /** One timeline for everything a member is waiting on: store orders, invoices to pay, items they want sourced, requests. */
-export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: string; onAddressChange?: () => void }) {
+export function OrdersPanel({
+  accessToken,
+  onAddressChange,
+  onViewChat,
+}: {
+  accessToken: string;
+  onAddressChange?: () => void;
+  /** Opens the chat kept with a request (from the Archive if it's there). */
+  onViewChat?: (conversationId: string) => void;
+}) {
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [error, setError] = useState("");
   const [paying, setPaying] = useState<MemberInvoice | null>(null);
@@ -374,6 +433,14 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
   const [notice, setNotice] = useState("");
   const [addressVersion, setAddressVersion] = useState(0);
   const book = useAddresses(accessToken, addressVersion);
+  const [tab, setTab] = useState<"active" | "completed" | "recurring">("active");
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  // Links like /member/chat?panel=requests#request-<id> open that request.
+  const [openId, setOpenId] = useState(() =>
+    window.location.hash.startsWith("#request-") ? decodeURIComponent(window.location.hash.slice("#request-".length)) : "",
+  );
+  const [summary, setSummary] = useState<RequestSummary>({ active: 0, completed: 0, needs: [] });
   const load = useCallback(() => {
     apiRequest<OrdersResponse>("/members/orders", accessToken)
       .then(setData)
@@ -410,12 +477,26 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
       setError(reason instanceof Error ? reason.message : "Your invoice could not be opened.");
     }
   }
+  const orderDone = (order: MemberOrder) => Boolean(order.cancelled_at) || order.fulfillment_status === "fulfilled";
+  const needle = query.trim().toLowerCase();
+  const matches = (order: MemberOrder) =>
+    !needle ||
+    `${order.order_name || ""} ${order.line_items.map((item) => item.title).join(" ")}`.toLowerCase().includes(needle);
+  const openOrders = (data?.orders || []).filter((order) => !orderDone(order));
+  const doneOrders = (data?.orders || []).filter(orderDone);
+  const shownOrders = (tab === "active" ? openOrders : tab === "completed" ? doneOrders : []).filter(matches);
+  const needCount = due.length + summary.needs.length + (needsAddress ? 1 : 0);
   return (
-    <section className="member-workspace-panel member-workspace-requests">
-      <header>
-        <small>YOUR ACCOUNT</small>
-        <h2>Orders & requests</h2>
-        <p>Store orders, invoices to pay, items you want sourced, and request progress in one place.</p>
+    <section className="member-workspace-panel member-workspace-requests orders-hub">
+      <header className="orders-hub-header">
+        <div>
+          <small>YOUR ACCOUNT</small>
+          <h2>Orders & requests</h2>
+          <p>Everything you're buying or asked us to source. Anything waiting for you is at the top.</p>
+        </div>
+        <button type="button" className="primary-button" onClick={() => setCreating((value) => !value)} aria-expanded={creating}>
+          {creating ? "Close the form" : "New request"}
+        </button>
       </header>
       {error && (
         <p role="alert" className="form-error">
@@ -423,20 +504,24 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
         </p>
       )}
       {notice && <p role="status" className="member-deposit-note">{notice}</p>}
-      {needsAddress && (
-        <div className="member-address-needed" role="note">
-          <div>
-            <strong>Add a shipping address</strong>
-            <span>You'll need one before paying for an order, so we know where to deliver.</span>
+      <section className={needCount ? "orders-needs has-items" : "orders-needs"} aria-label="Needs you">
+        <h3>
+          Needs you{needCount ? <span className="orders-count">{needCount}</span> : null}
+        </h3>
+        {!needCount && <p className="orders-needs-empty">Nothing needs you right now. We'll show it here when something does.</p>}
+        {needsAddress && (
+          <div className="member-address-needed" role="note">
+            <div>
+              <strong>Add a shipping address</strong>
+              <span>You'll need one before paying for an order, so we know where to deliver.</span>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => setPaying(due.find((invoice) => invoice.kind === "order") || null)}>
+              Add address
+            </button>
           </div>
-          <button type="button" className="secondary-button" onClick={() => setPaying(due.find((invoice) => invoice.kind === "order") || null)}>
-            Add address
-          </button>
-        </div>
-      )}
-      {due.length ? (
-        <section className="shop-orders" aria-label="Invoices to pay">
-          <h3>Ready to pay</h3>
+        )}
+        {due.length ? (
+          <section className="shop-orders" aria-label="Invoices to pay">
           {due.map((invoice) => (
             <article key={invoice.id} className="shop-order due">
               <div>
@@ -481,8 +566,30 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
               </div>
             </article>
           ))}
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+        {summary.needs.map((need) => (
+          <article key={need.id} className="shop-order due orders-need-request">
+            <div>
+              <strong>{need.kind === "answer" ? "We have a question about your request" : "Your options are ready"}</strong>
+              <small>{need.title}</small>
+            </div>
+            <div className="shop-order-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setTab("active");
+                  setQuery("");
+                  setOpenId(need.id);
+                }}
+              >
+                {need.kind === "answer" ? "Answer" : "Choose an option"}
+              </button>
+            </div>
+          </article>
+        ))}
+      </section>
       {paying && (
         <AddressPickerDialog
           accessToken={accessToken}
@@ -495,11 +602,42 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
           }}
         />
       )}
-      {data?.orders.length ? (
-        <section className="shop-orders" aria-label="Store orders">
-          <h3>Orders</h3>
-          {data.orders.map((order) => (
-            <article key={order.id} className="shop-order">
+      <div className="orders-tabs" role="tablist" aria-label="Orders and requests">
+        {(
+          [
+            ["active", "In progress", summary.active + openOrders.length],
+            ["completed", "Completed", summary.completed + doneOrders.length],
+            ["recurring", "Recurring", null],
+          ] as const
+        ).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={tab === key ? "is-active" : undefined}
+            onClick={() => setTab(key)}
+          >
+            {label}
+            {count !== null && <span className="orders-count">{count}</span>}
+          </button>
+        ))}
+        {tab !== "recurring" && (
+          <input
+            className="orders-search"
+            type="search"
+            aria-label="Search orders and requests"
+            placeholder="Search by name"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        )}
+      </div>
+      {shownOrders.length ? (
+        <section className="shop-orders" aria-label={tab === "completed" ? "Completed shop orders" : "Shop orders in progress"}>
+          {shownOrders.map((order) => (
+            <article key={order.id} className="shop-order orders-hub-order">
+              <small className="member-request-kind">Shop order</small>
               <div>
                 <strong>
                   {order.order_name || "Order"} · {orderStatus(order)}
@@ -530,9 +668,26 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
           ))}
         </section>
       ) : null}
-      {data?.wanted.length ? (
+      <MemberRequestsPanel
+        accessToken={accessToken}
+        compact
+        view={tab === "recurring" ? "none" : tab}
+        query={query}
+        showCreate={creating}
+        showRecurring={tab === "recurring"}
+        onCreated={() => {
+          setCreating(false);
+          setTab("active");
+          setNotice("Your request was sent. You'll find it under In progress.");
+        }}
+        openId={openId}
+        onOpenChange={setOpenId}
+        onSummary={setSummary}
+        onViewChat={onViewChat}
+      />
+      {tab === "active" && data?.wanted.length ? (
         <section className="shop-rail" aria-label="Items you want sourced">
-          <h3>Items you want sourced</h3>
+          <h3>Items you asked us to find</h3>
           <div className="shop-rail-track">
             {data.wanted.map((trend) => (
               <TrendTile key={trend.id} trend={trend} />
@@ -540,8 +695,6 @@ export function OrdersPanel({ accessToken, onAddressChange }: { accessToken: str
           </div>
         </section>
       ) : null}
-      <h3 className="shop-section-title">Sourcing requests</h3>
-      <MemberRequestsPanel accessToken={accessToken} />
       <AdSlot placement="orders_footer" />
     </section>
   );

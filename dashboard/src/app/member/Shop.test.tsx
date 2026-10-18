@@ -151,9 +151,13 @@ describe("shop inside the chat shell", () => {
   it("shows invoices to pay and store orders in Orders & requests", async () => {
     window.history.replaceState({}, "", "/member/chat?panel=requests");
     render(<App />);
-    const due = await screen.findByRole("region", { name: "Invoices to pay" });
+    const needs = await screen.findByRole("region", { name: "Needs you" });
+    const due = await within(needs).findByRole("region", { name: "Invoices to pay" });
     expect(within(due).getAllByRole("button", { name: "Pay invoice" })).toHaveLength(2);
-    const orders = screen.getByRole("region", { name: "Store orders" });
+    // A shipped order is finished: it lives under Completed.
+    expect(screen.queryByRole("region", { name: "Shop orders in progress" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Completed/ }));
+    const orders = screen.getByRole("region", { name: "Completed shop orders" });
     expect(within(orders).getByText(/#1001 · Shipped/)).toBeInTheDocument();
     expect(within(orders).getByRole("link", { name: "TRK1" })).toHaveAttribute("href", "https://dhl.example/TRK1");
   });
@@ -194,6 +198,13 @@ describe("shop inside the chat shell", () => {
     render(<App />);
     const tour = await screen.findByRole("dialog", { name: "Dashboard tour" });
     expect(within(tour).getByText("Start a chat")).toBeInTheDocument();
+    fireEvent.click(within(tour).getByRole("button", { name: "Next" }));
+    // The chat tools come next: one step for the toolbar, then one per tool.
+    expect(within(tour).getByText("Your chat tools")).toBeInTheDocument();
+    for (const title of ["Paste a link", "Ask a person to review a photo", "Create a sourcing request", "Link an existing request"]) {
+      fireEvent.click(within(tour).getByRole("button", { name: "Next" }));
+      expect(within(tour).getByRole("heading", { name: title })).toBeInTheDocument();
+    }
     fireEvent.click(within(tour).getByRole("button", { name: "Next" }));
     expect(within(tour).getByText("Browse")).toBeInTheDocument();
     fireEvent.click(within(tour).getByRole("button", { name: "Skip tour" }));

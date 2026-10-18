@@ -775,8 +775,19 @@ def create_accounts_router() -> APIRouter:
                 events_by_request.setdefault(str(event["request_id"]), []).append(event_projection(event))
             add_event_media(events_by_request)
             options_by_request = load_member_sourcing_options([str(row["id"]) for row in rows])
+            # "View chat" on a request: the chat kept with it, archived or not.
+            chat_by_request: dict[str, str] = {}
+            request_ids = [str(row["id"]) for row in rows]
+            if request_ids:
+                try:
+                    for chat in (supabase.table("member_conversations").select("id,linked_request_id")
+                                 .eq("member_id", user_id).in_("linked_request_id", request_ids).execute().data or []):
+                        chat_by_request.setdefault(str(chat["linked_request_id"]), str(chat["id"]))
+                except Exception:
+                    logger.exception("Could not match requests to their chats")
             return {"requests": [{**row, "events": events_by_request.get(str(row["id"]), []),
-                "sourcing_options": options_by_request.get(str(row["id"]), [])} for row in rows]}
+                "sourcing_options": options_by_request.get(str(row["id"]), []),
+                "conversation_id": chat_by_request.get(str(row["id"]))} for row in rows]}
         except Exception as exc:
             logger.exception("Could not load member purchasing requests")
             raise HTTPException(status_code=503, detail="Your requests could not be loaded.") from exc

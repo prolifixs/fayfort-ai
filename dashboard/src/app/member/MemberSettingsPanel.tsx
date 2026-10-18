@@ -8,16 +8,24 @@ import { MemberEmailPreferences } from "./MemberEmailPreferences";
 import { formatMemberTier } from "./memberShared";
 import { AddressBook, ProfileCompletionCard, type ProfileCompletion } from "./accountExtras";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { MemberPlanComparison } from "./MemberAccountDialogs";
+import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
+import { PlanBilling } from "./PlanBilling";
+import { useMemberPlan } from "./membershipApi";
 
 /** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
 export function MemberSettingsPanel({
   onProfileChange,
-  onOpenPlans,
   onCompletionChange,
+  onPlanChange,
+  focus,
 }: {
   onProfileChange?: (profile: Record<string, unknown>) => void;
-  onOpenPlans?: () => void;
   onCompletionChange?: (completion: ProfileCompletion) => void;
+  /** Called after a plan change so the chat page can refresh its own copy. */
+  onPlanChange?: () => void;
+  /** "plan" opens Settings scrolled to the Plan section ("See plans" links, the ad-free ad, back from checkout). */
+  focus?: "plan";
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +39,11 @@ export function MemberSettingsPanel({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(memberSoundsEnabled);
+  const { plan, reload: reloadPlan } = useMemberPlan(token);
+  function planChanged() {
+    reloadPlan();
+    onPlanChange?.();
+  }
   async function reloadCompletion() {
     if (!token) return;
     try {
@@ -136,6 +149,14 @@ export function MemberSettingsPanel({
     if (profile && onProfileChange) onProfileChange(profile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
+  useEffect(() => {
+    if (focus !== "plan" || loading) return;
+    const timer = window.setTimeout(
+      () => document.getElementById("member-settings-plan-section")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [focus, loading]);
   if (loading) return <FayfortLoader label="Checking your member sign-in…" />;
   if (!token)
     return (
@@ -153,6 +174,20 @@ export function MemberSettingsPanel({
             ?.scrollIntoView({ behavior: "smooth", block: "start" })
         }
       />
+      <section className="member-settings-section member-settings-plan" aria-labelledby="member-settings-plan" id="member-settings-plan-section">
+        <h2 id="member-settings-plan">Plan</h2>
+        <p>
+          Your plan: <strong>{formatMemberTier(profile?.member_tier)}</strong>. Paid plans lower your sourcing deposit and
+          consultation price and add supplier contacts.
+        </p>
+        <MemberPlanComparison currentTier={formatMemberTier(profile?.member_tier)} />
+        <PlanBilling accessToken={token} onChange={planChanged} />
+        <div className="member-perks">
+          <h3 className="member-perks-title">Your plan perks</h3>
+          <ConsultationCard accessToken={token} plan={plan || null} onChange={planChanged} />
+          <ContactCreditsCard accessToken={token} status={plan?.contacts} />
+        </div>
+      </section>
       <section className="member-settings-section" aria-labelledby="member-settings-signin">
         <h2 id="member-settings-signin">Sign-in methods</h2>
         <p>Link a provider to keep using the same member profile, saved products, and requests.</p>
@@ -263,22 +298,6 @@ export function MemberSettingsPanel({
             <small>{soundsEnabled ? "Sounds are on for this device." : "Sounds are off for this device."}</small>
           </span>
         </label>
-      </section>
-      <section className="member-settings-section" aria-labelledby="member-settings-plan">
-        <h2 id="member-settings-plan">Membership price tier</h2>
-        <p>
-          Current member plan: <strong>{profile ? formatMemberTier(profile.member_tier) : "Unavailable"}</strong>.
-          Plan upgrades open soon.
-        </p>
-        {onOpenPlans ? (
-          <button type="button" className="secondary-button member-plan-link" onClick={onOpenPlans}>
-            Compare member plans
-          </button>
-        ) : (
-          <a className="secondary-button member-plan-link" href="/member/membership">
-            View member plans
-          </a>
-        )}
       </section>
       {error && (
         <p role="alert" className="form-error">

@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useLayoutEffect, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { CHAT_TOOLS, type ChatToolKey } from "./chatTools";
 import { apiRequest } from "../../lib/api";
 import { MemberDialog } from "./MemberAccountDialogs";
 import { memberCountryOptions } from "./memberShared";
@@ -489,15 +490,45 @@ export function SaveProductButton({
 }
 
 /** First-visit tour: points at each part of the member dashboard in turn. */
-export type TourStep = { target: string; title: string; body: string };
+export type TourStep = { target: string; title: string; body: string; icon?: ReactNode };
+
+const toolStep = (key: ChatToolKey): TourStep => ({
+  target: `tool-${key}`,
+  title: CHAT_TOOLS[key].label,
+  body: CHAT_TOOLS[key].tip,
+  icon: CHAT_TOOLS[key].icon,
+});
 
 export const MEMBER_TOUR: TourStep[] = [
   { target: "new-chat", title: "Start a chat", body: "Ask our AI about any product, paste a TikTok or shop link, or ask for a person." },
+  {
+    target: "chat-tools",
+    title: "Your chat tools",
+    body: "The four buttons under the message box are the quickest way to get things done. Here's what each one does.",
+  },
+  toolStep("link"),
+  toolStep("photo"),
+  toolStep("request"),
+  toolStep("attach"),
   { target: "browse", title: "Browse", body: "Shop FayFort products, trending items and group buys. Tap the heart to save one." },
   { target: "saved", title: "Saved products", body: "Everything you've saved, in one place." },
   { target: "requests", title: "Orders & requests", body: "Invoices to pay, your orders and every sourcing request with its delivery estimate." },
   { target: "directory", title: "Supplier directory", body: "Verified suppliers you can contact." },
-  { target: "chats", title: "Your chats", body: "Past chats live here. Chats linked to a request are kept with it." },
+  {
+    target: "chats",
+    title: "Your chats",
+    body: "Past chats live here. A chat linked to a request moves to Archive a few days after the request is delivered or cancelled. Nothing is lost.",
+  },
+  {
+    target: "archive",
+    title: "Archive",
+    body: "Finished chats are kept here as your record. Open one to read it, or move it back to your chats.",
+  },
+  {
+    target: "product-ask",
+    title: "Ask about a product",
+    body: "On any product page, tap Ask (or use the card above the message box on a computer). Choose a new chat or one you already have, and FayFort AI knows which product you mean.",
+  },
   { target: "notifications", title: "Notifications", body: "Replies from our team, invoice reminders and request updates." },
   { target: "cart", title: "Cart", body: "Items you're buying from the shop." },
   {
@@ -572,7 +603,10 @@ export function MemberTour({
         <small>
           Step {index + 1} of {steps.length}
         </small>
-        <h2>{step.title}</h2>
+        <h2>
+          {step.icon && <span className="member-tour-icon">{step.icon}</span>}
+          {step.title}
+        </h2>
         <p>{step.body}</p>
         <div className="member-tour-dots" aria-hidden="true">
           {steps.map((item, position) => (

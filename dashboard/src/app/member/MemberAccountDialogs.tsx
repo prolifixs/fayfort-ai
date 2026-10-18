@@ -1,8 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { supabaseClient } from "../../lib/supabase";
 import { formatMemberTier } from "./memberShared";
-import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
-import { PlanBilling } from "./PlanBilling";
 import { apiRequest } from "../../lib/api";
 import { type MemberPlanSummary, RANK_NAMES, type RankStatus, useMemberRank } from "./membershipApi";
 
@@ -209,13 +207,12 @@ function PointsDialog({
 function TierDialog({
   profile,
   accessToken,
-  plan,
-  onPlanChange,
+  onOpenPlan,
 }: {
   profile: Profile;
   accessToken?: string | null;
-  plan?: MemberPlanSummary | null;
-  onPlanChange?: () => void;
+  /** Plans, billing and plan perks live in Settings → Plan (owner decision 2026-10-17). */
+  onOpenPlan?: () => void;
 }) {
   const { rank: status } = useMemberRank(accessToken);
   const rank = status?.rank ?? Math.min(5, Math.max(1, Number(profile?.rank_level) || 1));
@@ -292,15 +289,16 @@ function TierDialog({
           ))}
         </ul>
       )}
-      <MemberPlanComparison currentTier={tier} />
-      {accessToken && <PlanBilling accessToken={accessToken} onChange={() => onPlanChange?.()} />}
-      {accessToken && (
-        <div className="member-perks">
-          <h3 className="member-perks-title">Your perks</h3>
-          <ConsultationCard accessToken={accessToken} plan={plan || null} onChange={() => onPlanChange?.()} />
-          <ContactCreditsCard accessToken={accessToken} status={plan?.contacts} />
-        </div>
-      )}
+      <div className="member-tier-plan-link">
+        <span>
+          Your plan: <strong>{tier}</strong>
+        </span>
+        {onOpenPlan && (
+          <button type="button" className="secondary-button" onClick={onOpenPlan}>
+            Plans and perks in Settings
+          </button>
+        )}
+      </div>
     </>
   );
 }
@@ -373,8 +371,8 @@ export function MemberAccountDialogs({
   onOpen,
   settings,
   accessToken,
-  plan,
   onPlanChange,
+  onOpenPlan,
 }: {
   kind: MemberAccountDialogKind | null;
   profile: Profile;
@@ -383,6 +381,8 @@ export function MemberAccountDialogs({
   accessToken?: string | null;
   plan?: MemberPlanSummary | null;
   onPlanChange?: () => void;
+  /** Opens Settings scrolled to the Plan section. */
+  onOpenPlan?: () => void;
   /** The settings panel, passed in so this file doesn't import the account pages (avoids a cycle). */
   settings: ReactNode;
 }) {
@@ -396,7 +396,7 @@ export function MemberAccountDialogs({
   if (kind === "tier")
     return (
       <MemberDialog eyebrow="MEMBERSHIP" title="Member tier" onClose={onClose} wide>
-        <TierDialog profile={profile} accessToken={accessToken} plan={plan} onPlanChange={onPlanChange} />
+        <TierDialog profile={profile} accessToken={accessToken} onOpenPlan={onOpenPlan} />
       </MemberDialog>
     );
   if (kind === "account")

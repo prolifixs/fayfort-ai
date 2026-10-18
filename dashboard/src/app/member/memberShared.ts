@@ -173,6 +173,9 @@ export type MemberChat = {
   support_status?: string | null;
   last_activity_at: string;
   created_at: string;
+  /** Archived chats are kept as the record but leave the chat list (docs/MEMBER_DASHBOARD_UX_PLAN.md §1). */
+  archived_at?: string | null;
+  archived_by?: "member" | "auto" | null;
 };
 
 export type MemberChatMessage = {
@@ -183,6 +186,8 @@ export type MemberChatMessage = {
   created_at: string;
   /** Find It result for a pasted link or search: exact match, closest alternatives, Source it. */
   find_it?: FindItResult | null;
+  /** The product the member asked about from a product page. */
+  product_ref?: string | null;
 };
 
 export type MemberOwnedRequest = {
