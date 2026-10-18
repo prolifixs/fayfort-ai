@@ -149,3 +149,29 @@ the page read it, so the page showed a general message.
   sweeps across. With "reduce motion" on, it fades gently instead.
   - It replaces the "Loading…" and "Checking…" lines across the dashboard (42 places).
   - The opening screen ("Opening FayFort…") uses the white version on the navy globe.
+
+## 10. Staff sign-in cancelled at once, and password reset on accounts with an authenticator (fixed 2026-10-18)
+
+**What the owner saw**:
+- The admin account (password or Google) seemed to "do nothing".
+- A worker's password reset failed with "AAL2 session is required to update email or password when MFA is enabled".
+
+**Causes**:
+1. **The 12-hour idle rule ran against an old timestamp.** The staff gate keeps the last activity time in the
+   browser. When a staff member signed in again after more than 12 idle hours, the gate found the old time (39 hours
+   on the owner's Chrome) and signed the brand-new session out.
+   - Supabase showed the sign-in succeeding (last sign-in 00:40 PT) with 0 sessions left afterwards.
+   - The worker account was unaffected because its time was recent.
+2. **Accounts with an authenticator need the code before a password change.** A reset link signs in at the first
+   level (AAL1), and Supabase refuses the change until the 6-digit code is entered (AAL2). The reset page never asked
+   for the code.
+
+**Fixes**:
+- The idle rule treats a fresh sign-in as activity: it compares the session's sign-in time with the stored time.
+  Ending an idle session also clears the stored time.
+  - The owner's Chrome was cleared by hand on 2026-10-18, so the admin can sign in before the push.
+- The password form (reset link, invitation and settings) checks the account. When it has an authenticator, an
+  "Authenticator code" field appears above the new password. The code is verified (`challengeAndVerify`) before the
+  password is saved. If Supabase still answers "AAL2 required", the field appears with a clear message.
+- Tests: the idle rule (old time ends an idle session and is cleared; a fresh sign-in is never ended), the authenticator
+  step on a staff reset link, and the AAL2 message.

@@ -77,6 +77,8 @@ export function friendlyAuthError(reason: unknown, fallback: string): string {
     return "Verify your email first. Use the link we sent, or ask for a new one.";
   if (text.includes("otp_expired") || text.includes("expired"))
     return "This link has expired or was already used. Ask for a new one below.";
+  if (text.includes("aal2") || text.includes("insufficient_aal"))
+    return "Enter the 6-digit code from your authenticator app first.";
   if (text.includes("same_password") || text.includes("different from the old"))
     return "Choose a password you haven't used for this account.";
   if (text.includes("weak_password") || text.includes("password should"))

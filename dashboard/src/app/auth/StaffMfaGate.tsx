@@ -34,16 +34,33 @@ function writeActivity(now = Date.now()) {
   }
 }
 
+/** Ends an idle staff session and forgets the old activity time, so the next sign-in starts clean. */
+function endIdleSession() {
+  try {
+    localStorage.removeItem(ACTIVITY_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+  void supabaseClient?.auth.signOut();
+}
+
 /** Signs a staff browser out after 12 idle hours; activity is any click, key press or focus. */
 function useStaffIdleTimeout(active: boolean) {
   useEffect(() => {
     if (!active || !supabaseClient) return;
-    const last = readActivity();
-    if (last && Date.now() - last > STAFF_IDLE_LIMIT_MS) {
-      void supabaseClient.auth.signOut();
-      return;
-    }
-    writeActivity();
+    const client = supabaseClient;
+    let cancelled = false;
+    // A fresh sign-in is activity: never end it because of an old timestamp left in this browser.
+    void client.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const signedInAt = Date.parse(data.session?.user?.last_sign_in_at || "");
+      const last = readActivity();
+      if (last && Date.now() - last > STAFF_IDLE_LIMIT_MS && !(signedInAt > last)) {
+        endIdleSession();
+        return;
+      }
+      writeActivity();
+    });
     let throttle = 0;
     const touch = () => {
       const now = Date.now();
@@ -54,12 +71,13 @@ function useStaffIdleTimeout(active: boolean) {
     };
     const check = window.setInterval(() => {
       const seen = readActivity();
-      if (seen && Date.now() - seen > STAFF_IDLE_LIMIT_MS) void supabaseClient?.auth.signOut();
+      if (seen && Date.now() - seen > STAFF_IDLE_LIMIT_MS) endIdleSession();
     }, 5 * 60_000);
     window.addEventListener("pointerdown", touch);
     window.addEventListener("keydown", touch);
     window.addEventListener("focus", touch);
     return () => {
+      cancelled = true;
       window.clearInterval(check);
       window.removeEventListener("pointerdown", touch);
       window.removeEventListener("keydown", touch);

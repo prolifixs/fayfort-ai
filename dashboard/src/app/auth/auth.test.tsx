@@ -238,6 +238,41 @@ describe("email links with a one-time code", () => {
     expect(screen.queryByText(/other@example.com/)).not.toBeInTheDocument();
   });
 
+  it("asks staff for their authenticator code before changing the password from a reset link", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    auth.verifyOtp.mockResolvedValue({ data: { session: { access_token: "fresh", user: { email: "worker@example.com" } } }, error: null });
+    mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({ data: { currentLevel: "aal1", nextLevel: "aal2" }, error: null });
+    mfa.listFactors.mockResolvedValue({ data: { totp: [{ id: "factor-7", status: "verified" }], all: [] }, error: null });
+    mfa.challengeAndVerify.mockResolvedValue({ data: {}, error: null });
+    auth.updateUser.mockResolvedValue({ error: null });
+    window.history.replaceState({}, "", "/auth/callback?type=recovery&token_hash=staff1");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to reset password" }));
+    const code = await screen.findByLabelText("Authenticator code");
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "worker-pass-2026" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "worker-pass-2026" } });
+    // The code field is required: the browser won't submit without it.
+    expect(code).toBeRequired();
+    fireEvent.change(code, { target: { value: "123 456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(await screen.findByRole("heading", { name: "Password updated" })).toBeInTheDocument();
+    expect(mfa.challengeAndVerify).toHaveBeenCalledWith({ factorId: "factor-7", code: "123456" });
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: "worker-pass-2026" });
+  });
+
+  it("turns Supabase's AAL2 refusal into a request for the authenticator code", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: { access_token: "t", user: { email: "a@b.c" } } }, error: null });
+    mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({ data: { currentLevel: "aal1", nextLevel: "aal1" }, error: null });
+    auth.updateUser.mockResolvedValue({ error: new Error("AAL2 session is required to update email or password when MFA is enabled.") });
+    window.history.replaceState({}, "", "/auth/callback?audience=member&type=recovery");
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("New password"), { target: { value: "member-pass-2026" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "member-pass-2026" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(await screen.findByLabelText("Authenticator code")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("authenticator app");
+  });
+
   it("explains an expired code and offers a new link", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
     auth.verifyOtp.mockResolvedValue({ data: { session: null }, error: Object.assign(new Error("Token has expired or is invalid"), { code: "otp_expired" }) });
@@ -362,10 +397,28 @@ describe("staff two-step verification", () => {
     expect(screen.queryByText("Workspace content")).not.toBeInTheDocument();
   });
 
-  it("signs a staff browser out after 12 idle hours", async () => {
-    localStorage.setItem("fayfort-staff-last-activity", String(Date.now() - STAFF_IDLE_LIMIT_MS - 1000));
+  it("signs a staff browser out after 12 idle hours, and forgets the old activity time", async () => {
+    const stale = Date.now() - STAFF_IDLE_LIMIT_MS - 1000;
+    localStorage.setItem("fayfort-staff-last-activity", String(stale));
+    auth.getSession.mockResolvedValue({
+      data: { session: { access_token: "t", user: { last_sign_in_at: new Date(stale - 60_000).toISOString() } } },
+      error: null,
+    });
     render(<StaffMfaGate signedIn email="admin@example.com">{workspace}</StaffMfaGate>);
     await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
+    expect(localStorage.getItem("fayfort-staff-last-activity")).toBeNull();
+  });
+
+  it("never ends a fresh sign-in because of an old activity time left in the browser", async () => {
+    localStorage.setItem("fayfort-staff-last-activity", String(Date.now() - 5 * STAFF_IDLE_LIMIT_MS));
+    auth.getSession.mockResolvedValue({
+      data: { session: { access_token: "t", user: { last_sign_in_at: new Date().toISOString() } } },
+      error: null,
+    });
+    render(<StaffMfaGate signedIn email="admin@example.com">{workspace}</StaffMfaGate>);
+    expect(await screen.findByText("Workspace content")).toBeInTheDocument();
+    await waitFor(() => expect(Number(localStorage.getItem("fayfort-staff-last-activity"))).toBeGreaterThan(Date.now() - 60_000));
+    expect(auth.signOut).not.toHaveBeenCalled();
   });
 
   it("passes through to the page's own sign-in when nobody is signed in", async () => {
