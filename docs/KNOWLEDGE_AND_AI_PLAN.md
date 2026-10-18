@@ -158,3 +158,31 @@ refund. Still wrong, fixed in the third batch:
 Still open: the new-enquiry flow asks "How many pieces?" again after the customer gave destination and budget
 (quantity is never given, so the classifier keeps listing it as missing). Suggested fix: once the assistant has asked
 for quantity, drop it from the missing details and move to the next step.
+
+## 8. Walking customers through a process (2026-10-18)
+
+Found on Instagram: "I want to buy furniture, walk me through the purchase process" got a directory list of
+"Embroidery fabric" and "Hair tools". Two causes:
+- Anything that looked like buying (intent product_sourcing, or the words "source", "market", "supplier") went to the
+  directory search, whose reply replaces the AI's. The AI, and the "How sourcing works" knowledge, never saw it.
+- The directory search split the whole sentence into words and matched any of them anywhere: "to" matched "Hair
+  tools" and "me" matched "Garment". The member chat's product cards had the same problem ("the", "through").
+
+What changed:
+- `app/services/process_guide.py` recognises process questions ("walk me through", "how does it work", "how do I
+  order", "what happens after", "step by step", "from start to finish") for any product.
+- Those questions skip the directory, approved FAQs and canned auto-replies, and go to the AI with walk-through
+  guidance: the path that fits (sourcing request, shop, group buy, consultation for big projects), numbered steps from
+  first message to delivery, the product they named, only facts from the knowledge, then one next step. The reply may
+  be longer than the usual two to four sentences (up to 900 tokens).
+- The same guidance applies in the member dashboard chat (steps name the dashboard pages; no sign-up step) and the
+  website chat (first step is Join free).
+- Numbered steps ("2. We will send you options") are no longer mistaken for promises by the answer guard; a bare
+  "I'll forward this" outside the steps is still replaced.
+- Directory and catalog searches use only words that can name something (three letters or more, no filler or process
+  words, simple plurals folded), and return only the rows that match the most of them. Directory keywords match whole
+  words ("great" no longer means restaurants).
+- Knowledge: new document "From first message to delivery" (docs/KNOWLEDGE_BASE_DRAFT.md section 12), added to FayFort
+  Test Business on 2026-10-18. Edit it on the Knowledge page.
+
+Tests: `tests/test_process_guide.py`.

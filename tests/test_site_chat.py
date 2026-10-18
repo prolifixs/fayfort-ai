@@ -27,8 +27,9 @@ class SiteChatTests(unittest.TestCase):
         db = Db(rows or {})
         self.model_calls = []
 
-        def model(messages):
+        def model(messages, max_tokens=None):
             self.model_calls.append(messages)
+            self.max_tokens = max_tokens
             return answer, 120, 30
 
         for patcher in (

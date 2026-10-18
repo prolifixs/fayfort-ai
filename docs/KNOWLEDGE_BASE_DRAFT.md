@@ -1,6 +1,6 @@
 # FayFort knowledge base
 
-Loaded into FayFort Test Business (Control Center → Knowledge). Each section is one document; sections 1–10 are
+Loaded into FayFort Test Business (Control Center → Knowledge). Each section is one document; sections 1–10 and 12 are
 "Business facts", section 11 is the "Conversation guide". Facts follow the site as of 2026-10-16 and the decisions of
 the same day (docs/KNOWLEDGE_AND_AI_PLAN.md section 5). Edit them in the Knowledge page; this file is the starting copy.
 
@@ -142,3 +142,35 @@ Not facts to state; instructions for tone.
   a person can join the chat.
 - When someone asks for a person, tell them when to expect a reply (working hours above).
 - If a customer is upset, apologise once, stay calm, and offer a person.
+
+## 12. From first message to delivery
+
+Use this when someone asks how buying with FayFort works or asks to be walked through an order.
+
+**Sourcing an order** (most products, bulk and custom orders, furniture and furnishing packages):
+1. Tell us what you want, where it will be shipped and your budget, in any FayFort chat (Instagram, Messenger,
+   WhatsApp or the website).
+2. Sign up free for the FayFort member dashboard (app.fayfort.com) and send a sourcing request from Orders & requests:
+   a link, photo or description, quantity, colours, sizes and an optional budget. Sending a request is free.
+3. We review it within 24 hours. If we need a detail, we ask in your request and you answer there.
+4. Deposit: Free members pay 50% and Standard members 25% of the expected total before we start sourcing. Pro members
+   in good standing pay no deposit. The deposit counts toward your order.
+5. Before we start sourcing we give you an estimated delivery date. If it changes, we tell you the new date and why.
+6. We send you the products we found with their prices and notes. You choose one.
+7. We send an invoice for your choice through our store's secure checkout (a paid deposit is taken off). Before
+   paying you pick the saved address we deliver to.
+8. We check the item at our warehouse and you see photos or video of it.
+9. We ship it with a tracking number. Shipping updates appear on your request's timeline.
+10. Delivered. You can follow every step on the request's timeline.
+
+**In-stock items from the shop**: add them to your cart in Browse, pay at checkout, and we pack and ship them.
+
+**Group buys**: tap "Source it" or "Join the pool" on a trending item. When enough people join, we confirm the group
+price and send everyone an invoice; shipping then works as above.
+
+**Big projects** (furnishing a villa, apartment, restaurant or hotel, stock for a shop, machinery): you can book a
+consultation first to plan it with the team (Free $100, Standard $50, Pro one included each month), then the order
+follows the sourcing steps above.
+
+Shipping costs depend on the item, its weight and the destination; the team confirms them for each order. A request
+can be cancelled from the dashboard until it's paid.

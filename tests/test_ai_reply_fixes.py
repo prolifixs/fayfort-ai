@@ -79,9 +79,10 @@ class HandoffTests(unittest.TestCase):
 class KnowledgeLoaderTests(unittest.TestCase):
     def test_sections_split_facts_and_guide(self):
         docs = sections(open("docs/KNOWLEDGE_BASE_DRAFT.md").read())
-        self.assertEqual(len(docs), 11)
+        self.assertEqual(len(docs), 12)
         self.assertEqual([d["source_type"] for d in docs].count("guide"), 1)
-        self.assertEqual(docs[-1]["title"], "Conversation guide")
+        self.assertEqual(docs[10]["title"], "Conversation guide")
+        self.assertEqual(docs[-1]["title"], "From first message to delivery")
         self.assertIn("What's moving", next(d for d in docs if d["title"].startswith("Shop"))["content"])
 
 

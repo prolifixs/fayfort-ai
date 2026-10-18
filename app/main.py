@@ -45,6 +45,7 @@ from app.database.intents import (
 from app.database.actions import create_action
 from app.directory.service import lookup_for_message
 from app.directory.response import format_directory_response
+from app.services.process_guide import asks_for_process
 from app.config.settings import API_CONTRACT, cors_allowed_origins, settings
 from app.directory.identity import trusted_business_member, trusted_fayfort_staff
 
@@ -613,6 +614,10 @@ def _send_message_core(
 
     response_intent = soften_unrequested_handoff(response_intent, content)
 
+    # "Walk me through it" / "how does buying work": the whole journey from the business knowledge, never a
+    # directory list or a canned reply (app/services/process_guide.py).
+    walkthrough = asks_for_process(content)
+
     directory_result = lookup_for_message(
         message=content,
         intent=str(response_intent.intent),
@@ -645,6 +650,7 @@ def _send_message_core(
     approved_faq = None
     if (
         response_generation_enabled
+        and not walkthrough
         and not directory_result
         and not action_decision.needs_human
         and response_intent.action in {NextAction.ANSWER_QUESTION, NextAction.SEARCH_KNOWLEDGE}
@@ -663,6 +669,7 @@ def _send_message_core(
         inbound_context
         and inbound_context.get("automation_reply_enabled") is True
         and inbound_context.get("provider_event_id")
+        and not walkthrough
         and not directory_result
         and not action_decision.needs_human
     ):
@@ -705,6 +712,7 @@ def _send_message_core(
                 business_id=business_id,
                 conversation_id=conversation_id,
                 source_message_id=str(customer_message.get("id") or "") or None,
+                walkthrough=walkthrough,
             )
         except requests.RequestException as exc:
             logger.warning("AI response provider request failed: %s", type(exc).__name__)

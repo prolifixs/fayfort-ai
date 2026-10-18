@@ -22,6 +22,7 @@ from app.services.ai_responder import _guard_response_grounding, plain_text
 
 logger = logging.getLogger(__name__)
 MAX_OUTPUT_TOKENS = 500
+WALKTHROUGH_MAX_OUTPUT_TOKENS = 900
 
 
 class NewMemberMessage(BaseModel):
@@ -49,7 +50,9 @@ def _response_data(value: Any) -> Any:
 
 
 def _catalog_matches(text: str) -> list[dict[str, Any]]:
-    terms = list(dict.fromkeys(word.strip(".,!?;:'\"()[]{}") for word in text.casefold().split() if len(word.strip(".,!?;:'\"()[]{}")) > 2))[:8]
+    from app.services.process_guide import meaningful_terms
+    # Filler and process words ("the", "through", "purchase") never pick products.
+    terms = meaningful_terms(text, limit=8)
     if not terms:
         return []
     # Search a bounded safe projection locally so name, description, and
@@ -143,13 +146,14 @@ def _find_it_for_message(member_id: str, conversation_id: str, content: str) -> 
         return None
 
 
-def _invoke_member_model(*, member_id: str, messages: list[dict[str, str]]) -> tuple[str, int, int, str, str]:
+def _invoke_member_model(*, member_id: str, messages: list[dict[str, str]],
+                         max_output_tokens: int = MAX_OUTPUT_TOKENS) -> tuple[str, int, int, str, str]:
     model, provider = _configured_model_route()
     input_price, output_price = fetch_pinned_provider_prices()
     max_input_tokens = estimate_input_token_upper_bound(messages)
     reserved_micro_usd = (
         _calculate_cost_micro_usd(max_input_tokens, input_price)
-        + _calculate_cost_micro_usd(MAX_OUTPUT_TOKENS, output_price)
+        + _calculate_cost_micro_usd(max_output_tokens, output_price)
     )
     request_id = str(uuid.uuid4())
     reservation = _response_data(supabase.rpc("reserve_member_ai_turn", {
@@ -160,7 +164,7 @@ def _invoke_member_model(*, member_id: str, messages: list[dict[str, str]]) -> t
         "p_input_price_micro_usd_per_million": input_price,
         "p_output_price_micro_usd_per_million": output_price,
         "p_max_input_tokens": max_input_tokens,
-        "p_max_output_tokens": MAX_OUTPUT_TOKENS,
+        "p_max_output_tokens": max_output_tokens,
         "p_reserved_micro_usd": reserved_micro_usd,
     }).execute())
     if not isinstance(reservation, dict):
@@ -186,7 +190,7 @@ def _invoke_member_model(*, member_id: str, messages: list[dict[str, str]]) -> t
         response = requests.post(settings.HF_CHAT_COMPLETIONS_URL,
             headers={"Authorization": f"Bearer {settings.HF_TOKEN}", "Content-Type": "application/json"},
             json={"model": settings.HF_MODEL, "messages": messages, "temperature": 0.2,
-                "max_tokens": MAX_OUTPUT_TOKENS, "stream": False}, timeout=45)
+                "max_tokens": max_output_tokens, "stream": False}, timeout=45)
         response.raise_for_status()
         data = response.json()
     except requests.HTTPError as exc:
@@ -446,6 +450,8 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                         "human_active": True}
             previous = (supabase.table("member_messages").select("sender_type,content")
                 .eq("conversation_id", str(conversation_id)).order("created_at", desc=True).limit(12).execute().data or [])
+            from app.services.process_guide import WALKTHROUGH_GUIDANCE, asks_for_process
+            walkthrough = asks_for_process(payload.content)
             matches = _catalog_matches(payload.content)
             find_result = _find_it_for_message(member_id, str(conversation_id), payload.content)
             if find_result:
@@ -482,12 +488,16 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                 + f"Active catalog matches:\n{catalog_facts or '(No active catalog matches were found for this message.)'}"
                 + ("\nThe member shared a link. FayFort shows them cards for it below your reply: an exact match if the store has it, "
                    "the closest alternatives, and a Source it button that asks the FayFort team to find it. Refer to those cards briefly."
-                   if find_result and find_result.get("kind") == "link" else ""))
+                   if find_result and find_result.get("kind") == "link" else "")
+                + ("\nThis reply: " + WALKTHROUGH_GUIDANCE.replace("signing up free, ", "")
+                   + " The member is already signed in: the steps happen in this dashboard (Orders & requests, Browse,"
+                   " Member tier), so name those places." if walkthrough else ""))
             history = list(reversed(previous))
             messages = [{"role": "system", "content": system}]
             messages.extend({"role": "user" if item["sender_type"] == "member" else "assistant",
                 "content": item["content"]} for item in history)
-            answer, _, _, _, _ = _invoke_member_model(member_id=member_id, messages=messages)
+            answer, _, _, _, _ = _invoke_member_model(member_id=member_id, messages=messages,
+                **({"max_output_tokens": WALKTHROUGH_MAX_OUTPUT_TOKENS} if walkthrough else {}))
             answer = _guard_response_grounding(answer=plain_text(answer or ""), customer_message=payload.content,
                 knowledge_context="\n".join(part for part in (business_facts, catalog_facts,
                     _product_facts(referenced) if referenced else "") if part), action_decision=None)

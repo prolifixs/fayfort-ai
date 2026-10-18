@@ -8,6 +8,7 @@ import requests
 from app.config.settings import settings
 from app.schemas.customer import CustomerState
 from app.schemas.intent import ActionDecision, IntentResult, NextAction
+from app.services.process_guide import WALKTHROUGH_GUIDANCE
 from app.services.ai_usage import normalize_provider_usage, record_ai_usage, resolved_provider_model
 from app.services.ai_budget import (
     cost_from_provider_usage,
@@ -96,6 +97,7 @@ def _request_completion(*, messages: list[dict[str, Any]], temperature: float, m
     return data
 
 
+
 DEFAULT_SYSTEM_PROMPT = """
 You are the FayFort team's chat assistant. FayFort International Trading helps customers buy from China.
 
@@ -164,6 +166,7 @@ _REFUND_POLICY_EVIDENCE = re.compile(
 )
 _NEGATION = re.compile(r"\b(?:no|not|never|isn['’]t|aren['’]t|don['’]t|doesn['’]t|there['’]s no|there is no)\b", re.IGNORECASE)
 _PROCESS_MARKER = re.compile(r"\b(?:when|once|after|before|if|then|each time|whenever)\b", re.IGNORECASE)
+_PROCESS_STEP = re.compile(r"^\s*(?:\d{1,2}[.)]|step \d{1,2}\b)", re.IGNORECASE)
 _MARKDOWN_BOLD = re.compile(r"(\*\*|__)(.+?)\1")
 _MARKDOWN_BULLET = re.compile(r"^[ \t]*[-*+][ \t]+", re.MULTILINE)
 _MARKDOWN_HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.MULTILINE)
@@ -182,9 +185,13 @@ def plain_text(answer: str) -> str:
 def _promises_unexecuted_action(answer: str) -> bool:
     """A future or past action the assistant can't do. Describing the process ("once you choose, we'll send an
     invoice") is allowed; a bare promise ("I'll forward this to the team") is not."""
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
-        if _UNEXECUTED_ACTION_PROMISE.search(sentence) and not _PROCESS_MARKER.search(sentence):
-            return True
+    for line in answer.splitlines():
+        # A numbered step ("3. We send you options with prices") describes the process, it isn't a promise.
+        if _PROCESS_STEP.match(line):
+            continue
+        for sentence in re.split(r"(?<=[.!?])\s+", line):
+            if _UNEXECUTED_ACTION_PROMISE.search(sentence) and not _PROCESS_MARKER.search(sentence):
+                return True
     return False
 
 
@@ -363,6 +370,7 @@ def build_messages(
     directory_context: str = "",
     business_guide: str = "",
     time_context: str = "",
+    walkthrough: bool = False,
 ) -> list[dict[str, str]]:
     """
     Build a proper multi-turn chat message list.
@@ -403,6 +411,9 @@ def build_messages(
 
     if time_context:
         messages.append({"role": "system", "content": "SUPPORT HOURS:\n" + time_context})
+
+    if walkthrough:
+        messages.append({"role": "system", "content": "THIS REPLY: " + WALKTHROUGH_GUIDANCE})
 
     if conversation_summary:
         messages.append(
@@ -557,6 +568,7 @@ def generate_ai_response(
     business_id: str | None = None,
     conversation_id: str | None = None,
     source_message_id: str | None = None,
+    walkthrough: bool = False,
 ) -> str:
 
     business_guide = ""
@@ -583,10 +595,13 @@ def generate_ai_response(
         directory_context=directory_context,
         business_guide=business_guide,
         time_context=time_context,
+        walkthrough=walkthrough,
     )
+    # A numbered walk-through needs room: six to eight steps plus the next step.
+    max_tokens = 900 if walkthrough else 500
 
     data = _request_completion(
-        messages=messages, temperature=0.3, max_tokens=500,
+        messages=messages, temperature=0.3, max_tokens=max_tokens,
         business_id=business_id, operation="response",
         conversation_id=conversation_id, source_message_id=source_message_id,
     )
@@ -598,7 +613,7 @@ def generate_ai_response(
     if not (isinstance(content, str) and content.strip()):
         # The provider sometimes returns an empty answer to a one-word message ("Ghana"); one retry fixes most.
         data = _request_completion(
-            messages=messages, temperature=0.4, max_tokens=500,
+            messages=messages, temperature=0.4, max_tokens=max_tokens,
             business_id=business_id, operation="response",
             conversation_id=conversation_id, source_message_id=source_message_id,
         )
