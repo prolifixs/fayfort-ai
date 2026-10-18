@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { departments, departmentLabel, statuses, statusLabel } from "./types";
 import type { OperationsState } from "./useOperationsCenter";
 import { GUIDES, guideKeyFor, queueStepLabel } from "./playbooks";
@@ -560,6 +561,7 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     items,
     selected,
     setSelected,
+    recentId,
     sourcingBatches,
     batchWorkIds,
     setBatchWorkIds,
@@ -569,6 +571,11 @@ export function WorkList({ ops }: { ops: OperationsState }) {
   } = ops;
   const archive = listView === "archive";
   const now = useNow();
+  // Back on the list (phones and tablets), bring the card you were just on into view.
+  useEffect(() => {
+    if (selected || !recentId || window.innerWidth >= 1024) return;
+    document.querySelector(`[data-work-id="${recentId}"]`)?.scrollIntoView?.({ block: "center" });
+  }, [selected, recentId]);
   // Live work: the closest deadline first, so overdue and nearly-due work sits at the top of each department.
   const dueTime = (item: (typeof items)[number]) => (item.due_at ? new Date(item.due_at).getTime() : Number.MAX_SAFE_INTEGER);
   const groups = departments
@@ -609,14 +616,21 @@ export function WorkList({ ops }: { ops: OperationsState }) {
               const guide = GUIDES[guideKeyFor(item)];
               const clock = archive ? null : workClock(item, now);
               const timed = clock && clock.state !== "none";
+              const isOpen = selected?.id === item.id;
+              const isRecent = !selected && recentId === item.id;
               return (
                 <article
-                  className={`operations-work-card priority-${item.priority}${selected?.id === item.id ? " is-selected" : ""}${
+                  className={`operations-work-card priority-${item.priority}${isOpen ? " is-selected" : ""}${isRecent ? " is-recent" : ""}${
                     timed ? ` has-clock clock-${clock.tone}` : ""
                   }`}
                   style={timed ? ({ "--clock-hue": String(clock.hue) } as import("react").CSSProperties) : undefined}
                   key={item.id}
+                  data-work-id={item.id}
+                  aria-current={isOpen ? "true" : undefined}
                 >
+                  {(isOpen || isRecent) && (
+                    <span className="ops-viewing-chip">{isOpen ? "Viewing" : "Last opened"}</span>
+                  )}
                   {!archive && item.department === "sourcing" && item.work_type === "member_request" && (
                     <label className="operations-batch-select">
                       <input

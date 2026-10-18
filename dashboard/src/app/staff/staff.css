@@ -777,7 +777,7 @@
 }
 
 /* Notifications popup in the same tokens as the rest of the page (light and dark). */
-.operations-center-page .operations-notifications-popover { right: 0; top: calc(100% + 8px); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); box-shadow: var(--shadow-lg); z-index: var(--z-popover, 50); }
+.operations-center-page .operations-notifications-popover { right: 0; top: calc(100% + 8px); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); box-shadow: var(--shadow-lg); z-index: var(--z-popover, 50); }
 .operations-center-page .operations-notifications-popover li { border-top-color: var(--color-border-subtle, var(--color-border)); }
 .operations-center-page .operations-notifications-popover li.is-unread { background: var(--accent-soft); }
 .operations-center-page .operations-notifications-test { color: var(--accent); }
@@ -906,3 +906,36 @@
 .site-chat-thread p { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--color-surface); }
 .site-chat-thread p.from-visitor { background: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg)); }
 .site-chat-thread b { display: block; font-size: var(--text-xs, 12px); color: var(--color-text-muted); }
+
+/* The work item you have open (and, after going back to the list, the one you were last on). */
+.operations-work-card { position: relative; transition: background-color .15s ease, outline-color .15s ease, box-shadow .15s ease; }
+.operations-work-card.is-selected,
+.operations-work-card.is-selected.has-clock,
+.operations-work-card.is-selected.clock-overdue {
+  background: color-mix(in srgb, var(--accent) 11%, var(--color-bg));
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  box-shadow: inset 4px 0 0 var(--clock, var(--accent)), 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent), 0 6px 18px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.operations-work-card.is-selected .operations-work-card-top strong { color: var(--accent); }
+.operations-work-card.is-recent { outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -1px; }
+.ops-viewing-chip {
+  justify-self: start; display: inline-flex; align-items: center; gap: 5px; width: max-content; margin-bottom: var(--space-1);
+  padding: 2px 9px 2px 7px; border-radius: 999px; background: var(--accent); color: var(--color-bg);
+  font-size: var(--text-2xs, 11px); font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.ops-viewing-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.operations-work-card.is-recent .ops-viewing-chip { background: color-mix(in srgb, var(--accent) 16%, var(--color-bg)); color: var(--accent); }
+@media (min-width: 1024px) {
+  /* A notch on the right edge points at the detail panel. */
+  .operations-work-card.is-selected::after {
+    content: ""; position: absolute; top: 50%; right: -9px; width: 14px; height: 14px; transform: translateY(-50%) rotate(45deg);
+    background: var(--accent); border-radius: 2px;
+  }
+}
+/* The open work's title carries the same edge, so the card and the detail read as one. */
+.operations-work-detail > .operations-section-title {
+  padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2);
+  border-left: 5px solid var(--accent); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 7%, var(--color-bg));
+}

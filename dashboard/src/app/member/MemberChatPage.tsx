@@ -1,4 +1,5 @@
 import { playMemberSound } from "../memberSound";
+import { setOpenChat } from "./activeChat";
 import { MemberNotificationsBar } from "../MemberNotifications";
 import { dashboardAuthConfigured, supabaseClient } from "../../lib/supabase";
 import { ApiRequestError, apiRequest } from "../../lib/api";
@@ -864,6 +865,12 @@ export function MemberChatPage() {
   };
   const split = activePanel !== "chat" && chatExpanded && isDesktop;
   const showChat = activePanel === "chat" || split;
+  // A worker reply in the chat already on screen doesn't need a pop-up (MemberNotificationsBar checks this).
+  const visibleChatId = showChat ? activeChat?.id || null : null;
+  useEffect(() => {
+    setOpenChat(visibleChatId);
+    return () => setOpenChat(null);
+  }, [visibleChatId]);
   const navItems: { panel: MemberPanel; label: string; icon: string }[] = [
     { panel: "catalog", label: "Browse", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
     { panel: "saved", label: "Saved products", icon: "M6 4h12v16l-6-4-6 4z" },

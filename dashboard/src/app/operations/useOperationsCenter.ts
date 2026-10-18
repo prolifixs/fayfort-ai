@@ -62,6 +62,11 @@ export function useOperationsCenter() {
   const [requestStage, setRequestStage] = useState("");
   const [requestStageNote, setRequestStageNote] = useState("");
   const [selected, setSelected] = useState<WorkItem | null>(null);
+  // The last item opened stays marked in the queue after going back to the list (phones) or a refresh.
+  const [recentId, setRecentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (selected?.id) setRecentId(selected.id);
+  }, [selected?.id]);
   const [notes, setNotes] = useState<WorkNote[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [workEvents, setWorkEvents] = useState<WorkEvent[]>([]);
@@ -912,6 +917,7 @@ export function useOperationsCenter() {
     sendFlowMessage,
     selected,
     setSelected,
+    recentId,
     notes,
     setNotes,
     checklist,

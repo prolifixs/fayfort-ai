@@ -69,6 +69,31 @@ class DepartmentalOperationsTests(unittest.TestCase):
 
     @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
     @patch("app.accounts.operations.supabase.table")
+    def test_mark_all_read_only_touches_the_signed_in_workers_unread_notices(self, table, identity):
+        query = MagicMock()
+        chain = query.update.return_value.eq.return_value.is_.return_value.is_.return_value
+        chain.execute.return_value.data = [{"id": "n1"}, {"id": "n2"}]
+        table.return_value = query
+
+        response = self.client.post("/operations/me/notifications/read-all", headers={"Authorization": "Bearer worker-token"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"marked_read": 2})
+        table.assert_called_once_with("operations_worker_notifications")
+        self.assertIn("read_at", query.update.call_args.args[0])
+        query.update.return_value.eq.assert_called_once_with("worker_id", WORKER)
+        query.update.return_value.eq.return_value.is_.assert_called_once_with("read_at", "null")
+        query.update.return_value.eq.return_value.is_.return_value.is_.assert_called_once_with("dismissed_at", "null")
+
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value=None)
+    @patch("app.accounts.operations.supabase.table")
+    def test_mark_all_read_requires_staff(self, table, identity):
+        response = self.client.post("/operations/me/notifications/read-all")
+        self.assertEqual(response.status_code, 403)
+        table.assert_not_called()
+
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
+    @patch("app.accounts.operations.supabase.table")
     def test_worker_sound_preference_is_saved_for_signed_in_worker(self, table, identity):
         query = MagicMock()
         query.upsert.return_value.select.return_value.execute.return_value.data = [{

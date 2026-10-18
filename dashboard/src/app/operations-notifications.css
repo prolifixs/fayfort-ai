@@ -1,17 +1,22 @@
 .operations-notifications{position:relative}
 .operations-notifications-toggle{white-space:nowrap}
-.operations-notifications-popover{position:absolute;z-index:30;right:0;top:calc(100% + .5rem);width:min(24rem,calc(100vw - 2rem));max-height:min(70vh,34rem);overflow:auto;padding:1rem;border:1px solid #cbd8e4;border-radius:.9rem;background:#fff;box-shadow:0 16px 42px #18314b24;color:#17283a}
-.operations-notifications-popover>header{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.8rem}
-.operations-sound-setting{display:flex;align-items:center;gap:.55rem;font-size:.9rem;margin:.6rem 0}
-.operations-notifications-test{border:0;background:transparent;color:#075b9c;text-decoration:underline;cursor:pointer;padding:.2rem 0}
-.operations-notifications-popover ul{list-style:none;margin:.6rem 0 0;padding:0}
-.operations-notifications-popover li{display:flex;align-items:flex-start;gap:.4rem;padding:.7rem .3rem;border-top:1px solid #e2eaf1}
-.operations-notifications-popover li.is-unread{background:#f1f7fb}
-.operations-notifications-popover li>a{display:grid;gap:.2rem;flex:1;color:inherit;text-decoration:none}
-.operations-notification-open{display:grid;gap:.2rem;flex:1;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}
-.operations-notifications-popover li span{font-size:.9rem}
-.operations-notifications-popover li small{color:#617487}
-.operations-notifications-popover li>button{border:0;background:transparent;color:#586d80;font-size:1.2rem;cursor:pointer}
+.operations-notifications-popover{position:absolute;padding:0;gap:0;z-index:30;right:0;top:calc(100% + .5rem);display:flex;flex-direction:column;width:min(25rem,calc(100vw - 2rem));max-height:min(78vh,38rem);border:1px solid var(--color-border,#cbd8e4);border-radius:16px;background:var(--color-bg,#fff);box-shadow:0 18px 44px rgba(7,39,108,.16);color:var(--color-text,#17283a);overflow:hidden}
+.operations-notifications-popover>header{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--color-border-subtle,#e2eaf1)}
+.operations-notifications-popover>header>div{display:grid;gap:1px}
+.operations-notifications-popover>header small{color:var(--color-muted,#617487);font-size:.8rem}
+.operations-notifications-popover .form-error{margin:.5rem 1rem 0}
+.operations-notifications-body{flex:1;min-height:0;overflow:auto;padding:.25rem .6rem .6rem .8rem}
+.operations-notifications-empty{display:grid;justify-items:center;gap:.6rem;margin:1.5rem .5rem;color:var(--color-muted,#617487);font-size:.9rem;text-align:center}
+.operations-notifications-sound{display:grid;gap:.6rem;padding:.8rem 1rem;border-top:1px solid var(--color-border-subtle,#e2eaf1);background:var(--color-surface-2,#f6f8fb)}
+.operations-notifications-sound{gap:.4rem}
+.operations-sound-options>summary{cursor:pointer;color:var(--color-accent,#1a7a5e);font-size:.85rem;font-weight:700;list-style:none}
+.operations-sound-options>summary::-webkit-details-marker{display:none}
+.operations-sound-options>summary::after{content:" ▾"}
+.operations-sound-options[open]>summary::after{content:" ▴"}
+.operations-sound-options[open]>summary{margin-bottom:.6rem}
+.operations-sound-options .sound-picker-row select{flex:1;min-width:0}
+.operations-sound-setting{display:flex;align-items:center;gap:.55rem;font-size:.9rem;font-weight:600}
 .operations-header-actions{position:relative}
-@media(max-width:700px){.operations-notifications-popover{right:-3.5rem}}
+@media(max-width:700px){.operations-notifications-popover{position:fixed;left:.75rem;right:.75rem;top:4.5rem;width:auto}}
 .operations-note-composer{position:relative;display:grid;gap:.35rem}.operations-mention-suggestions{position:absolute;z-index:20;left:0;bottom:calc(100% + .35rem);display:grid;min-width:min(22rem,100%);max-height:16rem;overflow:auto;padding:.3rem;background:#fff;border:1px solid #cbd5e1;border-radius:.65rem;box-shadow:0 10px 28px #0f172a24}.operations-mention-suggestions button{display:grid;gap:.12rem;text-align:left;padding:.5rem .65rem;border:0;border-radius:.4rem;background:transparent;color:#1e293b;cursor:pointer}.operations-mention-suggestions button:hover,.operations-mention-suggestions button:focus-visible{background:#eff6ff;outline:none}.operations-mention-suggestions small,.operations-note-form>small{color:#64748b;font-size:.78rem}.operations-mention-suggestions p{margin:.35rem .5rem;color:#64748b;font-size:.8rem;line-height:1.4}
+.operations-notifications-popover,.staff-toast{--color-accent:var(--accent,#1a7a5e)}

@@ -491,6 +491,19 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             logger.exception("Could not save Operations notification preferences")
             raise HTTPException(status_code=503, detail="The notification preference could not be saved.") from exc
 
+    @router.post("/operations/me/notifications/read-all")
+    def read_all_operations_notifications(authorization: str | None = Header(default=None)):
+        staff = staff_identity(authorization)
+        try:
+            rows = (supabase.table("operations_worker_notifications").update({
+                "read_at": datetime.now().astimezone().isoformat(),
+            }).eq("worker_id", staff["user_id"]).is_("read_at", "null").is_("dismissed_at", "null")
+                .execute().data or [])
+            return {"marked_read": len(rows)}
+        except Exception as exc:
+            logger.exception("Could not mark Operations notifications read")
+            raise HTTPException(status_code=503, detail="Notifications could not be marked read.") from exc
+
     @router.patch("/operations/me/notifications/{notification_id}")
     def update_operations_notification(notification_id: UUID, payload: WorkerNotificationAction,
             authorization: str | None = Header(default=None)):

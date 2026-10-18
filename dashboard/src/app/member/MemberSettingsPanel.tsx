@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { memberSoundsEnabled, setMemberSoundsEnabled } from "../memberSound";
+import { SoundPicker } from "../SoundPicker";
+import "../notifications.css";
 import { MemberThemePicker } from "../MemberThemePicker";
 import { supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
@@ -283,7 +285,7 @@ export function MemberSettingsPanel({
       </section>
       <section className="member-settings-section" aria-labelledby="member-settings-sounds">
         <h2 id="member-settings-sounds">Chat and notification sounds</h2>
-        <p>Play a soft sound when a new chat reply or notification arrives on this device.</p>
+        <p>Play a sound when a new chat reply or notification arrives on this device.</p>
         <label className="member-sound-setting">
           <input
             type="checkbox"
@@ -298,6 +300,7 @@ export function MemberSettingsPanel({
             <small>{soundsEnabled ? "Sounds are on for this device." : "Sounds are off for this device."}</small>
           </span>
         </label>
+        <SoundPicker audience="member" disabled={!soundsEnabled} />
       </section>
       {error && (
         <p role="alert" className="form-error">
