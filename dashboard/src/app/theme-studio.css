@@ -7,3 +7,4 @@
 
 .theme-font-sample{display:block;margin-top:6px;color:#3b4656;font-size:14px;line-height:1.3}
 .theme-preview-v2{display:grid;align-content:start;gap:10px;min-width:0}.theme-preview-v2-label{margin:0;color:#5d6877;font-size:12px;font-weight:700}.theme-dark-note{margin:0;padding:9px 11px;border-radius:8px;background:#eef3ff;color:#173a6b;font-size:12px;line-height:1.5}
+.theme-unpublished{display:block;margin-top:3px;color:#9a5b00!important;font-weight:700}.theme-state.unpublished{background:#fff4dd;color:#8a5200}

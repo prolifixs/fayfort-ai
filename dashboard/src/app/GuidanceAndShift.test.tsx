@@ -237,3 +237,20 @@ describe("theme tone", () => {
     expect(themeTone("#FFFFFF")).toBe("light");
   });
 });
+
+describe("Theme Studio unpublished changes", () => {
+  it("names the draft and says members still see the published version", async () => {
+    const colors = { page_background: "#0B1A33", surface: "#12264A", text: "#EAF1FB", muted_text: "#A9BCD8", accent: "#4FA3FF", accent_foreground: "#06122A", border: "#3A5A8C", focus: "#7CC0FF" };
+    routes = (url) =>
+      url.endsWith("/platform/themes")
+        ? { themes: [{ theme_id: "t05", display_name: "T-05 Acceptance Preview", description: null, draft_display_name: "Importer, Exporter, Koko Water", draft_description: null,
+            status: "published", requires_paid: true, is_builtin: false, draft_revision: 2, published_revision: 1,
+            draft: { revision: 2, palette_preset: "koko-water-navy", wrapper_style: "soft", colors, font_family: "montserrat" },
+            published: { revision: 1, palette_preset: "ocean-blue", wrapper_style: "soft", colors: { ...colors, page_background: "#FFFFFF", surface: "#F7F9FA", text: "#17212B", muted_text: "#526170", accent: "#005A9C", accent_foreground: "#FFFFFF" } } }] }
+        : {};
+    render(<ThemeStudioPage accessToken="t" />);
+    const item = await screen.findByRole("button", { name: /Importer, Exporter, Koko Water/ });
+    expect(item).toHaveTextContent("Changes not published: members still see “T-05 Acceptance Preview”");
+    expect(item).toHaveTextContent("unpublished");
+  });
+});
