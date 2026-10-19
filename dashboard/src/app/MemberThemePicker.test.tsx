@@ -31,7 +31,7 @@ describe("MemberThemePicker", () => {
   expect(screen.getByText("Dark")).toBeInTheDocument();
   expect(screen.getByText(/Standard or Pro required to use this theme/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Use this theme" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Try on the whole app" }));
+  fireEvent.click(screen.getByRole("button", { name: "Try it for 15 seconds" }));
   await waitFor(() => expect(previewMemberTheme).toHaveBeenCalledWith("koko-water"));
  });
  it("saves a theme the member can use", async () => {

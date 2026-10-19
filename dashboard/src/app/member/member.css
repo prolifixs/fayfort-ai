@@ -1375,3 +1375,9 @@ article.shop-tile,
   .mtp-body { display: flex; flex-direction: column-reverse; }
   .mtp-actions > button { flex: 1 1 auto; }
 }
+
+/* Theme try-on lasts 15 seconds (MemberThemeRuntime): a shrinking bar and the seconds left. */
+.member-theme-preview-time { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 64px; padding: 2px 8px 2px 6px; border-radius: 999px; background: color-mix(in srgb, currentColor 16%, transparent); font-variant-numeric: tabular-nums; }
+.member-theme-preview-track { display: block; width: 28px; height: 4px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, currentColor 30%, transparent); }
+.member-theme-preview-track i { display: block; height: 100%; background: currentColor; transition: width .25s linear; }
+.member-theme-preview-banner.is-ended { background: var(--color-text); color: var(--color-bg); }

@@ -153,11 +153,11 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
                       </button>
                     )}
                     <button className="secondary-button" type="button" onClick={() => void tryOn(shown)}>
-                      Try on the whole app
+                      Try it for 15 seconds
                     </button>
                   </div>
                   {shown.requires_paid && !shown.can_apply && (
-                    <p className="mtp-locked">Standard or Pro required to use this theme. You can still try it on.</p>
+                    <p className="mtp-locked">Standard or Pro required to use this theme. You can still try it for 15 seconds.</p>
                   )}
                 </div>
                 <div className="mtp-list" role="radiogroup" aria-label="Themes">
