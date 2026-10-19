@@ -1,6 +1,7 @@
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { ConversationRow, Handoff, HandoffAgent, HandoffEvent, MessageRow } from "./types";
+import { NextHint } from "../staff/PageHelp";
 import { StaffChatThread, fromBusinessMessage } from "../staff/StaffChatThread";
 import { readable } from "../staff/StaffChrome";
 import { FayfortLoader } from "../brand/FayfortLogo";
@@ -352,6 +353,13 @@ export function HandoffsPage({ accessToken, businessId }: { accessToken: string;
                       : "No wait estimate yet"}
                   </small>
                 )}
+                {item.status === "requested" ? (
+                  <NextHint>A customer is waiting. Take it over yourself, or assign it to an available colleague.</NextHint>
+                ) : item.status === "assigned" ? (
+                  <NextHint>Assigned but not started. The assignee presses Take over to start replying.</NextHint>
+                ) : item.status === "active" ? (
+                  <NextHint>Open the chat and reply. When the customer has what they need, press Return to automation.</NextHint>
+                ) : null}
                 <div className="record-actions">
                   {["requested", "assigned"].includes(item.status) && (
                     <>

@@ -420,6 +420,23 @@ class DepartmentalOperationsTests(unittest.TestCase):
         })
 
     @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
+    @patch("app.accounts.operations.supabase.table")
+    @patch("app.accounts.operations.supabase.rpc")
+    def test_worker_must_be_clocked_in_to_claim(self, rpc, table, identity):
+        shifts = table.return_value.select.return_value.eq.return_value.is_.return_value.limit.return_value.execute.return_value
+        shifts.data = []
+        response = self.client.post(f"/operations/work-items/{WORK_ITEM}/claim")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Clock in", response.json()["detail"])
+        rpc.assert_not_called()
+        table.assert_called_with("worker_shifts")
+
+        shifts.data = [{"id": "shift-1"}]
+        rpc.return_value.execute.return_value.data = {"id": WORK_ITEM, "status": "claimed", "version": 2}
+        response = self.client.post(f"/operations/work-items/{WORK_ITEM}/claim")
+        self.assertEqual(response.status_code, 200)
+
+    @patch("app.accounts.router.trusted_fayfort_staff", return_value={"user_id": WORKER, "role": "worker"})
     @patch("app.accounts.operations.supabase.rpc")
     def test_worker_cannot_view_all_departments(self, rpc, identity):
         response = self.client.get("/operations/work-items?scope=all")

@@ -288,3 +288,30 @@ export type AiUsageResult = {
 };
 
 export type OperationalRecord = Record<string, unknown>;
+
+/** GET /businesses/{id}/analytics/charts (app/dashboard/analytics_charts.py). */
+export type AnalyticsCharts = {
+  days: number;
+  bucket: "day" | "week";
+  start: string;
+  end: string;
+  truncated: boolean;
+  totals: {
+    conversations: { value: number; change: number | null };
+    handoffs: { value: number; change: number | null };
+    events: { value: number; change: number | null };
+    messages: { value: number };
+    ai_calls: { value: number; change: number | null };
+    ai_cost_usd: { value: number };
+  };
+  groups: { key: string; label: string }[];
+  activity: ({ bucket: string } & Record<string, number | string>)[];
+  channels: string[];
+  conversations: ({ bucket: string } & Record<string, number | string>)[];
+  handoffs: { series: { bucket: string; requested: number }[]; by_status: Record<string, number> };
+  ai: {
+    series: { bucket: string; calls: number; tokens: number; cost_usd: number }[];
+    by_operation: { operation: string; calls: number; tokens: number; cost_usd: number }[];
+  };
+  top_events: { event_type: string; label: string; count: number }[];
+};

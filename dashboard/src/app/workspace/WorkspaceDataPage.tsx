@@ -13,6 +13,7 @@ import type {
   RequestRow,
 } from "./types";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { NextHint } from "../staff/PageHelp";
 
 export function WorkspaceDataPage({
   module,
@@ -362,7 +363,7 @@ export function WorkspaceDataPage({
       {loading ? (
         <FayfortLoader label={`Loading ${module.toLowerCase()}…`} />
       ) : module === "Conversations" ? (
-        conversations.length === 0 ? (
+        conversations.length === 0 && !selected ? (
           <p className="empty-copy">
             {conversationOffset > 0 || conversationStatus || conversationChannel.trim()
               ? "No chats needing a person match these filters."
@@ -371,8 +372,15 @@ export function WorkspaceDataPage({
         ) : (
           <div className={selected ? "workspace-split inbox has-selection" : "workspace-split inbox"}>
             <div className="record-list inbox-list" aria-label="Conversation list">
+              {selected && !conversations.some((item) => item.id === selected.id) && (
+                <p className="quiet-note inbox-opened-note" role="status">
+                  Opened from Customers. The AI is handling this chat, so it isn't in the list of chats that need a person.
+                </p>
+              )}
               {visibleConversations.length === 0 ? (
-                <p className="empty-copy">No conversations on this page match that search.</p>
+                <p className="empty-copy">
+                  {conversations.length === 0 ? "No other chats need a person right now." : "No conversations on this page match that search."}
+                </p>
               ) : (
                 visibleConversations.map((item) => (
                   <button
@@ -740,6 +748,16 @@ export function RequestManagementCard({
             <dd>{item.missing_information.length ? item.missing_information.map(readable).join(", ") : "Nothing"}</dd>
           </div>
         </dl>
+        {item.status === "awaiting_customer" ? (
+          <NextHint tone="wait">The customer's move: they answer in the chat. It comes back to Active when they do.</NextHint>
+        ) : item.status === "active" && item.missing_information.length ? (
+          <NextHint>
+            The AI is asking for {item.missing_information.map(readable).join(", ").toLowerCase()}. If the chat has stalled, ask the
+            customer yourself (Customers → Read chat → Open in Conversations).
+          </NextHint>
+        ) : item.status === "active" ? (
+          <NextHint>Everything needed is here. Do the work, tell the customer, then set it to Completed.</NextHint>
+        ) : null}
         <span className="request-card-refs">
           <ShortId id={item.id} label="Request" />
           <ShortId id={item.conversation_id} label="Chat" />
@@ -849,7 +867,36 @@ export function CustomerWorkspace({
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  /** The chat whose full thread is open on this page, with its messages. */
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [chat, setChat] = useState<MessageRow[] | null>(null);
+  const [chatError, setChatError] = useState("");
+  async function toggleChat(conversation: CustomerConversationRow) {
+    if (chatId === conversation.id) {
+      setChatId(null);
+      return;
+    }
+    setChatId(conversation.id);
+    setChat(null);
+    setChatError("");
+    try {
+      const data = await apiRequest<{ messages: MessageRow[] }>(
+        `/businesses/${businessId}/conversations/${conversation.id}/messages`,
+        accessToken,
+      );
+      if (!data || !Array.isArray(data.messages)) throw new Error("The chat returned an incomplete response.");
+      setChat(
+        data.messages.map((message) => ({
+          ...message,
+          content: typeof message.content === "string" ? message.content : String(message.content ?? ""),
+        })),
+      );
+    } catch (e) {
+      setChatError(e instanceof Error ? e.message : "This chat could not be loaded.");
+    }
+  }
   async function selectCustomer(item: CustomerRow) {
+    setChatId(null);
     setSelected(item);
     setDetail(null);
     setLoading(true);
@@ -932,13 +979,7 @@ export function CustomerWorkspace({
                   <div className="customer-history-section">
                     <div className="panel-heading">
                       <h3>Conversation history</h3>
-                      <button
-                        type="button"
-                        disabled={!detail.conversations.length}
-                        onClick={() => setActive("Conversations")}
-                      >
-                        Open Conversations
-                      </button>
+                      <span className="quiet-note">Every chat, including ones the AI handled alone</span>
                     </div>
                     {detail.conversations.length === 0 ? (
                       <p className="empty-copy">No conversations are linked to this customer.</p>
@@ -954,9 +995,38 @@ export function CustomerWorkspace({
                               {new Date(conversation.last_message_at || conversation.created_at).toLocaleString()}
                             </small>
                             {conversation.summary && <p>{conversation.summary}</p>}
-                            <button type="button" onClick={() => openConversation(conversation)}>
-                              Open conversation
-                            </button>
+                            <span className="record-actions">
+                              <button
+                                type="button"
+                                aria-expanded={chatId === conversation.id}
+                                onClick={() => void toggleChat(conversation)}
+                              >
+                                {chatId === conversation.id ? "Hide chat" : "Read chat"}
+                              </button>
+                              <button type="button" className="text-button" onClick={() => openConversation(conversation)}>
+                                Open in Conversations to reply
+                              </button>
+                            </span>
+                            {chatId === conversation.id &&
+                              (chatError ? (
+                                <p className="form-error" role="alert">
+                                  {chatError}
+                                </p>
+                              ) : chat === null ? (
+                                <FayfortLoader label="Loading the chat…" />
+                              ) : (
+                                <StaffChatThread
+                                  className="customer-chat-thread"
+                                  label={`Chat on ${readable(conversation.channel || conversation.platform || "an unknown channel")}`}
+                                  emptyText="No messages recorded in this chat."
+                                  messages={chat.map((message) => fromBusinessMessage(message))}
+                                  footer={
+                                    <p className="staff-thread-footer">
+                                      Full history, read-only. To reply, open it in Conversations and request a human takeover.
+                                    </p>
+                                  }
+                                />
+                              ))}
                           </article>
                         ))}
                       </div>

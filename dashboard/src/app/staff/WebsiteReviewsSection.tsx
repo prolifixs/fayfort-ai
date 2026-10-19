@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { NextHint } from "./PageHelp";
 import { ApiRequestError, apiRequest } from "../../lib/api";
 import { FayfortLoader } from "../brand/FayfortLogo";
 
@@ -322,6 +323,13 @@ function ReviewCard({
           {review.featured && <span className="status-pill is-good">On the home page first</span>}
         </div>
         {review.staff_note && review.status === "pending" && <p className="review-note">{review.staff_note}</p>}
+        {review.status === "pending" && (
+          <NextHint>
+            {member
+              ? "Read it, then Publish it to the website or Hide it. Members' words can't be changed."
+              : "Compare the text with the screenshot, fix anything the reader got wrong, add the name, then Publish."}
+          </NextHint>
+        )}
         {member ? (
           <div className="review-member-words">
             <Stars value={review.rating} label="Rating" />

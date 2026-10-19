@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { loadThemeFont } from "./themeFonts";
 import { apiRequest } from "../lib/api";
 import { dashboardAuthConfigured, supabaseClient } from "../lib/supabase";
 import "./theme-preview.css";
 import { FayfortLoader } from "./brand/FayfortLogo";
 
 type ThemeColors={page_background:string;surface:string;text:string;muted_text:string;accent:string;accent_foreground:string;border:string;focus:string};
-type ThemeRevision={palette_preset:string;wrapper_style:"clean"|"soft"|"framed";colors:ThemeColors};
+type ThemeRevision={palette_preset:string;wrapper_style:"clean"|"soft"|"framed";colors:ThemeColors;font_family?:string};
 type Theme={theme_id:string;display_name:string;description:string|null;status:"draft"|"published"|"archived";draft_revision:number|null;published_revision:number|null;draft:ThemeRevision|null;published:ThemeRevision|null};
 type PreviewPage="chat"|"catalog"|"saved"|"notifications"|"requests"|"settings";
 
@@ -17,7 +18,7 @@ export function ThemePreviewPage(){
  const themeId=new URLSearchParams(window.location.search).get("theme")||"";
  const [token,setToken]=useState<string|null>(null);const [loading,setLoading]=useState(true);const [theme,setTheme]=useState<Theme|null>(null);const [error,setError]=useState("");const [page,setPage]=useState<PreviewPage>("chat");
  useEffect(()=>{let active=true;if(!supabaseClient){setError("FayFort authentication is not configured.");setLoading(false);return;}supabaseClient.auth.getSession().then(async({data})=>{if(!active)return;const accessToken=data.session?.access_token;if(!accessToken){setError("Sign in with a platform-admin account to preview themes.");setLoading(false);return;}setToken(accessToken);try{const result=await apiRequest<{themes:Theme[]}>('/platform/themes',accessToken);if(!active)return;const found=result.themes.find(item=>item.theme_id===themeId);if(!found)throw new Error("Theme not found in the platform catalog.");if(found.status==="archived")throw new Error("Archived themes cannot be previewed.");setTheme(found);}catch(reason){if(active)setError(reason instanceof Error?reason.message:"Theme preview could not be loaded.");}finally{if(active)setLoading(false);}});return()=>{active=false;};},[themeId]);
- const revision=theme?.draft||theme?.published;const colors=revision?.colors||baseColors;const style={"--preview-page":colors.page_background,"--preview-surface":colors.surface,"--preview-text":colors.text,"--preview-muted":colors.muted_text,"--preview-accent":colors.accent,"--preview-accent-text":colors.accent_foreground,"--preview-border":colors.border,"--preview-focus":colors.focus} as React.CSSProperties;
+ const revision=theme?.draft||theme?.published;const colors=revision?.colors||baseColors;const style={"--preview-page":colors.page_background,"--preview-surface":colors.surface,"--preview-text":colors.text,"--preview-muted":colors.muted_text,"--preview-accent":colors.accent,"--preview-accent-text":colors.accent_foreground,"--preview-border":colors.border,"--preview-focus":colors.focus,fontFamily:loadThemeFont(revision?.font_family).family} as React.CSSProperties;
  if(loading)return <main className="theme-preview-screen"><FayfortLoader label="Loading private theme preview…" /></main>;
  if(error||!theme||!token)return <main className="theme-preview-screen"><section className="theme-preview-error"><h1>Theme preview unavailable</h1><p role="alert">{error||"A platform-admin session is required."}</p><a href="/">Return to Control Center</a></section></main>;
  return <main className="theme-preview-screen" style={style}>

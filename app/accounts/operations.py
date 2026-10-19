@@ -335,6 +335,18 @@ class WorkDepositInvoice(BaseModel):
         return value.upper()
 
 
+
+def worker_on_shift(worker_id: str) -> bool:
+    """Workers must be clocked in to claim work (the dashboards are gated the same way). If shifts can't be read,
+    claiming isn't blocked: an outage of the hours table mustn't stop the queue."""
+    try:
+        rows = (supabase.table("worker_shifts").select("id").eq("worker_id", worker_id)
+                .is_("ended_at", "null").limit(1).execute().data)
+    except Exception:
+        logger.warning("Could not check the worker's shift before a claim", exc_info=True)
+        return True
+    return isinstance(rows, list) and bool(rows)
+
 def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict | None]) -> APIRouter:
     router = APIRouter(tags=["departmental-operations"])
 
@@ -768,6 +780,8 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         staff = staff_identity(authorization)
         if staff.get("role") != "worker":
             raise HTTPException(status_code=403, detail="Only an active FayFort worker can claim queue work.")
+        if not worker_on_shift(staff["user_id"]):
+            raise HTTPException(status_code=409, detail="Clock in first: work can only be claimed while you're on shift.")
         try:
             result = supabase.rpc("claim_operations_work_item", {
                 "p_work_item_id": str(work_item_id), "p_worker_id": staff["user_id"],

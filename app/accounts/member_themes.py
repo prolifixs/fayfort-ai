@@ -53,6 +53,12 @@ class ThemeColors(BaseModel):
         return normalized
 
 
+# Text fonts a theme may use. "system" is FayFort's standard stack; the others load from Google Fonts in the member
+# app (dashboard/src/app/themeFonts.ts keeps the same list).
+THEME_FONTS = ("system", "poppins", "quicksand", "nunito", "montserrat", "dm-sans", "playfair", "lora")
+ThemeFont = Literal["system", "poppins", "quicksand", "nunito", "montserrat", "dm-sans", "playfair", "lora"]
+
+
 class ThemeDesign(BaseModel):
     """Persistable, versioned theme payload with accessible color pairings."""
 
@@ -61,6 +67,7 @@ class ThemeDesign(BaseModel):
     palette_preset: str = Field(min_length=1, max_length=40)
     wrapper_style: Literal["clean", "soft", "framed"]
     colors: ThemeColors
+    font_family: ThemeFont = "system"
 
     @field_validator("palette_preset")
     @classmethod

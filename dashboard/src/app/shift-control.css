@@ -25,3 +25,19 @@
   .ops-head-actions > * { min-width: 0; }
   .shift-control > .ops-head-button { width: 100%; justify-content: center; }
 }
+
+/* Clock-in gate (ShiftGate.tsx): workers see this until they clock in. */
+.shift-gate-wait { min-height: 100dvh; background: var(--color-bg, #fff); }
+.shift-gate { display: grid; place-items: center; min-height: 100dvh; padding: 24px 16px; box-sizing: border-box; background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--staff-accent, #07276c) 10%, var(--color-bg, #fff)), var(--color-bg, #fff)); color: var(--color-text, #17212b); }
+.shift-gate-card { display: grid; justify-items: center; gap: 14px; width: min(440px, 100%); padding: 32px 28px; border: 1px solid var(--color-border-subtle, #e3e7ed); border-radius: 20px; background: var(--color-surface, #fff); box-shadow: 0 24px 60px rgba(7, 39, 108, .12); text-align: center; }
+.shift-gate-card .brand-mark { width: 56px; height: 56px; }
+.shift-gate-card h1 { margin: 4px 0 0; font-size: 26px; letter-spacing: -.01em; }
+.shift-gate-card > p { margin: 0; color: var(--color-muted, #5b6676); line-height: 1.5; }
+.shift-gate-card > small { color: var(--color-muted, #5b6676); font-size: 12px; line-height: 1.5; }
+.shift-gate-hours { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin: 0; }
+.shift-gate-hours div { padding: 10px; border-radius: 12px; background: var(--color-hover, #f2f4f7); }
+.shift-gate-hours dt { color: var(--color-muted, #5b6676); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.shift-gate-hours dd { margin: 2px 0 0; font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.shift-gate-button { width: 100%; min-height: 48px; font-size: 16px; }
+.shift-gate .form-error { margin: 0; }
+.staff-topbar .shift-control .ops-head-button { min-height: 36px; }

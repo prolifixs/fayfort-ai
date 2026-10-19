@@ -3,9 +3,10 @@ import { apiRequest } from "../lib/api";
 import { useDismiss } from "./ui/useDismiss";
 import { hours, type ShiftView } from "./staff/WorkerTeam";
 import "./shift-control.css";
+import { SHIFT_CHANGED_EVENT } from "./ShiftGate";
 
 /** Operations header: Clock in, then a running shift timer with Break and Clock out (docs/WORKFORCE_AND_REVENUE_PLAN.md).
- * Claiming work while clocked out shows a one-tap reminder; it never blocks the claim. */
+ * Workers can't use the dashboards while clocked out (ShiftGate); every change here is announced so the gate follows. */
 
 type State = { shift: ShiftView | null; today_seconds: number; week_seconds: number; server_time: string };
 
@@ -27,10 +28,11 @@ export function ShiftControl({ accessToken }: { accessToken: string }) {
   onShift.current = state ? Boolean(state.shift) : null;
   useDismiss(open || nudge, () => (setOpen(false), setNudge(false)), [wrap]);
 
-  const apply = useCallback((next: State) => {
+  const apply = useCallback((next: State, announce = false) => {
     setState(next);
     setFetchedAt(Date.now());
     setError("");
+    if (announce) window.dispatchEvent(new CustomEvent(SHIFT_CHANGED_EVENT, { detail: next }));
   }, []);
   const load = useCallback(async () => {
     try {
@@ -46,6 +48,14 @@ export function ShiftControl({ accessToken }: { accessToken: string }) {
     return () => (window.clearInterval(poll), window.clearInterval(clock));
   }, [load]);
   useEffect(() => {
+    const onChange = (event: Event) => {
+      const detail = (event as CustomEvent<State>).detail;
+      if (detail && "shift" in detail) apply(detail);
+    };
+    window.addEventListener(SHIFT_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(SHIFT_CHANGED_EVENT, onChange);
+  }, [apply]);
+  useEffect(() => {
     const onClaim = () => {
       if (onShift.current === false) setNudge(true);
     };
@@ -57,7 +67,7 @@ export function ShiftControl({ accessToken }: { accessToken: string }) {
     setBusy(true);
     setError("");
     try {
-      apply(await apiRequest<State>(`/workers/me/shift/${path}`, accessToken, { method: "POST", body: body ? JSON.stringify(body) : undefined }));
+      apply(await apiRequest<State>(`/workers/me/shift/${path}`, accessToken, { method: "POST", body: body ? JSON.stringify(body) : undefined }), true);
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "That didn't work. Try again.");
@@ -144,7 +154,7 @@ export function ShiftControl({ accessToken }: { accessToken: string }) {
               {busy ? "Saving…" : "Clock out"}
             </button>
           </form>
-          <small className="muted">If you close the dashboard and forget, your shift ends by itself after 30 minutes.</small>
+          <small className="muted">Clocking out closes the dashboards until you clock in again. If you close the dashboard and forget, your shift ends by itself after 30 minutes.</small>
           {error && <p className="form-error" role="alert">{error}</p>}
         </div>
       )}

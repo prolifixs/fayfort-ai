@@ -19,6 +19,7 @@ from app.channels.messenger_outbound import deliver_messenger_text
 from app.directory.identity import trusted_business_member, trusted_platform_admin
 from app.directory.registry import TOOLS, get_tool
 from app.database.events import publish_business_event
+from app.dashboard.analytics_charts import ROW_CAP, build_charts
 
 
 class DirectorySearchRequest(BaseModel):
@@ -764,6 +765,27 @@ def create_workspace_modules_router() -> APIRouter:
             }
         except Exception:
             raise HTTPException(status_code=503, detail="Analytics could not be loaded.")
+
+    @router.get("/analytics/charts")
+    def analytics_charts(
+        business_id: str,
+        days: int = Query(default=30, ge=1, le=90),
+        authorization: str | None = Header(default=None),
+    ):
+        """Daily (weekly for 90 days) activity, conversations, handoffs and AI use for the Analytics charts."""
+        authorize(business_id, authorization)
+        if days not in {7, 30, 90}:
+            raise HTTPException(status_code=422, detail="Analytics window must be 7, 30, or 90 days.")
+
+        def fetch(table: str, columns: str, time_column: str, since: datetime):
+            return (supabase.table(table).select(columns).eq("business_id", business_id)
+                    .gte(time_column, since.isoformat()).order(time_column, desc=True)
+                    .limit(ROW_CAP + 1).execute().data or [])
+
+        try:
+            return build_charts(days, fetch)
+        except Exception:
+            raise HTTPException(status_code=503, detail="Analytics charts could not be loaded.")
 
     @router.get("/ai-usage")
     def ai_usage(

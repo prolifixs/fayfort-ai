@@ -62,7 +62,7 @@ Status: **built 2026-10-19** with every recommended decision (D1–D8) approved,
 - Clocking in marks them "On shift" (green ring on their photo) everywhere colleagues and admins see them; "Online" stays the separate tab-is-open signal.
 - Optional note on clock-out ("Packed 6 orders, sourcing calls").
 - **Forgot to clock out:** if the heartbeat stops for 30 minutes, the shift ends automatically at the last heartbeat and is flagged "Auto-ended" so an admin can check it. Shifts can't run past 16 hours.
-- **Claiming work (D3):** recommended: no hard block. Claiming while clocked out shows a nudge "You're not clocked in. Clock in now?" with one tap.
+- **Claiming work (D3):** changed by the owner on 2026-10-19: clocking in is required. See §11.
 
 **For admins (Control Center → Workforce):**
 - **Timesheets** tab: week view per worker (Mon–Sun, China time), hours per day, total, breaks, auto-ended shifts highlighted.
@@ -168,7 +168,7 @@ Each step ships on its own (migration, API, dashboard, tests, layout screenshots
 | Worker photo upload/remove; admin remove | Account page; Workforce profile (`/workers/me/photo`, `/platform/workers/{id}/photo`) |
 | Photo + first name on team replies in member chat | `member_messages.actor_user_id` → `staff` on each reply (id never sent) |
 | Clock in / break / clock out, auto-end after 30 min quiet, 16 h cap | Operations header (`ShiftControl.tsx`), sweep step `shifts` |
-| Claim nudge when clocked out | Operations (never blocks) |
+| Claim nudge when clocked out | Replaced by the clock-in gate (§11) |
 | Timesheets, on shift now, corrections (worker asks, admin approves; admin edits keep the original), CSV, hours bars, support-hours coverage heatmap | Workforce → Timesheets |
 | Customer ratings (chat quiet 2 h, delivered request), change within 7 days, low-rating alerts, fresh start | Member chat and Orders & requests; Workforce profile; Account page |
 | Revenue: tiles, net by stream over time, mix, top products, countries, memberships, CSV, history import | Shop → Revenue; Overview tile |
@@ -177,3 +177,13 @@ Each step ships on its own (migration, API, dashboard, tests, layout screenshots
 | Chart kit (validated palette, legend, hover + keyboard tooltips, table view) | `dashboard/src/app/charts/` |
 
 Tests: `tests/test_workforce_team.py`, `WorkforceRevenue.test.tsx`, e2e `team-revenue.spec.ts`.
+
+
+## 11. Clock-in required (owner request, 2026-10-19)
+
+Workers must be on shift to use FayFort at all, not only the Operations Center.
+
+- **Gate:** an active worker who isn't a platform administrator sees "Clock in to start" (today's and this week's hours, one Clock in button) instead of the Control Center or the Operations Center until they clock in (`dashboard/src/app/ShiftGate.tsx`). Administrators are never gated.
+- **Clock out closes both dashboards** at once; so does a forgotten shift that ends by itself after 30 minutes away. The shift button now sits in the Control Center header too (workers only).
+- **Server side:** claiming a work item needs an open shift (409 "Clock in first"); if the hours table can't be read, the claim isn't blocked (`worker_on_shift` in `app/accounts/operations.py`).
+- An API without the shift endpoints never locks anyone out (the gate opens on a 404).

@@ -25,6 +25,9 @@ import { AnalyticsPage } from "./AnalyticsPage";
 import { InfrastructurePage } from "../staff/InfrastructurePage";
 import { StaffThemeToggle, useStaffTheme } from "../staff/staffTheme";
 import { BrandMark } from "../brand/FayfortLogo";
+import { PageHelp } from "../staff/PageHelp";
+import { ShiftGate } from "../ShiftGate";
+import { ShiftControl } from "../ShiftControl";
 
 export const modules = [
   ["Overview", "Workspace"],
@@ -44,7 +47,7 @@ export const modules = [
 
 export const descriptions: Record<string, string> = {
   Overview: "Today at a glance for this client account.",
-  Conversations: "Customers waiting for a person, and chats a person is handling. Full chat histories are under Customers.",
+  Conversations: "Customers waiting for a person, and chats a person is handling. Every chat, including ones the AI handled alone, is under Customers → Read chat.",
   Customers: "Customer profiles with their conversations and requests.",
   Requests: "Structured requests, missing information, and lifecycle status.",
   "Directory & Tools": "Curated supplier directory data and who can use it.",
@@ -89,6 +92,7 @@ export function DashboardWorkspace({
   const [invalidSession, setInvalidSession] = useState(false);
   const [businessLoading, setBusinessLoading] = useState(true);
   const [activeWorker, setActiveWorker] = useState(false);
+  const [workerChecked, setWorkerChecked] = useState(false);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventStatus, setEventStatus] = useState("Connecting");
   const [waitingHandoffs, setWaitingHandoffs] = useState<number | null>(null);
@@ -169,6 +173,9 @@ export function DashboardWorkspace({
       })
       .catch(() => {
         if (alive) setActiveWorker(false);
+      })
+      .finally(() => {
+        if (alive) setWorkerChecked(true);
       });
     return () => {
       alive = false;
@@ -348,7 +355,9 @@ export function DashboardWorkspace({
       </b>
     ) : undefined;
   const showAlert = waitingHandoffs !== null && waitingHandoffs > (acknowledgedWaiting[businessId] || 0);
+  const gated = !platformAdmin && activeWorker;
   return (
+    <ShiftGate accessToken={accessToken} required={gated} pending={!platformAdmin && !workerChecked} onSignOut={onSignOut ? () => void onSignOut() : undefined}>
     <div className={drawerOpen && !isDesktop ? "staff-app shell sidebar-open" : "staff-app shell"}>
       <aside
         id="staff-sidebar"
@@ -469,6 +478,7 @@ export function DashboardWorkspace({
                 </button>
               </>
             )}
+            {gated && <ShiftControl accessToken={accessToken} />}
             <StaffThemeToggle theme={staffTheme} onChange={setStaffTheme} />
             {import.meta.env.DEV ? <small className="staff-dev-pill">Dev</small> : null}
           </div>
@@ -480,6 +490,7 @@ export function DashboardWorkspace({
               <p>{descriptions[active]}</p>
             </div>
           </div>
+          <PageHelp key={active} id={active === "Channels" || active === "Connections" ? "Channels & Connections" : active} />
           <PageErrorBoundary page={active}>
           {active === "Theme Studio" && platformAdmin ? (
             <ThemeStudioPage accessToken={accessToken} /> 
@@ -608,6 +619,7 @@ export function DashboardWorkspace({
         </div>
       </main>
     </div>
+    </ShiftGate>
   );
 }
 

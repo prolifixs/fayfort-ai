@@ -96,3 +96,17 @@ All five decisions were approved.
 | 5. Human Agents and Operations Center | Queue cards open the full chat with the reply box. Operations Center has Queue, Team and Reports tabs (queue first); the detail stays in view; "← Back to the queue" and auto-scroll on smaller screens; notes and checklist forms stacked |
 | 6. Remaining pages | Overview shows live numbers (open conversations, handoffs waiting, requests awaiting the customer, active requests, recent failed automation runs) plus recent activity and shortcuts. Requests show details as fields instead of JSON. Customers list and history tidied. Settings form stacked. Channels and Connections merged into "Channels & Connections" (old names still open it) |
 | 7. QA | `tests/e2e/staff-layout.spec.ts` with `staff-fixtures.ts`: key pages at four sizes with a no-sideways-scroll check, chat sides, phone drawer, Operations Center tabs and chats |
+
+
+## 7. Guidance, chats under Customers, Analytics charts (2026-10-19)
+
+- **How this works:** every Control Center page and every Shop tab has a collapsible guide under its title (what the page is for, the usual steps in order, confusing words). It opens the first time someone visits the page, then stays closed until opened. Operations Center → Products and Schedule show their guides the same way. Text lives in `dashboard/src/app/staff/PageHelp.tsx` (`PAGE_GUIDES`).
+- **What next:** records say what happens next and whose move it is (Next / Waiting / Fix / Done): giveaways (draft, scheduled, live, ended, drawn with prizes to arrange), flash sales, trend items and pools, invoices to send and failed ones, orders to pack, member plans without Stripe, requests, handoffs and reviews to check. Shop → Overview starts with "What needs you", linking to the right tab. The Operations queue says which work to pick first.
+- **Product picker:** flash sales and giveaway prizes pick shop products by name instead of pasting ids.
+- **Draw winners** only appears once a giveaway has ended.
+- **Customers shows every chat:** Read chat opens the full thread on the customer's page (including chats the AI handled alone); Open in Conversations opens it there to request a takeover and reply, even when it isn't in the "needs a person" list.
+- **Analytics:** headline tiles with change against the previous window, the AI budget meter, and charts (activity by group, new conversations by channel, handoffs, AI calls, AI calls by job, handoff outcomes, most common events), each with a table view. Data from `GET /businesses/{id}/analytics/charts` (`app/dashboard/analytics_charts.py`): daily for 7 and 30 days, weekly for 90, at most 10,000 rows per source. The event log and AI details stay underneath, folded.
+
+## 8. Member theme fonts (2026-10-19)
+
+Themes change the member dashboard only. Theme Studio has a Text font (FayFort standard, Poppins, Quicksand, Nunito, Montserrat, DM Sans, Playfair Display, Lora), loaded from Google Fonts when used, and three pink palettes (girl boss pink, blush rose, berry bold) that pass the contrast rules. Stored as `member_theme_revisions.font_family` (migration `20261019150000_theme_fonts.sql`); older revisions use the standard font.

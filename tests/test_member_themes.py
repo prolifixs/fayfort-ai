@@ -88,3 +88,16 @@ def test_theme_draft_reserves_base_and_normalizes_slug_and_name():
 
 def test_contrast_ratio_calculation():
     assert contrast_ratio("#000000", "#FFFFFF") == pytest.approx(21)
+
+
+def test_font_defaults_to_system_and_rejects_unknown_fonts():
+    from app.accounts.member_themes import THEME_FONTS
+    colors = {"page_background": "#FFFFFF", "surface": "#F7F9FA", "text": "#17212B", "muted_text": "#526170",
+              "accent": "#005A9C", "accent_foreground": "#FFFFFF", "border": "#637180", "focus": "#005A9C"}
+    assert ThemeDesign(palette_preset="ocean-blue", wrapper_style="soft", colors=colors).font_family == "system"
+    assert ThemeDesign(palette_preset="x", wrapper_style="soft", colors=colors, font_family="poppins").font_family == "poppins"
+    with pytest.raises(ValidationError):
+        ThemeDesign(palette_preset="x", wrapper_style="soft", colors=colors, font_family="comic-sans")
+    migration = open("supabase/migrations/20261019150000_theme_fonts.sql").read()
+    for font in THEME_FONTS:
+        assert f"'{font}'" in migration

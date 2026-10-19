@@ -35,7 +35,9 @@ import {
   RequestStagePanel,
   useFirstWeek,
 } from "./operations/FlowPanels";
-import { GUIDES, guideKeyFor, playbookSteps } from "./operations/playbooks";
+import { GUIDES, TOOL_GUIDES, guideKeyFor, playbookSteps } from "./operations/playbooks";
+import { PageHelp, toPageGuide } from "./staff/PageHelp";
+import { ShiftGate } from "./ShiftGate";
 import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ProductsWorkspace } from "./operations/StoreTeam";
@@ -180,6 +182,7 @@ export function OperationsCenterPage() {
   const guideKey = selected ? guideKeyFor(selected) : "";
   const openHelp = () => setHelp(guideKey || "glossary");
   return (
+    <ShiftGate accessToken={token || ""} required={Boolean(token) && ops.identityLoaded && !canManage} pending={Boolean(token) && !ops.identityLoaded && !error}>
     <main className="operations-center-page">
       <header className="ops-head">
         <div className="ops-head-top">
@@ -261,6 +264,8 @@ export function OperationsCenterPage() {
             </section>
           )}
           {view === "guide" && <GuideTab firstWeek={firstWeek} setFirstWeek={setFirstWeek} />}
+          {view === "products" && storeTeam && <PageHelp id="ops/products" guide={toPageGuide(TOOL_GUIDES.products_workspace)} />}
+          {view === "schedule" && <PageHelp id="ops/schedule" guide={toPageGuide(TOOL_GUIDES.schedule)} />}
           {view === "products" && storeTeam && (
             <ProductsWorkspace
               key={params.get("listing") || params.get("tab") || "products"}
@@ -305,6 +310,14 @@ export function OperationsCenterPage() {
                           ? "Finished work keeps its full history here. It can't be changed; an administrator can reopen it."
                           : "Open an item from the queue. The steps bar shows where it is and what to do now."}
                       </p>
+                      {view === "queue" && (
+                        <ol className="ops-pick-order" aria-label="Which work to pick first">
+                          <li><strong>Overdue first.</strong> Red cards marked Overdue have passed their deadline.</li>
+                          <li><strong>Then anything waiting for a person:</strong> chats and handoffs, because a customer is sitting there.</li>
+                          <li><strong>Then the oldest open item</strong> in your departments. Claim it so nobody doubles up.</li>
+                          <li><strong>Waiting cards can wait.</strong> The next move is someone else's; they come back by themselves.</li>
+                        </ol>
+                      )}
                       <button type="button" className="secondary-button" onClick={() => setView("guide")}>
                         New here? Read the guide
                       </button>
@@ -480,5 +493,6 @@ export function OperationsCenterPage() {
       )}
       {help && <HelpSheet guideKey={help} onClose={() => setHelp(null)} />}
     </main>
+    </ShiftGate>
   );
 }

@@ -3,6 +3,8 @@ import { ApiRequestError, apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
 import { FayfortLoader } from "../brand/FayfortLogo";
 import { RevenuePanel } from "./RevenuePanel";
+import { NextHint, NextUp, PageHelp } from "./PageHelp";
+import { ProductPicker } from "./ProductPicker";
 
 type Tab = "overview" | "revenue" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders" | "billing";
 
@@ -69,7 +71,8 @@ export function CommercePage({ accessToken, initialTab = "overview" }: { accessT
           </button>
         ))}
       </div>
-      {tab === "overview" && <OverviewPanel accessToken={accessToken} />}
+      <PageHelp key={tab} id={`Shop/${tab}`} />
+      {tab === "overview" && <OverviewPanel accessToken={accessToken} openTab={setTab} />}
       {tab === "trends" && <TrendsPanel accessToken={accessToken} />}
       {tab === "invoices" && <InvoicesPanel accessToken={accessToken} />}
       {tab === "sales" && <SalesPanel accessToken={accessToken} />}
@@ -100,7 +103,7 @@ interface Overview {
   orders_7_days: { count: number; total: number; checkouts_started?: number };
 }
 
-function OverviewPanel({ accessToken }: { accessToken: string }) {
+function OverviewPanel({ accessToken, openTab }: { accessToken: string; openTab: (tab: Tab) => void }) {
   const { data, error, load, setError } = useLoad<Overview>("/platform/commerce/overview", accessToken);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
@@ -125,6 +128,22 @@ function OverviewPanel({ accessToken }: { accessToken: string }) {
     }
   }
   const c = data?.connection;
+  const go = (tab: Tab, label: string) => (
+    <button type="button" className="text-button" onClick={() => openTab(tab)}>
+      {label}
+    </button>
+  );
+  const lastSync = data?.sync_runs?.[0];
+  const todo = !data
+    ? []
+    : [
+        ...(c && !c.admin_configured ? [{ tone: "problem" as const, text: "Shopify isn't connected, so nothing syncs. An administrator adds the Shopify settings on the API server." }] : []),
+        ...(lastSync?.status === "failed" ? [{ tone: "problem" as const, text: `The last sync failed: ${lastSync.error || "no reason given"}. Fix the cause, then press Sync now.` }] : []),
+        ...(data.trends?.pools_ready ? [{ text: `${data.trends.pools_ready} pool${data.trends.pools_ready === 1 ? " is" : "s are"} full and ready to invoice.`, action: go("trends", "Open Trend queue") }] : []),
+        ...(data.invoices?.failed ? [{ tone: "problem" as const, text: `${data.invoices.failed} invoice${data.invoices.failed === 1 ? "" : "s"} failed to send.`, action: go("invoices", "Open Invoices") }] : []),
+        ...(data.catalog?.needs_category ? [{ text: `${data.catalog.needs_category} product${data.catalog.needs_category === 1 ? " needs" : "s need"} a FayFort category.`, action: go("products", "Open Category mapping") }] : []),
+        ...(data.trends?.open ? [{ text: `${data.trends.open} shared item${data.trends.open === 1 ? " is" : "s are"} waiting for a decision (link, pool or dismiss).`, action: go("trends", "Open Trend queue") }] : []),
+      ];
   return (
     <section className="control-panel" aria-label="Shop overview">
       <div className="panel-heading">
@@ -132,6 +151,7 @@ function OverviewPanel({ accessToken }: { accessToken: string }) {
         <p>Shopify holds products, prices, stock, checkout and orders. FayFort copies the catalog and adds Find It, pools, sales and giveaways.</p>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
+      {data && (todo.length ? <NextUp items={todo} /> : <p className="email-delivery ok" role="status">Nothing waiting in the Shop right now.</p>)}
       {notice && <p className="email-delivery ok" role="status">{notice}</p>}
       {c && (
         <>
@@ -315,6 +335,15 @@ function TrendsPanel({ accessToken }: { accessToken: string }) {
                 <a href={trend.url} target="_blank" rel="noreferrer noopener">
                   Open link
                 </a>
+                {trend.ready ? (
+                  <NextHint>The pool is full: press Invoice pool to email each member their share.</NextHint>
+                ) : trend.pool ? (
+                  <NextHint tone="wait">Members joining the pool ({trend.want_count} of {trend.pool.target}). Invoice it when it's full.</NextHint>
+                ) : trend.linked_product ? (
+                  <NextHint tone="done">Linked to a store product; everyone who wanted it was emailed.</NextHint>
+                ) : trend.status === "open" ? (
+                  <NextHint>Decide: link it to a store product, open a pool with a group price, or dismiss it.</NextHint>
+                ) : null}
               </div>
               <div className="record-actions">
                 <button type="button" disabled={busy === trend.id} onClick={() => { setEditing(trend); setForm({ target: String(trend.pool?.target || 10), price: trend.pool?.price ? String(trend.pool.price) : "", currency: trend.pool?.currency || "USD", product: trend.linked_product?.id || "" }); }}>
@@ -559,6 +588,13 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
                       : ` · deposit ${money(row.deposit.amount, row.deposit.currency)} not paid yet`
                     : ""}
                 </small>
+                {!row.can_invoice ? (
+                  <NextHint tone="problem">The option the member chose has no price or currency, so it can't be invoiced. Check the option on the request in the Operations Center.</NextHint>
+                ) : row.deposit && row.deposit.status !== "paid" ? (
+                  <NextHint tone="wait">The deposit isn't paid yet. You can still send the invoice; the deposit is then not taken off.</NextHint>
+                ) : (
+                  <NextHint>Send the invoice. Shopify emails the member, and paying it moves the request to Fulfillment.</NextHint>
+                )}
               </div>
               <div className="record-actions">
                 <button type="button" disabled={!row.can_invoice || busy === row.request_id} onClick={() => void send(row)}>
@@ -587,7 +623,15 @@ function InvoicesPanel({ accessToken }: { accessToken: string }) {
                   {money(row.amount, row.currency)}
                   {row.deposit_credit ? <small>less {money(row.deposit_credit, row.currency)} deposit</small> : null}
                 </td>
-                <td>{row.status}{row.error ? <small>{row.error}</small> : null}</td>
+                <td>
+                  {row.status}
+                  {row.error ? <small>{row.error}</small> : null}
+                  {row.status === "failed" ? (
+                    <NextHint tone="problem">An "invoice didn't send" task is open in the Operations Center. Fix the cause there and send it again.</NextHint>
+                  ) : row.status === "sent" ? (
+                    <NextHint tone="wait">Waiting for the member to pay.</NextHint>
+                  ) : null}
+                </td>
                 <td>{relativeTime(row.created_at)}</td>
               </tr>
             ))}
@@ -619,11 +663,16 @@ function toIso(local: string) {
 
 function SalesPanel({ accessToken }: { accessToken: string }) {
   const { data, error, load, setError } = useLoad<{ sales: Sale[] }>("/platform/commerce/sales", accessToken);
-  const [form, setForm] = useState({ title: "", type: "percentage", value: "20", products: "", starts: "", ends: "", code: "", limit: "" });
+  const [form, setForm] = useState({ title: "", type: "percentage", value: "20", starts: "", ends: "", code: "", limit: "" });
+  const [productIds, setProductIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (!productIds.length) {
+      setError("Choose at least one product for the sale.");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -634,7 +683,7 @@ function SalesPanel({ accessToken }: { accessToken: string }) {
           title: form.title,
           discount_type: form.type,
           value: form.value,
-          product_ids: form.products.split(/[\s,]+/).filter(Boolean),
+          product_ids: productIds,
           starts_at: toIso(form.starts),
           ends_at: toIso(form.ends),
           code: form.code.trim() ? form.code.trim().toUpperCase() : null,
@@ -677,7 +726,7 @@ function SalesPanel({ accessToken }: { accessToken: string }) {
           </select>
         </label>
         <label>Value<input required inputMode="decimal" value={form.value} onChange={(event) => setForm({ ...form, value: event.target.value })} /></label>
-        <label>Product ids<input required value={form.products} onChange={(event) => setForm({ ...form, products: event.target.value })} placeholder="FayFort product ids, comma separated" /></label>
+        <ProductPicker accessToken={accessToken} label="Products" multiple value={productIds} onChange={setProductIds} />
         <label>Starts<input required type="datetime-local" value={form.starts} onChange={(event) => setForm({ ...form, starts: event.target.value })} /></label>
         <label>Ends<input required type="datetime-local" value={form.ends} onChange={(event) => setForm({ ...form, ends: event.target.value })} /></label>
         <label>Code (optional)<input value={form.code} maxLength={40} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="AMAKA20" /></label>
@@ -693,7 +742,11 @@ function SalesPanel({ accessToken }: { accessToken: string }) {
                 <td>{sale.title}<small>{sale.code ? `Code ${sale.code}` : "Automatic"} · {sale.product_ids.length} products</small></td>
                 <td>{sale.discount_type === "percentage" ? `${sale.value}%` : money(sale.value)}</td>
                 <td>{new Date(sale.starts_at).toLocaleString()}<small>to {new Date(sale.ends_at).toLocaleString()}</small></td>
-                <td>{sale.status}{sale.error ? <small>{sale.error}</small> : null}</td>
+                <td>
+                  {saleState(sale)}
+                  {sale.error ? <small>{sale.error}</small> : null}
+                  <SaleNext sale={sale} />
+                </td>
                 <td>{sale.status === "scheduled" && <button type="button" className="text-button" onClick={() => void cancel(sale)}>Cancel</button>}</td>
               </tr>
             ))}
@@ -704,6 +757,24 @@ function SalesPanel({ accessToken }: { accessToken: string }) {
       )}
     </section>
   );
+}
+
+function saleState(sale: Sale) {
+  if (sale.status !== "scheduled") return sale.status;
+  const now = Date.now();
+  if (new Date(sale.starts_at).getTime() > now) return "scheduled";
+  return new Date(sale.ends_at).getTime() > now ? "running" : "ended";
+}
+
+function SaleNext({ sale }: { sale: Sale }) {
+  const state = saleState(sale);
+  if (state === "failed") return <NextHint tone="problem">Shopify didn't accept it. Read the reason, fix it (often a product that left the shop), then create it again.</NextHint>;
+  if (state === "scheduled")
+    return <NextHint tone="wait">Starts {new Date(sale.starts_at).toLocaleString()}. The Store team gets a task to prepare it the day before; nothing else to do.</NextHint>;
+  if (state === "running")
+    return <NextHint tone="wait">{sale.code ? `Live: shoppers who enter ${sale.code} get the discount.` : "Live: members see the countdown on the cards."} It stops by itself at the end time.</NextHint>;
+  if (state === "ended") return <NextHint tone="done">Finished. See the effect in Revenue.</NextHint>;
+  return null;
 }
 
 interface GiveawayRow {
@@ -721,7 +792,8 @@ interface GiveawayRow {
 
 function GiveawaysPanel({ accessToken }: { accessToken: string }) {
   const { data, error, load, setError } = useLoad<{ giveaways: GiveawayRow[] }>("/platform/commerce/giveaways", accessToken);
-  const [form, setForm] = useState({ title: "", prize: "", product: "", starts: "", ends: "", winners: "1", description: "", draft: false });
+  const [form, setForm] = useState({ title: "", prize: "", starts: "", ends: "", winners: "1", description: "", draft: false });
+  const [prize, setPrize] = useState<string[]>([]);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   async function act(path: string, init: RequestInit, message: string, key: string) {
@@ -748,7 +820,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
           title: form.title,
           description: form.description,
           prize_text: form.prize,
-          prize_product_id: form.product.trim() || null,
+          prize_product_id: prize[0] || null,
           starts_at: toIso(form.starts),
           ends_at: toIso(form.ends),
           winner_count: Number(form.winners) || 1,
@@ -772,7 +844,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
       <form className="inline-form" onSubmit={create} aria-label="New giveaway">
         <label>Title<input required maxLength={120} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
         <label>Prize<input required maxLength={300} value={form.prize} onChange={(event) => setForm({ ...form, prize: event.target.value })} placeholder="A 24-inch body wave wig" /></label>
-        <label>Prize product id (optional)<input value={form.product} onChange={(event) => setForm({ ...form, product: event.target.value })} /></label>
+        <ProductPicker accessToken={accessToken} label="Prize from the shop (optional)" value={prize} onChange={setPrize} />
         <label>Starts<input required type="datetime-local" value={form.starts} onChange={(event) => setForm({ ...form, starts: event.target.value })} /></label>
         <label>Ends<input required type="datetime-local" value={form.ends} onChange={(event) => setForm({ ...form, ends: event.target.value })} /></label>
         <label>Winners<input type="number" min={1} max={50} value={form.winners} onChange={(event) => setForm({ ...form, winners: event.target.value })} /></label>
@@ -790,7 +862,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
               <div>
                 <strong>{giveaway.title} · {giveawayState(giveaway)}</strong>
                 <small>
-                  {giveaway.prize_text} · {giveaway.entries} entries · {giveaway.winner_count} winner(s) · ends {new Date(giveaway.ends_at).toLocaleString()}
+                  {giveaway.prize_text} · {giveaway.entries} entr{giveaway.entries === 1 ? "y" : "ies"} · {giveaway.winner_count} winner{giveaway.winner_count === 1 ? "" : "s"} · ends {new Date(giveaway.ends_at).toLocaleString()}
                 </small>
                 {giveaway.winners.map((winner) => (
                   <small key={winner.member_id}>
@@ -798,6 +870,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
                   </small>
                 ))}
                 {giveaway.draw_seed && <small>Draw seed: {giveaway.draw_seed}</small>}
+                <GiveawayNext giveaway={giveaway} />
               </div>
               <div className="record-actions">
                 {giveaway.status === "draft" && (
@@ -805,7 +878,7 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
                     Open
                   </button>
                 )}
-                {giveaway.status === "open" && (
+                {giveaway.status === "open" && giveawayState(giveaway).startsWith("ended") && (
                   <button
                     type="button"
                     disabled={!!busy}
@@ -829,6 +902,28 @@ function GiveawaysPanel({ accessToken }: { accessToken: string }) {
       )}
     </section>
   );
+}
+
+function GiveawayNext({ giveaway }: { giveaway: GiveawayRow }) {
+  const state = giveawayState(giveaway);
+  if (state === "draft") return <NextHint>Check the details, then press Open. Members can't see it until then.</NextHint>;
+  if (state === "scheduled")
+    return <NextHint tone="wait">Opens by itself on {new Date(giveaway.starts_at).toLocaleString()}. The Store team prepares the prize and the announcement the day before.</NextHint>;
+  if (state === "live")
+    return <NextHint tone="wait">Running. Members enter from the chat's front page. Draw the winners after {new Date(giveaway.ends_at).toLocaleString()}.</NextHint>;
+  if (state.startsWith("ended"))
+    return giveaway.entries
+      ? <NextHint>It has ended with {giveaway.entries} entr{giveaway.entries === 1 ? "y" : "ies"}. Press Draw winners: they are picked and emailed at once.</NextHint>
+      : <NextHint>It ended with no entries. Cancel it, or schedule a new one with more notice.</NextHint>;
+  if (state === "drawn") {
+    const noCode = giveaway.winners.filter((winner) => !winner.prize_code).length;
+    return noCode ? (
+      <NextHint>{noCode} winner{noCode === 1 ? "'s prize" : "s' prizes"} must be arranged by hand: see "Arranging a prize" in the Operations Center. It wraps up by itself a week after the draw.</NextHint>
+    ) : (
+      <NextHint tone="done">Winners emailed with their one-time codes. It wraps up by itself a week after the draw.</NextHint>
+    );
+  }
+  return null;
 }
 
 interface CategoryOption { source_ref: string; category: string; group_name?: string | null; product_type: string }
@@ -948,7 +1043,15 @@ function OrdersPanel({ accessToken }: { accessToken: string }) {
                 <td>{order.order_name}<small>{order.line_items.map((item) => `${item.quantity}× ${item.title}`).join(", ")}</small></td>
                 <td>{order.source}</td>
                 <td>{money(order.total, order.currency || "USD")}</td>
-                <td>{order.financial_status}<small>{order.fulfillment_status || "unfulfilled"}</small></td>
+                <td>
+                  {order.financial_status}
+                  <small>{order.fulfillment_status || "unfulfilled"}</small>
+                  {order.financial_status === "paid" && !order.fulfillment_status ? (
+                    <NextHint>Pack and ship it (it's also in the Operations Center), then mark it fulfilled with tracking in Shopify.</NextHint>
+                  ) : order.fulfillment_status === "partial" ? (
+                    <NextHint>Part of it shipped. Send the rest and add its tracking in Shopify.</NextHint>
+                  ) : null}
+                </td>
                 <td>{order.placed_at ? relativeTime(order.placed_at) : ""}</td>
               </tr>
             ))}
@@ -991,7 +1094,7 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
       <div className="panel-heading">
         <h2>Member plans (Stripe)</h2>
         <p>
-          Standard and Pro are monthly Stripe subscriptions. With the Stripe secret key on the API server, FayFort creates
+          Standard and Pro are monthly Stripe subscriptions. Once the Stripe key is connected (Infrastructure → Connections), FayFort creates
           the products, prices, customer portal and webhook by itself and keeps every member's plan in sync.
         </p>
       </div>
@@ -999,10 +1102,19 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
       {!data ? (
         <FayfortLoader label="Loading…" />
       ) : !data.configured ? (
-        <div className="empty-copy">
-          Stripe isn't connected. Add <code>STRIPE_SECRET_KEY</code> to the API server's settings and restart it; setup
-          then runs automatically.
-        </div>
+        <NextUp
+          title="Next"
+          items={[
+            {
+              text: "Stripe isn't connected. Go to Infrastructure → Connections and paste the Stripe secret key (a test key first). Setup then runs by itself.",
+              action: (
+                <a className="text-button" href="/?page=infrastructure">
+                  Open Infrastructure
+                </a>
+              ),
+            },
+          ]}
+        />
       ) : (
         <>
           <dl className="billing-status">
@@ -1013,6 +1125,7 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
             {data.checked_at && <div><dt>Last checked</dt><dd>{relativeTime(data.checked_at)}</dd></div>}
           </dl>
           {data.problem && <p className="form-error" role="alert">{data.problem}</p>}
+          {!data.ready && !data.problem && <NextHint>Press Run setup and sync now to finish the Stripe setup.</NextHint>}
           <div className="record-actions">
             <button type="button" disabled={busy} onClick={() => void setup()}>
               {busy ? "Checking Stripe…" : "Run setup and sync now"}
