@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import "./theme-studio.css";
 import { THEME_FONTS, loadThemeFont, themeFont, type ThemeFont } from "./themeFonts";
+import { ThemeMiniPreview } from "./ThemeMiniPreview";
+import { themeTone } from "./themeTone";
 
 type ThemeColors = {page_background:string;surface:string;text:string;muted_text:string;accent:string;accent_foreground:string;border:string;focus:string};
 type ThemeDesign = {palette_preset:string;wrapper_style:"clean"|"soft"|"framed";colors:ThemeColors;font_family:ThemeFont};
@@ -16,6 +18,8 @@ const palettes:Record<string,ThemeColors>={
   "plum-evening":{page_background:"#FBF8FC",surface:"#FFFFFF",text:"#291A31",muted_text:"#65566B",accent:"#693B78",accent_foreground:"#FFFFFF",border:"#81758A",focus:"#693B78"},
   "girl-boss-pink":{page_background:"#FFF4F8",surface:"#FFFFFF",text:"#3D0C25",muted_text:"#8A3A62",accent:"#D6247A",accent_foreground:"#FFFFFF",border:"#E9A3C4",focus:"#B0185F"},
   "blush-rose":{page_background:"#FDF6F7",surface:"#FFFFFF",text:"#3A1F26",muted_text:"#7B4E59",accent:"#B8475F",accent_foreground:"#FFFFFF",border:"#C99AA5",focus:"#B8475F"},
+  "koko-water-navy":{page_background:"#0B1A33",surface:"#12264A",text:"#EAF1FB",muted_text:"#A9BCD8",accent:"#4FA3FF",accent_foreground:"#06122A",border:"#3A5A8C",focus:"#7CC0FF"},
+  "hustler-grey":{page_background:"#161718",surface:"#222426",text:"#F2F2F2",muted_text:"#B3B6BA",accent:"#2FBF71",accent_foreground:"#0B1A10",border:"#4A4E53",focus:"#5FD99A"},
   "berry-bold":{page_background:"#FFF0F6",surface:"#FFFFFF",text:"#2E0A1F",muted_text:"#7A2E58",accent:"#A3155E",accent_foreground:"#FFFFFF",border:"#C46B98",focus:"#A3155E"},
 };
 const colorLabels:Record<keyof ThemeColors,string>={page_background:"Page background",surface:"Surface",text:"Text",muted_text:"Muted text",accent:"Accent",accent_foreground:"Accent foreground",border:"Border",focus:"Focus ring"};
@@ -45,7 +49,7 @@ export function ThemeStudioPage({accessToken}:{accessToken:string}){
     {confirmAction&&selectedTheme&&<div className="theme-lifecycle-confirm" role="alertdialog" aria-modal="false" aria-labelledby="theme-lifecycle-title" aria-describedby="theme-lifecycle-description"><strong id="theme-lifecycle-title">{confirmAction==="publish"?"Publish this theme?":"Archive this theme?"}</strong><p id="theme-lifecycle-description">{confirmAction==="publish"?"This makes the published theme available in the member theme catalog. Members can preview it, and eligible plans can apply it.":"This removes the theme from the member catalog. Members using it will see FayFort base. The catalog record stays available to staff and the theme can be republished later."}</p><div className="theme-studio-actions"><button type="button" className="primary-button" disabled={busy} onClick={()=>void lifecycle(confirmAction)}>{busy?"Working…":confirmAction==="publish"?"Confirm publish":"Confirm archive"}</button><button type="button" disabled={busy} onClick={()=>setConfirmAction(null)}>Cancel</button></div></div>}
     {selectedTheme&&<p className="theme-revision-note">Status: <strong>{selectedTheme.status}</strong> · Draft revision: {selectedTheme.draft_revision??"none"} · Published revision: {selectedTheme.published_revision??"none"}</p>}
    </form>
-   <div className={`theme-preview theme-wrapper-${form.design.wrapper_style}`} style={{"--theme-page":c.page_background,"--theme-surface":c.surface,"--theme-text":c.text,"--theme-muted":c.muted_text,"--theme-accent":c.accent,"--theme-accent-text":c.accent_foreground,"--theme-border":c.border,"--theme-focus":c.focus,fontFamily:themeFont(form.design.font_family).family} as React.CSSProperties} aria-label="Generated theme preview"><div className="theme-preview-head"><span>F</span><div><small>MEMBER EXPERIENCE PREVIEW</small><strong>{form.display_name||"Your theme name"}</strong></div><button type="button">Account</button></div><div className="theme-preview-body"><div><small>WELCOME BACK</small><h3>Your FayFort workspace</h3><p>Product discovery, saved items, and request updates in one place.</p><button type="button">Explore products</button><div className="theme-preview-card"><small>REQUEST UPDATE</small><strong>Item in warehouse</strong><p>Your item has arrived at the warehouse.</p></div></div></div></div>
+   <div className="theme-preview-v2" style={{fontFamily:themeFont(form.design.font_family).family}} aria-label="Generated theme preview"><p className="theme-preview-v2-label">What members will see</p><ThemeMiniPreview design={form.design} name={form.display_name||"Your theme name"} />{themeTone(c.page_background)==="dark"&&<p className="theme-dark-note" role="note">Dark theme: error, success and sale colours switch to light versions in the member app so they stay readable, and the logo turns white.</p>}</div>
    </div>
   </div>
  </section>;

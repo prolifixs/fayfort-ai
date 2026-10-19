@@ -74,10 +74,21 @@ class MemberThemePickerApiTests(TestCase):
         themes.select.return_value.eq.return_value.order.return_value.execute.return_value.data = [
             {"theme_id": "spring-dawn", "display_name": "Spring Dawn", "description": "Green", "status": "published", "requires_paid": True, "published_revision": 2},
         ]
-        table.side_effect = lambda name: profiles if name == "member_profiles" else themes
+        revisions = MagicMock()
+        colors = {"page_background": "#0B1A33", "surface": "#12264A", "text": "#EAF1FB", "muted_text": "#A9BCD8",
+                  "accent": "#4FA3FF", "accent_foreground": "#06122A", "border": "#3A5A8C", "focus": "#7CC0FF"}
+        revisions.select.return_value.in_.return_value.execute.return_value.data = [
+            {"theme_id": "spring-dawn", "revision": 1, "palette_preset": "old", "wrapper_style": "clean", "colors": colors},
+            {"theme_id": "spring-dawn", "revision": 2, "palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat"},
+        ]
+        table.side_effect = lambda name: profiles if name == "member_profiles" else revisions if name == "member_theme_revisions" else themes
         response = self.client.get("/members/themes", headers={"Authorization": "Bearer member-token"})
         self.assertEqual(response.status_code, 200)
         body = response.json()
+        # Every choice carries its published design so the chooser can draw it.
+        self.assertEqual(body["themes"][0]["design"]["colors"]["accent"], "#005A9C")
+        self.assertEqual(body["themes"][1]["design"], {"palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat"})
+        revisions.select.return_value.in_.assert_called_once_with("theme_id", ["spring-dawn"])
         self.assertEqual([theme["theme_id"] for theme in body["themes"]], ["base", "spring-dawn"])
         self.assertTrue(body["themes"][0]["can_apply"])
         self.assertFalse(body["themes"][1]["can_apply"])

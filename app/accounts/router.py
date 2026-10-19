@@ -615,7 +615,20 @@ def create_accounts_router() -> APIRouter:
                 "theme_id": "base", "display_name": _BASE_MEMBER_THEME["display_name"],
                 "description": "FayFort’s standard member theme.", "requires_paid": False,
                 "can_apply": True, "is_current": (profile.get("selected_theme") or "base") == "base",
+                "design": _BASE_MEMBER_THEME["design"],
             }]
+            # Each published design comes with the list so the chooser can draw a preview of every theme.
+            designs: dict[tuple[str, int], dict] = {}
+            ids = [theme["theme_id"] for theme in published if theme.get("published_revision")]
+            if ids:
+                revision_rows = (supabase.table("member_theme_revisions")
+                    .select("theme_id,revision,palette_preset,wrapper_style,colors,font_family")
+                    .in_("theme_id", ids).execute().data or [])
+                for row in revision_rows:
+                    designs[(row["theme_id"], row["revision"])] = {
+                        **{key: row[key] for key in ("palette_preset", "wrapper_style", "colors")},
+                        "font_family": row.get("font_family") or "system",
+                    }
             for theme in published:
                 if not theme.get("published_revision"):
                     continue
@@ -624,6 +637,7 @@ def create_accounts_router() -> APIRouter:
                     "description": theme.get("description") or "", "requires_paid": bool(theme.get("requires_paid")),
                     "can_apply": not theme.get("requires_paid") or tier in {"standard", "pro"},
                     "is_current": (profile.get("selected_theme") or "base") == theme["theme_id"],
+                    "design": designs.get((theme["theme_id"], theme["published_revision"])),
                 })
             return {"member_tier": tier, "selected_theme": profile.get("selected_theme") or "base", "themes": choices}
         except HTTPException:

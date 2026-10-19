@@ -110,3 +110,10 @@ All five decisions were approved.
 ## 8. Member theme fonts (2026-10-19)
 
 Themes change the member dashboard only. Theme Studio has a Text font (FayFort standard, Poppins, Quicksand, Nunito, Montserrat, DM Sans, Playfair Display, Lora), loaded from Google Fonts when used, and three pink palettes (girl boss pink, blush rose, berry bold) that pass the contrast rules. Stored as `member_theme_revisions.font_family` (migration `20261019150000_theme_fonts.sql`); older revisions use the standard font.
+
+## 9. Dark member themes and the visual theme chooser (2026-10-19)
+
+- **Dark themes work:** `MemberThemeRuntime` marks a theme dark from its page background (`themeTone.ts`). Dark themes get readable status colours (danger #ff8a80, success #4cd8a0, warning #f5c063, sale #ff9f5a; all at least 6.5:1 on navy and charcoal), dark native controls (`color-scheme`), deeper shadows and the white-shell logo (`styles/tokens.css`). Browse section tiles and request pills recolour on dark (`member.css`).
+- **Theme chooser:** Settings → Browse themes shows every published theme as a small picture of the member app in its colours and font, plus a large preview of the one selected with its colours, font and a Dark tag. Use this theme saves it; Try on the whole app keeps the old full-app preview. On phones the cards scroll sideways above the preview. `GET /members/themes` now returns each theme's published design for this.
+- **Theme Studio** draws the same preview ("What members will see") and notes what changes on dark themes. New palettes: koko water navy, hustler grey.
+- **Themes:** "Importer, Exporter, Koko Water" (rebuild of T-05: deep navy, sky-blue buttons, Montserrat) and "+234 Hustler" (charcoal, Naija green, DM Sans), both Standard or Pro, saved as drafts for the owner to publish.

@@ -106,6 +106,23 @@
   --card-border: 1px solid var(--color-border);
 }
 
+/* Dark member themes (MemberThemeRuntime sets data-theme-tone from the page background). The fixed status colours
+   are built for white and fall under 3:1 on navy or charcoal, so dark themes get light versions (all >= 6.5:1 on
+   both dark palettes), dark native controls, deeper shadows and the white-shell logo. */
+.member-theme-runtime[data-theme-tone="dark"] {
+  color-scheme: dark;
+  --color-success: #4cd8a0;
+  --color-danger: #ff8a80;
+  --color-warning: #f5c063;
+  --color-sale: #ff9f5a;
+  --color-accent-hover: color-mix(in srgb, var(--color-accent) 84%, white);
+  --color-scrim: rgb(0 0 0 / 60%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 6px 20px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 20px 60px rgb(0 0 0 / 55%);
+  --ff-logo-shell: #ffffff;
+}
+
 @media (min-width: 640px) {
   :root { --gutter: 24px; }
 }

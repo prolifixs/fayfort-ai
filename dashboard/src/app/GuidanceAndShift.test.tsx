@@ -227,3 +227,13 @@ describe("theme fonts", () => {
     expect(body.design.palette_preset).toBe("girl-boss-pink");
   });
 });
+
+describe("theme tone", () => {
+  it("treats navy and charcoal as dark, blush and white as light", async () => {
+    const { themeTone } = await import("./themeTone");
+    expect(themeTone("#0B1A33")).toBe("dark");
+    expect(themeTone("#161718")).toBe("dark");
+    expect(themeTone("#FFF4F8")).toBe("light");
+    expect(themeTone("#FFFFFF")).toBe("light");
+  });
+});
