@@ -450,6 +450,8 @@ export function useOperationsCenter() {
     if (!token) return;
     await run(async () => {
       await apiRequest(`/operations/work-items/${item.id}/claim`, token, { method: "POST" });
+      // The shift control offers to clock in if this worker is clocked out (ShiftControl.tsx).
+      window.dispatchEvent(new CustomEvent("fayfort:work-claimed"));
     }, "Work claimed for 15 minutes.");
   }
   async function saveStatus(event: FormEvent) {

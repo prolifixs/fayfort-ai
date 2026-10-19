@@ -1277,3 +1277,53 @@ article.shop-tile,
 .shop-section-tile.is-giveaway{grid-column:1/-1;grid-template-columns:auto 1fr auto;align-items:center;gap:8px 18px}
 .shop-section-tile.is-giveaway .primary-button{justify-self:end}
 @media (max-width:640px){.shop-section-tile.is-giveaway{grid-template-columns:1fr}.shop-section-tile.is-giveaway .primary-button{justify-self:start}}
+
+/* Orders & requests → "How was it?" (ReviewPrompts.tsx) */
+.review-prompts { display: grid; gap: 10px; margin: 0 0 16px; padding: 16px; border: 1px solid color-mix(in srgb, #f2a900 40%, var(--color-border)); border-radius: var(--radius-md); background: linear-gradient(135deg, color-mix(in srgb, #f2a900 9%, var(--color-bg)), var(--color-bg) 70%); }
+.review-prompts-head h3 { margin: 0; font-size: var(--text-md); }
+.review-prompts-head p { margin: 2px 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.review-thanks { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--color-success, #147a3d) 12%, var(--color-bg)); color: var(--color-success, #147a3d); font-size: var(--text-sm); font-weight: 600; }
+.review-prompt { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
+.review-prompt.is-target { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 30%, transparent); }
+.review-prompt-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.review-prompt-top > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.review-prompt-top small { color: var(--color-muted); font-size: var(--text-xs, 12px); font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.review-prompt-top strong { overflow-wrap: anywhere; }
+.review-prompt-stars { display: inline-flex; align-items: center; gap: 2px; }
+.review-prompt-stars button { width: 36px; height: 36px; padding: 0; border: 0; background: none; color: var(--color-border-strong, #c4ccd5); font-size: 28px; line-height: 1; cursor: pointer; transition: transform .12s ease, color .12s ease; }
+.review-prompt-stars button.is-on { color: #f2a900; }
+.review-prompt-stars button:hover { transform: scale(1.12); }
+.review-prompt-stars span { min-width: 76px; margin-left: 6px; color: var(--color-muted); font-size: var(--text-sm); font-weight: 600; }
+.review-prompt-form { display: grid; gap: 10px; }
+.review-prompt-form label { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 600; }
+.review-prompt-form textarea, .review-prompt-form input { width: 100%; min-width: 0; font-weight: 400; }
+.review-prompt-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.review-prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.review-prompt-skip { justify-self: start; padding: 0; border: 0; background: none; color: var(--color-muted); font: inherit; font-size: var(--text-xs, 12px); cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .review-prompt-stars button { transition: none; } }
+
+/* Chat: the team member who replied, and "How was Ada's help?" (WorkerRatingPrompts.tsx) */
+.member-chat-staff { display: inline-flex; align-items: center; gap: 6px; }
+.member-chat-staff-face, .worker-rating-face { display: inline-grid; flex: none; place-items: center; overflow: hidden; border-radius: 50%; background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg)); color: var(--color-accent); font-weight: 800; }
+.member-chat-staff-face { width: 20px; height: 20px; font-size: 11px; }
+.member-chat-staff-face img, .worker-rating-face img { width: 100%; height: 100%; object-fit: cover; }
+.worker-rating-prompts { display: grid; gap: 10px; }
+.worker-rating-prompts.is-chat { margin: 8px 0; }
+.worker-rating-prompts.is-request { margin: 0 0 16px; }
+.worker-rating-card { display: flex; gap: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border)); border-radius: 14px; background: color-mix(in srgb, var(--color-accent) 5%, var(--color-bg)); }
+.worker-rating-card.is-target { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent); }
+.worker-rating-face { width: 42px; height: 42px; font-size: 17px; }
+.worker-rating-body { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.worker-rating-body small { color: var(--color-muted); font-size: var(--text-xs, 12px); overflow-wrap: anywhere; }
+.worker-rating-stars { display: inline-flex; align-items: center; gap: 2px; margin-top: 2px; }
+.worker-rating-stars button { width: 34px; height: 34px; padding: 0; border: 0; background: none; color: var(--color-border-strong, #c4ccd5); font-size: 26px; line-height: 1; cursor: pointer; transition: transform .12s ease; }
+.worker-rating-stars button.is-on { color: #f2a900; }
+.worker-rating-stars button:hover { transform: scale(1.12); }
+.worker-rating-stars span { margin-left: 6px; color: var(--color-muted); font-size: var(--text-sm); font-weight: 600; }
+.worker-rating-form { display: flex; flex-wrap: wrap; gap: 8px; }
+.worker-rating-form input { flex: 1 1 200px; min-width: 0; }
+.worker-rating-skip { justify-self: start; padding: 0; border: 0; background: none; color: var(--color-muted); font: inherit; font-size: var(--text-xs, 12px); cursor: pointer; }
+.worker-rating-done { display: flex; align-items: center; gap: 8px; margin: 0; color: #f2a900; font-size: 18px; letter-spacing: 1px; }
+.worker-rating-done span { color: var(--color-border-strong, #c4ccd5); margin-left: -8px; }
+.worker-rating-done .text-button { font-size: var(--text-xs, 12px); letter-spacing: 0; }
+@media (prefers-reduced-motion: reduce) { .worker-rating-stars button { transition: none; } }

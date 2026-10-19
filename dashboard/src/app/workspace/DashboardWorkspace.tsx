@@ -12,6 +12,7 @@ import { EmailCenterPage } from "../staff/EmailCenterPage";
 import { CommercePage } from "../staff/CommercePage";
 import { AdsPage } from "../staff/AdsPage";
 import { WebsitePage } from "../staff/WebsitePage";
+import { RevenueTile } from "../staff/RevenuePanel";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { AgentAvailabilityPanel, HandoffsPage } from "./HandoffsPage";
@@ -79,7 +80,7 @@ export function DashboardWorkspace({
   eventStreaming = true,
 }: WorkspaceProps) {
   const linkedPage = new URLSearchParams(window.location.search).get("page");
-  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : "Overview");
+  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : "Overview");
   const [conversationTarget, setConversationTarget] = useState<ConversationRow | null>(null);
   const [requestTargetId, setRequestTargetId] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -493,7 +494,7 @@ export function DashboardWorkspace({
           ) : active === "Shop" && platformAdmin ? (
             <CommercePage
               accessToken={accessToken}
-              initialTab={(["overview", "products", "trends", "invoices", "sales", "giveaways", "orders", "billing"].includes(new URLSearchParams(window.location.search).get("tab") || "")
+              initialTab={(["overview", "revenue", "products", "trends", "invoices", "sales", "giveaways", "orders", "billing"].includes(new URLSearchParams(window.location.search).get("tab") || "")
                 ? new URLSearchParams(window.location.search).get("tab")
                 : "overview") as "overview"}
             />
@@ -548,6 +549,7 @@ export function DashboardWorkspace({
               accessToken={accessToken}
               businessId={businessId}
               waitingHandoffs={waitingHandoffs}
+              platformAdmin={platformAdmin}
             />
           ) : ["Channels & Connections", "Channels", "Connections"].includes(active) ? (
             <>
@@ -623,12 +625,14 @@ export function Overview({
   accessToken,
   businessId,
   waitingHandoffs,
+  platformAdmin = false,
 }: {
   events: EventRecord[];
   setActive: (page: string) => void;
   accessToken?: string;
   businessId?: string;
   waitingHandoffs?: number | null;
+  platformAdmin?: boolean;
 }) {
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   useEffect(() => {
@@ -685,6 +689,15 @@ export function Overview({
             <span>{tile.label}</span>
           </button>
         ))}
+        {platformAdmin && accessToken && (
+          <RevenueTile
+            accessToken={accessToken}
+            onOpen={() => {
+              window.history.replaceState(null, "", "?page=shop&tab=revenue");
+              setActive("Shop");
+            }}
+          />
+        )}
       </div>
       <div className="overview-columns">
         <section className="overview-section" aria-label="Recent business activity">

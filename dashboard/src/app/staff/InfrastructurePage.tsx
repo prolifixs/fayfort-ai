@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ConnectionsSection } from "./ConnectionsSection";
 import { apiRequest } from "../../lib/api";
 
 type Tunnel = {
@@ -198,6 +199,8 @@ export function InfrastructurePage({ accessToken }: { accessToken: string }) {
         </p>
       )}
       {notice && <p role="status" className="quiet-note">{notice}</p>}
+
+      <ConnectionsSection accessToken={accessToken} />
 
       <section className="control-panel" aria-label="Cloudflare connection">
         <div className="panel-heading">

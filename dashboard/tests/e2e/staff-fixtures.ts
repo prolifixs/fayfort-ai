@@ -96,6 +96,19 @@ function fixture(path: string, search: URLSearchParams): unknown {
   };
   if (path === "/operations/automation-health") return { summary: { recent_runs: 42, failed_runs: 2, enabled_schedules: 5, schedule_issues: 1 }, recent_runs: [{ id: "r1", automation_name: "Abandoned cart reminder", business_ref: "biz-1", status: "failed", error_code: "provider_timeout", triggered_by: "schedule", created_at: iso(30), completed_at: iso(29) }], schedule_issues: [{ id: "s1", name: "Weekly report", business_ref: "biz-1", next_run_at: iso(-60), attempts: 3, last_error_code: "missing_template" }] };
   if (path === "/operations/reports") return { generated_at: iso(0), period_days: 30, work: { total: 48, active: 12, due_overdue: 3, by_department: { sourcing: { open: 4, claimed: 2 }, member_support: { claimed: 3 } }, aging: { under_1_day: 6, "1_to_3_days": 4, over_3_days: 2 } }, sourcing: { requests_by_latest_stage: { submitted: 3, sourcing: 4 }, candidates_added: 18, member_options_shared: 9, member_options_selected: 5 }, disputes: { opened_in_period: 2, active: 1, by_status: { investigating: 1 } }, automation: { runs_in_period: 410, failed_in_period: 7, enabled_schedules: 5, schedules_with_issues: 1 }, reconciliation: { actionable_requests_missing_work: 0, terminal_requests_with_active_work: 1, active_disputes_missing_work: 0, expired_claims: 0 }, data_limit_reached: false };
+  if (path === "/workers/me/shift") return shiftState;
+  if (path === "/platform/revenue") return revenueReport;
+  if (path === "/platform/connections") return connections;
+  if (path === "/platform/infrastructure") return { cloudflare: { provider: "cloudflare", status: "not_configured", safe_settings: {} }, tunnels: [], cloudflare_error_code: null, webhooks: [], local_api: { base_url: "http://127.0.0.1:8001", public_api_url: null }, recent_events: [] };
+  if (path === "/platform/workers") return workerDirectory;
+  if (path === "/platform/workers/staff-1") return { worker: { ...workerDirectory.workers[0], departments: ["member_support"], current_work: [], recent_activity: [], audit: [], auth_events: [] } };
+  if (path.endsWith("/ratings")) return workerRatings;
+  if (path === "/platform/workforce/settings") return { rating_reset_tasks: 20 };
+  if (path === "/platform/workforce/timesheets") return timesheet;
+  if (path === "/platform/workers/provisioning" || path.startsWith("/platform/workers/invitations")) return { invitations: [] };
+  if (path === "/platform/site/reviews") return { reviews: siteReviews, counts: { pending: 2, published: 1, hidden: 0 } };
+  if (path === "/platform/site/chat") return { settings: { enabled: true, visitor_daily_limit: 20, network_daily_limit: 60, daily_reply_cap: 400 }, today: { replies: 0, conversations: 0 }, conversations: [] };
+  if (path === "/platform/site/instagram") return { posts: [] };
   if (path === "/operations/me/notifications") return { notifications: [{ id: "on1", title: "New handoff", body: "Instagram customer needs a person", created_at: iso(9), read_at: null, href: "/operations" }], unread_count: 1 };
   return lists;
 }
@@ -169,3 +182,63 @@ function storeFixture(path: string, search: URLSearchParams): unknown {
   if (path === "/operations/schedule") return { entries: scheduleEntries(), can_plan: true, workers: [{ user_id: "staff-2", label: "ada@fayfort.com" }] };
   return {};
 }
+
+// ---- Customer reviews (Control Center → Website). Layout-test placeholders. ----------------------------------------
+const chatShot = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="390" height="520"><rect width="390" height="520" fill="#0b0b0f"/><rect x="16" y="60" width="270" height="110" rx="18" fill="#26262c"/><text x="32" y="100" fill="#eee" font-family="sans-serif" font-size="15">Placeholder customer message</text><text x="32" y="124" fill="#eee" font-family="sans-serif" font-size="15">read from a screenshot</text><rect x="150" y="200" width="224" height="60" rx="18" fill="#7a3cf0"/><text x="166" y="236" fill="#fff" font-family="sans-serif" font-size="15">Staff reply</text></svg>`)}`;
+const siteReviews = [
+  { id: "rv1", source: "instagram", status: "pending", featured: false, rating: null, body: "Placeholder customer message read from a screenshot.",
+    display_name: "Test A.", country: "Nigeria", product: null, reviewed_on: "2026-10-12", staff_note: null,
+    ocr_text: "23:18\nPlaceholder customer message\nread from a screenshot\nStaff reply", screenshot_url: chatShot, created_at: iso(30) },
+  { id: "rv2", source: "member", status: "pending", featured: false, rating: 4, body: "Placeholder member review written in the dashboard.",
+    display_name: "Test B.", country: "Ghana", product: "Sample order #1042", reviewed_on: null, staff_note: null, ocr_text: null, screenshot_url: null, created_at: iso(60) },
+  { id: "rv3", source: "whatsapp", status: "published", featured: true, rating: null, body: "Placeholder published review.",
+    display_name: "Test C", country: "UK", product: null, reviewed_on: null, staff_note: null, ocr_text: null, screenshot_url: null, created_at: iso(900) },
+];
+
+// ---- Hours, ratings, revenue and connections (docs/WORKFORCE_AND_REVENUE_PLAN.md). Layout-test placeholders. --------
+const shiftState = { shift: { id: "sh1", worker_id: "staff-1", started_at: iso(134), ended_at: null, on_break: false, on_break_since: null, break_seconds: 900, worked_seconds: 7140, ended_by: null, note: null, flag: null }, today_seconds: 7140, week_seconds: 61200, server_time: iso(0) };
+const fresh = (current: number, count: number, done: number) => ({ count, average: count >= 5 ? 4.6 : null, average_90_days: count >= 5 ? 4.7 : null, is_new: count < 5, current, current_count: Math.min(count, 4),
+  fresh_start: { every: 20, completed_tasks: done, resets: Math.floor(done / 20), last_reset_at: iso(3000), tasks_to_go: 20 - (done % 20) },
+  distribution: { "5": 8, "4": 3, "3": 1, "2": 0, "1": 0 }, monthly: [{ month: "2026-07", average: 4.4, count: 3 }, { month: "2026-08", average: 4.6, count: 4 }, { month: "2026-09", average: 4.5, count: 2 }, { month: "2026-10", average: 4.9, count: 3 }] });
+const workerDirectory = {
+  workers: [
+    { user_id: "staff-1", email: "test.a@example.com", display_name: "Test Worker A", status: "active", online: true, last_seen_at: iso(1), last_sign_in_at: iso(200), invited_at: iso(90000), activated_at: iso(80000), deactivated_at: null, handoff_availability: "available", mfa_enrolled: true, email_confirmed: true, open_work_count: 3, invitation: null, photo_url: null, rating: fresh(4.8, 12, 52), on_shift: true, on_break: false },
+    { user_id: "staff-2", email: "test.b@example.com", display_name: "Test Worker B", status: "active", online: false, last_seen_at: iso(300), last_sign_in_at: iso(900), invited_at: iso(90000), activated_at: iso(80000), deactivated_at: null, handoff_availability: "away", mfa_enrolled: false, email_confirmed: true, open_work_count: 1, invitation: null, photo_url: null, rating: fresh(5, 2, 7), on_shift: false, on_break: false },
+  ],
+  summary: { total: 2, active: 2, online: 1, invited: 0, inactive: 0, without_mfa: 1 }, online_window_seconds: 120, generated_at: iso(0),
+};
+const workerRatings = { summary: fresh(4.8, 12, 52), ratings: [
+  { id: "wr1", stars: 5, comment: "Placeholder comment: quick and very helpful.", source: "chat", created_at: iso(600), about: "Sample chat" },
+  { id: "wr2", stars: 4, comment: "Placeholder comment: good updates on my order.", source: "request", created_at: iso(3000), about: "Sample order" },
+] };
+const day = (offset: number) => { const d = new Date(now); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset); return d.toISOString().slice(0, 10); };
+const timesheet = {
+  start: day(0), days: [0, 1, 2, 3, 4, 5, 6].map(day),
+  workers: [
+    { user_id: "staff-1", name: "Test Worker A", photo_url: null, days: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((i) => [day(i), [27000, 30600, 25200, 0, 28800, 14400, 0][i]])), total_seconds: 126000, on_shift: true, on_break: false,
+      shifts: [{ id: "sx1", worker_id: "staff-1", started_at: iso(2000), ended_at: iso(1500), on_break: false, on_break_since: null, break_seconds: 1800, worked_seconds: 28200, ended_by: "auto", note: null, flag: "auto_ended" }] },
+    { user_id: "staff-2", name: "Test Worker B", photo_url: null, days: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((i) => [day(i), [0, 18000, 21600, 19800, 0, 0, 0][i]])), total_seconds: 59400, on_shift: false, on_break: false, shifts: [] },
+  ],
+  on_shift_now: [{ ...shiftState.shift, name: "Test Worker A", photo_url: null }],
+  corrections: [{ id: "cr1", shift_id: "sx1", previous_started_at: iso(2000), previous_ended_at: iso(1500), proposed_started_at: iso(2000), proposed_ended_at: iso(1400), reason: "Placeholder reason: forgot to clock out", created_at: iso(30), worker: { name: "Test Worker A", photo_url: null } }],
+  coverage: [0, 1, 2, 3, 4, 5].flatMap((weekday) => [9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((hour) => ({ weekday, hour, covered: weekday === 3 ? 0 : hour === 12 ? 0.5 : hour > 16 && weekday > 3 ? 0 : 1 }))),
+  support_hours: { days: "Mon-Sat", start: "09:30", end: "18:30", time_zone: "China time" },
+};
+const revDays = Array.from({ length: 30 }, (_, i) => { const d = new Date(now); d.setDate(d.getDate() - 29 + i); return d.toISOString().slice(0, 10); });
+const revenueReport = {
+  range: { start: revDays[0], end: revDays[29], bucket: "day", time_zone: "China time" }, currency: "USD",
+  tiles: { gross: 18420, refunds: 640, net: 17780, sales: 96, average_sale: 185.21, paying_customers: 61, previous_net: 14210, change: 0.2512, mrr: { amount: 1243, members: { standard: 24, pro: 16 } } },
+  streams: [["shop", "Shop"], ["sourcing", "Sourcing orders"], ["deposits", "Deposits"], ["consultations", "Consultations"], ["contact_credits", "Contact credits"], ["memberships", "Memberships"], ["other", "Other"]].map(([key, label]) => ({ key, label })),
+  series: revDays.map((bucket, i) => ({ bucket, shop: 120 + (i * 37) % 260, sourcing: i % 3 === 0 ? 900 - (i * 13) % 300 : 0, deposits: i % 4 === 1 ? 300 : 80, consultations: i % 6 === 2 ? 100 : 0, contact_credits: i % 5 === 0 ? 50 : 15, memberships: i % 7 === 3 ? 380 : 20, other: 0 })),
+  mix: [["shop", "Shop", 6200, 300, 5900, 41], ["sourcing", "Sourcing orders", 7900, 340, 7560, 10], ["deposits", "Deposits", 2400, 0, 2400, 14], ["consultations", "Consultations", 500, 0, 500, 5], ["contact_credits", "Contact credits", 620, 0, 620, 12], ["memberships", "Memberships", 800, 0, 800, 14], ["other", "Other", 0, 0, 0, 0]]
+    .map(([key, label, gross, refunds, net, count]) => ({ key, label, gross, refunds, net, count })),
+  sources: { shopify: 16980, stripe: 800 },
+  top_products: [{ title: "Sample wig 22 inch", revenue: 1920, quantity: 16 }, { title: "Sample closure", revenue: 1260, quantity: 9 }, { title: "Sample edge control", revenue: 380, quantity: 38 }],
+  countries: [{ country: "Nigeria", net: 9200 }, { country: "Ghana", net: 4100 }, { country: "UK", net: 2300 }, { country: "US", net: 1380 }],
+  other_currencies: {}, stripe_connected: true, data_since: iso(90000),
+};
+const connections = {
+  shopify: { connected: true, store: "sample.myshopify.com", webhooks: true, manage: "Control Center → Shop → Overview" },
+  stripe: { connected: false, ready: false, mode: "not_configured", source: "none", key_hint: null, problem: null, saved_at: null, manage: "Control Center → Shop → Billing" },
+  email: { connected: true, sending: true, from: "FayFort <updates@fayfort.com>", manage: "Control Center → Email" },
+};

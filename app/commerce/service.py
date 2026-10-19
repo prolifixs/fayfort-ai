@@ -689,7 +689,35 @@ def _attributes(order: dict) -> dict[str, str]:
     return {str(a.get("name")): str(a.get("value")) for a in order.get("note_attributes") or [] if isinstance(a, dict)}
 
 
-def record_order(order: dict) -> dict:
+def refunded_total(order: dict) -> float:
+    """Money returned on a Shopify order: successful refund transactions, else what a full refund implies."""
+    total = 0.0
+    for refund in order.get("refunds") or []:
+        for transaction in refund.get("transactions") or []:
+            if transaction.get("kind") == "refund" and transaction.get("status") in (None, "success"):
+                try:
+                    total += float(transaction.get("amount") or 0)
+                except (TypeError, ValueError):
+                    pass
+    if not total and order.get("financial_status") == "refunded":
+        try:
+            total = float(order.get("total_price") or 0)
+        except (TypeError, ValueError):
+            total = 0.0
+    return round(total, 2)
+
+
+def _country(order: dict) -> str | None:
+    for key in ("shipping_address", "billing_address"):
+        country = ((order.get(key) or {}).get("country") or "").strip()
+        if country:
+            return country[:80]
+    return None
+
+
+def record_order(order: dict, *, backfill: bool = False) -> dict:
+    """Save a Shopify order from a webhook. With backfill=True (the Revenue history import) an order already saved
+    is left alone and nothing else happens: no points, no Operations work, no invoice changes."""
     attributes = _attributes(order)
     invoice = None
     if attributes.get("fayfort_invoice_id"):
@@ -725,10 +753,16 @@ def record_order(order: dict) -> dict:
         "tracking": tracking,
         "status_url": status_url if str(status_url or "").startswith("https://") else None,
         "placed_at": order.get("created_at"),
+        "refunded_amount": refunded_total(order),
+        "ship_country": _country(order),
         "updated_at": iso(now_utc()),
     }
     previous = one(db().table("commerce_orders").select("id,financial_status")
                    .eq("shopify_order_id", shopify_order_id).maybe_single().execute())
+    if backfill:
+        if not previous:
+            db().table("commerce_orders").insert(values).execute()
+        return {"imported": not previous}
     db().table("commerce_orders").upsert(values, on_conflict="shopify_order_id").execute()
     if invoice and order.get("financial_status") in ("paid", "partially_refunded", "refunded") and invoice.get("status") != "paid":
         db().rpc("record_commerce_invoice_paid", {"p_invoice_id": str(invoice["id"]),

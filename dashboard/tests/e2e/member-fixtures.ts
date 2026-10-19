@@ -41,7 +41,7 @@ const messages = [
     find_it: { kind: "link", query: "bob wig", link: { ...trend, status: "open", pool: null }, exact: null, alternatives: [products[1], products[0]], source_it: { available: true, trend_item_id: "t1", title_hint: "Viral bob wig" } },
   },
   { id: "m3", sender_type: "member", content: "Yes please, I need it before the 30th.", related_product_ids: [], created_at: "2026-10-15T00:00:03Z" },
-  { id: "m4", sender_type: "worker", content: "Hi, I'm Ada from FayFort. I'll check with our Guangzhou suppliers and get back to you within a day.", related_product_ids: [], created_at: "2026-10-15T00:00:04Z" },
+  { id: "m4", sender_type: "worker", content: "Hi, I'm Ada from FayFort. I'll check with our Guangzhou suppliers and get back to you within a day.", related_product_ids: [], created_at: "2026-10-15T00:00:04Z", staff: { first_name: "Ada", photo_url: null } },
 ];
 const profile = {
   user_id: "member-1", display_name: "Jordan Member", points_balance: 320, rank_level: 2, subrank: 3, member_tier: "free",
@@ -88,6 +88,14 @@ const fixtures: Record<string, unknown> = {
   "/members/shop/sections/s1": { section: { id: "s1", title: "Dollar deals", hook: "From $18", style: "deal", accent: "pink", total: 4, items: products.slice(1, 5) } },
   "/members/shop/products": { products, categories: [], has_more: false },
   "/members/cart": { lines: [{ variant_id: "v1", quantity: 1, unit_price: 96, variant_title: "22 inch", available: true, product: products[0] }], subtotal: 96, currency: "USD", impulse: { pairs_with: [products[4]], ending_soon: [] } },
+  "/members/worker-ratings": {
+    prompts: [{ id: "wp1", title: "I saw this wig on TikTok", kind: "chat", conversation_id: "c1", request_id: null, worker: { first_name: "Ada", photo_url: null }, rating: null }],
+  },
+  "/members/reviews": {
+    invites: [{ id: "inv1", title: "Body wave wig 22 inch", kind: "request", created_at: "2026-10-16T00:00:00Z" }],
+    reviews: [],
+    defaults: { display_name: "Jordan M.", country: "Nigeria" },
+  },
   "/members/notifications": {
     unread_count: 2,
     notifications: [

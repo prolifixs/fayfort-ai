@@ -386,8 +386,21 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                 .eq("id", str(conversation_id)).eq("member_id", member_id).maybe_single().execute())
             if not _response_data(owner):
                 raise HTTPException(status_code=404, detail="Chat not found.")
-            rows = (supabase.table("member_messages").select("id,sender_type,content,related_product_ids,find_it,product_ref,created_at")
+            rows = (supabase.table("member_messages").select("id,sender_type,content,related_product_ids,find_it,product_ref,created_at,actor_user_id")
                 .eq("conversation_id", str(conversation_id)).order("created_at").limit(500).execute().data or [])
+            # A team member's first name and photo on their replies; their account id never leaves the server.
+            actor_ids = list(dict.fromkeys(str(row["actor_user_id"]) for row in rows
+                                           if row.get("sender_type") == "worker" and row.get("actor_user_id")))
+            try:
+                from app.workforce.team import people
+                staff_cards = people(actor_ids) if actor_ids else {}
+            except Exception:
+                logger.warning("Team member names could not be added to a chat", exc_info=True)
+                staff_cards = {}
+            for row in rows:
+                actor = str(row.pop("actor_user_id", None) or "")
+                if row.get("sender_type") == "worker" and actor in staff_cards:
+                    row["staff"] = {"first_name": staff_cards[actor]["first_name"], "photo_url": staff_cards[actor]["photo_url"]}
             product_ids = list(dict.fromkeys([product_id for row in rows
                 for product_id in (row.get("related_product_ids") or []) if product_id]
                 + [row["product_ref"] for row in rows if row.get("product_ref")]))

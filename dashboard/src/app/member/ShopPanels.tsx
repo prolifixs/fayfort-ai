@@ -5,6 +5,8 @@ import type { Cart, ProductDetail, ShopCard, ShopHome, StoreSectionTile, TrendCa
 import { money, shopSessionId, trackIntent } from "./commerceApi";
 import { CategoryBar, Countdown, HotRails, PriceLine, ProductTile, SectionTiles, TrendTile } from "./ShopComponents";
 import { MemberRequestsPanel, type RequestSummary } from "./MemberRequestsPanel";
+import { ReviewPrompts } from "./ReviewPrompts";
+import { WorkerRatingPrompts } from "./WorkerRatingPrompts";
 import { AddressPickerDialog, SaveProductButton, addressLine, useAddresses } from "./accountExtras";
 import { AdSlot } from "./ads";
 import { FayfortLoader } from "../brand/FayfortLogo";
@@ -625,6 +627,8 @@ export function OrdersPanel({
           </article>
         ))}
       </section>
+      <ReviewPrompts accessToken={accessToken} />
+      <WorkerRatingPrompts accessToken={accessToken} kind="request" />
       {paying && (
         <AddressPickerDialog
           accessToken={accessToken}

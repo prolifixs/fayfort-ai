@@ -1,31 +1,32 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Close an open menu, popover or drawer when the user taps or clicks outside it, or presses Escape.
  * Pass every element that counts as "inside" (usually the trigger button's wrapper and the popover). */
 export function useDismiss(open: boolean, onClose: () => void, inside: RefObject<HTMLElement | null>[]) {
   const close = useRef(onClose);
   close.current = onClose;
-  useEffect(() => {
+  const within = useRef(inside);
+  within.current = inside;
+  // Listeners attach before paint, so a quick tap or Escape right after the menu appears is never missed. The tap
+  // that opened the menu happened earlier, so it's ignored by its timestamp instead of by waiting.
+  useLayoutEffect(() => {
     if (!open) return;
+    const openedAt = performance.now();
     function outside(event: PointerEvent) {
+      if (event.timeStamp && event.timeStamp < openedAt) return;
       const target = event.target as Node | null;
-      if (target && inside.some((ref) => ref.current?.contains(target))) return;
+      if (target && within.current.some((ref) => ref.current?.contains(target))) return;
       close.current();
     }
     function escape(event: KeyboardEvent) {
       if (event.key === "Escape") close.current();
     }
-    // Attach after the opening click has finished so it doesn't close the menu straight away.
-    const timer = window.setTimeout(() => {
-      document.addEventListener("pointerdown", outside, true);
-      document.addEventListener("keydown", escape);
-    }, 0);
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape);
     return () => {
-      window.clearTimeout(timer);
       document.removeEventListener("pointerdown", outside, true);
       document.removeEventListener("keydown", escape);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 }
 

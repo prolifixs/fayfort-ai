@@ -36,7 +36,10 @@ describe("Infrastructure page", () => {
     }));
     expect(await screen.findByText(/stored in the vault/)).toBeInTheDocument();
     expect(within(form).getByLabelText("API token")).toHaveValue("");
-    expect(mocks.apiRequest.mock.calls.every(([path]) => typeof path === "string" && path.startsWith("/platform/infrastructure"))).toBe(true);
+    // The Cloudflare token only ever goes to the infrastructure endpoints (the Connections card reads its own status).
+    expect(mocks.apiRequest.mock.calls.every(([path]) => typeof path === "string" && (path.startsWith("/platform/infrastructure") || path === "/platform/connections"))).toBe(true);
+    expect(mocks.apiRequest.mock.calls.filter(([, , init]) => String((init as RequestInit | undefined)?.body || "").includes("cf-token")).map(([path]) => path))
+      .toEqual(["/platform/infrastructure/cloudflare/credentials"]);
   });
 
   it("shows tunnel health, nameservers and webhook callback, and requires confirmation before a DNS change", async () => {

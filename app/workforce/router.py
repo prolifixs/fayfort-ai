@@ -141,6 +141,25 @@ def _present(worker: dict, auth: dict, last_seen: str | None, open_work: int, no
     }
 
 
+def _enrich(entries: list[dict]) -> None:
+    """Photo, customer rating and whether each worker is on shift now (app/workforce/team.py)."""
+    from app.workforce import team
+    ids = [entry["user_id"] for entry in entries]
+    try:
+        who = team.people(ids)
+        ratings = team.ratings_for(ids)
+        on_shift = {str(r["worker_id"]): r for r in (supabase.table("worker_shifts").select("worker_id,on_break_since")
+                    .is_("ended_at", "null").in_("worker_id", ids).execute().data or [])} if ids else {}
+    except Exception:
+        logger.warning("Worker photos, ratings or shifts could not be added", exc_info=True)
+        who, ratings, on_shift = {}, {}, {}
+    for entry in entries:
+        entry["photo_url"] = (who.get(entry["user_id"]) or {}).get("photo_url")
+        entry["rating"] = ratings.get(entry["user_id"])
+        entry["on_shift"] = entry["user_id"] in on_shift
+        entry["on_break"] = bool((on_shift.get(entry["user_id"]) or {}).get("on_break_since"))
+
+
 def create_workforce_router() -> APIRouter:
     router = APIRouter(tags=["workforce"])
     limiter = _ActionLimiter(ACTION_LIMIT_PER_MINUTE)
@@ -186,6 +205,7 @@ def create_workforce_router() -> APIRouter:
             now = datetime.now(timezone.utc)
             roster = [_present(row, _auth_summary(str(row["user_id"])), seen.get(str(row["user_id"])),
                                work.get(str(row["user_id"]), 0), now) for row in workers]
+            _enrich(roster)
             order = {"active": 0, "invited": 1, "inactive": 2}
             roster.sort(key=lambda item: (order.get(item["status"], 3), not item["online"],
                                           -(_parse_time(item["last_seen_at"]) or datetime.min.replace(tzinfo=timezone.utc)).timestamp()))
@@ -223,6 +243,7 @@ def create_workforce_router() -> APIRouter:
                     .select("work_item_id,event_type,previous_status,next_status,reason,created_at")
                     .eq("actor_user_id", worker_id).order("created_at", desc=True).limit(25).execute().data or [])
         profile = _present(worker, auth, seen, len(current_work), now)
+        _enrich([profile])
         profile.update({
             "departments": [row["department"] for row in departments if row.get("can_claim")],
             "current_work": current_work,

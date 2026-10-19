@@ -595,3 +595,30 @@ def create_checkout(*, lines: list[tuple[str, int]], member_id: str, email: str 
     if email:
         query["checkout[email]"] = email
     return f"permalink:{path}", f"https://{shop_domain()}/cart/{path}?{urlencode(query)}"
+
+
+def iter_orders(created_at_min: str, *, client: httpx.Client | None = None):
+    """Every order since a date, as the Admin REST API (and the order webhooks) shape it. Without the
+    read_all_orders scope Shopify only returns the last 60 days."""
+    http, owned = _http(client)
+    url: str | None = (f"https://{shop_domain()}/admin/api/{settings.SHOPIFY_API_VERSION}/orders.json?"
+                       + urlencode({"status": "any", "limit": 250, "created_at_min": created_at_min}))
+    try:
+        while url:
+            response = http.get(url, headers={"X-Shopify-Access-Token": admin_token(http)})
+            if response.status_code == 429:
+                time.sleep(float(response.headers.get("Retry-After") or 2))
+                continue
+            if response.status_code in (401, 403):
+                raise ShopifyError("Shopify refused the order list. The app needs the read_orders scope.")
+            if response.status_code != 200:
+                raise ShopifyError(f"Shopify returned HTTP {response.status_code} for the order list.")
+            for order in response.json().get("orders") or []:
+                yield order
+            url = None
+            for part in response.headers.get("Link", "").split(","):
+                if 'rel="next"' in part:
+                    url = part.split(";")[0].strip().strip("<>")
+    finally:
+        if owned:
+            http.close()

@@ -235,3 +235,34 @@ Changes to the sections above that follow from these:
   - Website: the chat is not on LANDED, and the CSP allows the API.
   - A browser check of the flow: the bubble, a starter, the typing state, talking to a person, minimise, moving to
     another page, Join free with the code, the phone sheet and LANDED.
+
+## Customer reviews (2026-10-18)
+
+Reviews on the www.fayfort.com home page ("What customers say", after How it works). Hidden until at least one is
+published. Every review comes from a real customer; nothing is public until staff publish it.
+
+**Two ways in**
+- **Screenshots** (Control Center → Website → Customer reviews): staff drop in screenshots of reviews customers sent
+  (Instagram, WhatsApp, Facebook, TikTok, email, Google). The API server reads the text with Tesseract, the chat model
+  sorts it into the customer's words, name, country and product (copying only words that were read; anything that
+  doesn't match the screenshot is flagged), and the review waits under "To check". Staff fix misreads and publish.
+  The screenshot stays private (bucket `review-screenshots`) as the record of what the customer wrote. Reviews from a
+  call or email can be typed in.
+- **Members**: when a sourcing request ships (stage shipped, in transit, out for delivery or delivered) or Shopify marks
+  a shop order shipped, the member gets a "How was your order?" notification and email, and a "How was it?" card in
+  Orders & requests: stars, a few words, name shown (first name and initial) and country. These arrive in Control
+  Center as "Verified order" reviews and admins get a notice. Staff can publish, hide or feature a member review but
+  can't change its words or stars.
+
+**On the website**: the average of the stars customers gave (screenshot reviews only count when the customer gave
+stars), the number of reviews and the countries they came from, then the cards: stars or a quote mark, the words,
+name, country, product and month, and "Verified order" or "via Instagram". Featured reviews come first; six show, the
+rest behind "Show all". Cached 5 minutes.
+
+**Rules**: publish every genuine review, good or bad; hide only spam, abuse or personal details. No made-up reviews.
+
+**Build**: migration `20261019130000_customer_reviews.sql` (`customer_reviews`, `customer_review_invites`, triggers on
+request events and shop orders, notification type `review_invite`); `app/site/reviews.py`, `app/site/review_import.py`;
+the API image installs `tesseract-ocr`. Dashboard: `staff/WebsiteReviewsSection.tsx`, `member/ReviewPrompts.tsx`.
+Website: `(site)/reviews/`. Tests: `tests/test_customer_reviews.py`, `WebsiteReviewsSection.test.tsx`,
+`web/tests/reviews.test.ts`, e2e `reviews.spec.ts`.

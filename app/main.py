@@ -837,6 +837,14 @@ app.include_router(create_site_router())
 from app.site.chat import create_site_chat_router  # noqa: E402
 from app.commerce.member_router import verified_member as _site_chat_member  # noqa: E402
 app.include_router(create_site_chat_router(_site_chat_member))
+from app.site.reviews import create_reviews_router  # noqa: E402
+app.include_router(create_reviews_router(_site_chat_member))
+from app.workforce.team import create_team_router  # noqa: E402
+app.include_router(create_team_router(_site_chat_member))
+from app.commerce.revenue import create_revenue_router  # noqa: E402
+app.include_router(create_revenue_router())
+from app.infrastructure.connections import create_connections_router  # noqa: E402
+app.include_router(create_connections_router())
 
 @app.post("/conversations/{conversation_id}/messages")
 def send_message(

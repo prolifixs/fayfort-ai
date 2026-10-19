@@ -32,7 +32,7 @@ WEBHOOK_PATH = "/billing/stripe/webhook"
 WEBHOOK_EVENTS = [
     "checkout.session.completed", "customer.subscription.created", "customer.subscription.updated",
     "customer.subscription.deleted", "customer.subscription.paused", "customer.subscription.resumed",
-    "invoice.paid", "invoice.payment_failed",
+    "invoice.paid", "invoice.payment_failed", "charge.refunded",
 ]
 SUBSCRIPTION_POINTS = {"standard": 50, "pro": 100}  # per paid month, toward rank (ranks.py)
 
@@ -422,10 +422,22 @@ def record_invoice_paid(invoice: dict) -> str | None:
     db().table("member_subscription_payments").upsert({
         "stripe_invoice_id": invoice["id"], "member_id": member_id, "plan": plan,
         "amount": round(float(invoice.get("amount_paid") or 0) / 100, 2),
-        "currency": invoice.get("currency") or settings.BILLING_CURRENCY, "paid_at": paid_at},
+        "currency": invoice.get("currency") or settings.BILLING_CURRENCY, "paid_at": paid_at,
+        "stripe_charge_id": invoice.get("charge") if str(invoice.get("charge") or "").startswith(("ch_", "py_")) else None},
         on_conflict="stripe_invoice_id", ignore_duplicates=True).execute()
     _refresh_rank(member_id)
     return member_id
+
+
+def record_refund(charge: dict) -> bool:
+    """A refunded membership payment (Revenue tab): the refunded total from the charge, in the payment's currency."""
+    invoice_id = charge.get("invoice")
+    if not invoice_id:
+        return False
+    refunded = round(float(charge.get("amount_refunded") or 0) / 100, 2)
+    updated = rows(db().table("member_subscription_payments").update({"refunded_amount": refunded})
+                   .eq("stripe_invoice_id", invoice_id).execute())
+    return bool(updated)
 
 
 def _refresh_rank(member_id: str) -> None:
@@ -464,6 +476,8 @@ def handle_event(event: dict) -> str:
             if obj.get("subscription"):
                 sync_subscription(stripe_api.request("GET", f"/subscriptions/{obj['subscription']}"))
             result = "processed"
+        elif kind == "charge.refunded":
+            result = "processed" if record_refund(obj) else "ignored"
         elif kind == "invoice.payment_failed" and obj.get("subscription"):
             sync_subscription(stripe_api.request("GET", f"/subscriptions/{obj['subscription']}"))
             result = "processed"

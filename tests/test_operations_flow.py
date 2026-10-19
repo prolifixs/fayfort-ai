@@ -190,8 +190,10 @@ class FlowTests(unittest.TestCase):
     def test_sweep_leaves_recurring_orders_to_the_database_scheduler(self):
         summary = flow.sweep()
         self.assertEqual(set(summary), {"giveaways", "billing", "group_buys", "map_products", "retire",
-                                        "trend_listings", "sections", "campaigns"})
-        self.assertEqual(self.db.rpc_calls, [])
+                                        "trend_listings", "sections", "campaigns", "shifts", "worker_ratings"})
+        # Only the worker-rating release runs as a database call; recurring orders stay on pg_cron.
+        self.assertEqual([call[0] if isinstance(call, tuple) else call for call in self.db.rpc_calls
+                          if "recurring" in str(call)], [])
 
     def test_cancel_deletes_unpaid_shopify_invoices_and_falls_back_to_staff(self):
         with patch("app.commerce.shopify.delete_draft_order") as delete:

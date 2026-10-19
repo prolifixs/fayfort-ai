@@ -7,6 +7,7 @@ import { revealDelay } from './components'
 import { FAQ } from './faq'
 import HeroGlobe from './globe/HeroGlobe'
 import InstagramRail from './instagram/InstagramRail'
+import ReviewsBand from './reviews/ReviewsBand'
 
 const title = 'FAYFORT · From China’s factories to your door'
 const description = 'We source, inspect and ship from China for importers in Africa, the UK and the US, and you follow every step in your free FayFort dashboard.'
@@ -111,6 +112,9 @@ export default function HomePage() {
         </ol>
         <Link className="text-button" href="/how-it-works">More on how it works <ArrowRight size={15} /></Link>
       </div></section>
+
+      {/* 4b. Customer reviews (hidden until staff publish one) */}
+      <ReviewsBand />
 
       {/* 5. What a free account gives you */}
       <section className="dark-section" aria-labelledby="account-title"><div className="shell section-space">

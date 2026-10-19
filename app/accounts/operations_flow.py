@@ -308,13 +308,23 @@ def sweep() -> dict:
     on pg_cron in the database.)"""
     summary: dict[str, Any] = {}
     for name, step in (("giveaways", sync_giveaways),
-                       ("billing", sync_billing_issues), ("group_buys", sweep_group_buys), *_store_team_steps()):
+                       ("billing", sync_billing_issues), ("group_buys", sweep_group_buys), *_store_team_steps(),
+                       ("shifts", _end_stale_shifts), ("worker_ratings", _release_rating_prompts)):
         try:
             summary[name] = step()
         except Exception:
             logger.exception("Operations sweep step %s failed", name)
             summary[name] = "failed"
     return summary
+
+
+def _end_stale_shifts() -> dict:
+    from app.workforce.team import end_stale_shifts
+    return end_stale_shifts()
+
+
+def _release_rating_prompts() -> int:
+    return int(db().rpc("release_worker_rating_prompts", {"p_limit": 200}).execute().data or 0)
 
 
 def sweep_group_buys() -> int:

@@ -1,4 +1,5 @@
 import { playMemberSound } from "../memberSound";
+import { WorkerRatingPrompts } from "./WorkerRatingPrompts";
 import { setOpenChat } from "./activeChat";
 import { MemberNotificationsBar } from "../MemberNotifications";
 import { dashboardAuthConfigured, supabaseClient } from "../../lib/supabase";
@@ -1348,11 +1349,18 @@ export function MemberChatPage() {
                         )}
                         {messages.map((message) => (
                           <article className={`member-chat-bubble ${message.sender_type}`} key={message.id}>
-                            <small>
+                            <small className={message.staff ? "member-chat-staff" : undefined}>
+                              {message.staff && (
+                                <span className="member-chat-staff-face" aria-hidden="true">
+                                  {message.staff.photo_url ? <img src={message.staff.photo_url} alt="" /> : message.staff.first_name.slice(0, 1)}
+                                </span>
+                              )}
                               {message.sender_type === "member"
                                 ? "You"
                                 : message.sender_type === "worker"
-                                  ? "FayFort human support"
+                                  ? message.staff
+                                    ? `${message.staff.first_name} · FayFort team`
+                                    : "FayFort human support"
                                   : "FayFort assistant"}
                             </small>
                             {message.product_ref && refProducts[message.product_ref] && (
@@ -1373,6 +1381,7 @@ export function MemberChatPage() {
                             )}
                           </article>
                         ))}
+                        {token && activeChat?.id && <WorkerRatingPrompts accessToken={token} conversationId={activeChat.id} kind="chat" />}
                         {busy && (
                           <p role="status" className="member-chat-loading">
                             Searching the catalog and preparing a reply…

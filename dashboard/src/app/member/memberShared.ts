@@ -188,6 +188,8 @@ export type MemberChatMessage = {
   find_it?: FindItResult | null;
   /** The product the member asked about from a product page. */
   product_ref?: string | null;
+  /** First name and photo of the FayFort team member who wrote a "worker" message. */
+  staff?: { first_name: string; photo_url: string | null } | null;
 };
 
 export type MemberOwnedRequest = {

@@ -9,8 +9,9 @@ export class ApiRequestError extends Error {
 
 const API_TIMEOUT_MS = 20_000;
 
-export async function apiRequest<T>(path: string, accessToken: string, init: RequestInit = {}): Promise<T> {
-  const timeoutSignal = AbortSignal.timeout(API_TIMEOUT_MS);
+/** `timeoutMs` is for slow calls such as reading a screenshot; the default suits everything else. */
+export async function apiRequest<T>(path: string, accessToken: string, init: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<T> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
   let response: Response;
   try {
@@ -25,7 +26,7 @@ export async function apiRequest<T>(path: string, accessToken: string, init: Req
     });
   } catch (error) {
     if (timeoutSignal.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
-      throw new ApiRequestError("FayFort API did not respond within 20 seconds. Check the API connection, then retry.", 0);
+      throw new ApiRequestError(`FayFort API did not respond within ${Math.round(timeoutMs / 1000)} seconds. Check the API connection, then retry.`, 0);
     }
     throw error;
   }

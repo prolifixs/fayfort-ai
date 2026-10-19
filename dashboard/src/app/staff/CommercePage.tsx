@@ -2,11 +2,13 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { RevenuePanel } from "./RevenuePanel";
 
-type Tab = "overview" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders" | "billing";
+type Tab = "overview" | "revenue" | "products" | "trends" | "invoices" | "sales" | "giveaways" | "orders" | "billing";
 
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
+  ["revenue", "Revenue"],
   ["trends", "Trend queue & pools"],
   ["invoices", "Invoices"],
   ["sales", "Flash sales & codes"],
@@ -75,6 +77,7 @@ export function CommercePage({ accessToken, initialTab = "overview" }: { accessT
       {tab === "products" && <MappingPanel accessToken={accessToken} />}
       {tab === "orders" && <OrdersPanel accessToken={accessToken} />}
       {tab === "billing" && <BillingPanel accessToken={accessToken} />}
+      {tab === "revenue" && <RevenuePanel accessToken={accessToken} />}
     </div>
   );
 }

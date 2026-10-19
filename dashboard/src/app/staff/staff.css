@@ -939,3 +939,157 @@
   border-left: 5px solid var(--accent); border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 7%, var(--color-bg));
 }
+
+/* ---------- Control Center → Website → Customer reviews (WebsiteReviewsSection.tsx) ---------- */
+.reviews-admin { scroll-margin-top: 80px; }
+.reviews-admin .text-link-button { justify-self: start; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; }
+.reviews-intake { display: grid; gap: var(--space-2); }
+.reviews-drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 5%, var(--color-bg)); }
+.reviews-drop > svg { flex: none; width: 34px; height: 34px; padding: 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.reviews-drop > div { display: grid; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.reviews-drop > div span { color: var(--color-muted); font-size: var(--text-sm); }
+.reviews-source { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 600; }
+.reviews-choose { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.reviews-choose input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.reviews-choose.is-busy { opacity: .7; cursor: progress; }
+.reviews-typein { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.reviews-typein > .primary-button { justify-self: start; }
+.reviews-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.reviews-filters button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg); color: var(--color-text); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.reviews-filters button span { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--color-surface); font-size: 12px; text-align: center; }
+.reviews-filters button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.reviews-filters button.is-active span { background: var(--accent); color: #fff; }
+.reviews-empty { margin: var(--space-3) 0; }
+.reviews-list { display: grid; gap: var(--space-3); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.review-admin-card { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-md); background: var(--color-bg); }
+.review-admin-card.is-published { border-left-color: var(--color-success); }
+.review-admin-card.is-hidden { border-left-color: var(--color-border-strong, var(--color-border)); background: var(--color-surface); }
+.review-admin-media { position: relative; }
+.review-shot { display: block; width: 100%; max-height: 320px; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); cursor: zoom-in; }
+.review-shot img { display: block; width: 100%; height: auto; }
+.review-shot-none { display: grid; align-content: center; gap: 4px; min-height: 120px; padding: var(--space-3); border: 1px dashed var(--color-border); border-radius: 10px; color: var(--color-muted); font-size: var(--text-sm); text-align: center; }
+.review-shot-none strong { color: var(--color-text); }
+.review-shot-none.is-member { border-style: solid; border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border)); background: var(--color-success-soft); }
+.review-shot-none.is-member strong { color: var(--color-success); }
+.review-zoom { position: fixed; z-index: 95; inset: 0; display: grid; place-items: center; gap: var(--space-3); padding: var(--space-5); background: rgba(5, 12, 24, .82); }
+.review-zoom img { max-width: min(560px, 100%); max-height: 82vh; border-radius: 12px; }
+.review-admin-body { display: grid; gap: var(--space-3); min-width: 0; }
+.review-admin-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.review-source { color: var(--color-muted); font-size: var(--text-sm); font-weight: 600; }
+.review-note { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--color-warning-soft); color: var(--color-warning); font-size: var(--text-sm); font-weight: 600; }
+.review-field { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 600; }
+.review-field > span { font-weight: 600; }
+.review-field textarea, .review-field input, .review-field select { width: 100%; min-width: 0; font-weight: 400; }
+.review-field-body textarea { min-height: 96px; font-size: var(--text-base, 15px); line-height: 1.5; }
+.review-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); }
+.review-stars { display: inline-flex; gap: 2px; color: color-mix(in srgb, var(--color-muted) 35%, transparent); font-size: 20px; line-height: 1; }
+.review-stars button { padding: 2px; border: 0; background: none; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.review-stars .is-on { color: #f2a900; }
+.review-member-words { display: grid; gap: 6px; }
+.review-member-words blockquote { margin: 0; padding: 10px 14px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--color-surface); font-size: var(--text-base, 15px); line-height: 1.5; white-space: pre-line; }
+.review-member-words small { color: var(--color-muted); }
+.review-ocr summary { color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; }
+.review-ocr pre { max-height: 200px; margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 8px; background: var(--color-surface); font-size: 12px; white-space: pre-wrap; }
+.review-admin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.review-admin-actions .danger { color: var(--color-danger); }
+.review-admin-actions .review-delete { margin-left: auto; color: var(--color-muted); font-weight: 600; }
+@media (max-width: 720px) {
+  .review-admin-card { grid-template-columns: 1fr; }
+  .review-shot { max-height: 220px; }
+  .reviews-drop { align-items: stretch; }
+  .reviews-choose { justify-content: center; }
+}
+
+/* ---------- Infrastructure → Connections (ConnectionsSection.tsx) ---------- */
+.connections-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.connections-list > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--color-border); }
+.connections-list > li:first-child { border-top: 0; }
+.connections-list > li > div:first-child { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.connections-list small { font-size: var(--text-sm); }
+.connections-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.connections-actions .danger { color: var(--color-danger); }
+.connections-form { display: grid; gap: var(--space-3); flex: 1 1 100%; padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.connections-form ol { display: grid; gap: 4px; margin: 0; padding-left: 20px; font-size: var(--text-sm); }
+.connections-form label { display: grid; gap: 4px; max-width: 480px; font-size: var(--text-sm); font-weight: 600; }
+.connections-form input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; }
+.connections-form code { padding: 1px 4px; border-radius: 4px; background: var(--color-bg); font-size: 12px; }
+
+/* ---------- Shop → Revenue (RevenuePanel.tsx) ---------- */
+.revenue-panel { display: grid; gap: var(--space-4); }
+.revenue-heading { align-items: flex-start; }
+.revenue-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.revenue-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.revenue-filters > button { min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg); color: var(--color-text); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.revenue-filters > button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.revenue-custom { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-left: 4px; }
+.revenue-custom label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.revenue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); }
+.revenue-other, .revenue-since { margin: 0; font-size: var(--text-sm); }
+.overview-tile.revenue-tile small { color: var(--color-muted); font-size: var(--text-xs, 12px); font-weight: 600; }
+
+/* ---------- Workforce: photos, ratings, timesheets (WorkerTeam.tsx) ---------- */
+.team-avatar { position: relative; display: inline-grid; flex: none; place-items: center; overflow: hidden; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
+.team-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.team-avatar.is-on-shift { box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-success); }
+.workforce-name { align-items: center; }
+.team-on-shift { display: block; color: var(--color-success); font-weight: 700; }
+.team-rating-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.team-rating-badge small { color: var(--color-muted); font-size: 11px; }
+.team-tabs { display: flex; gap: 6px; margin-bottom: var(--space-3); }
+.team-tabs button { min-height: 36px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 700; cursor: pointer; }
+.team-tabs button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.team-setting { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: var(--space-3); }
+.team-setting p { margin: 4px 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.team-setting label { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 600; }
+.team-setting input { width: 110px; }
+.team-setting [role="status"] { grid-column: 1 / -1; margin: 0; }
+.team-ratings { display: grid; gap: var(--space-4); }
+.team-current strong { font-size: 34px; }
+.team-fresh-start { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: var(--space-4); align-items: center; padding: var(--space-4); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 6%, var(--color-bg)); }
+.team-fresh-start p { margin: 4px 0 0; color: var(--color-muted); font-size: var(--text-sm); line-height: 1.5; }
+.team-fresh-start.is-off { display: block; color: var(--color-muted); font-size: var(--text-sm); }
+.team-fresh-progress { display: grid; gap: 6px; font-size: var(--text-sm); }
+.team-fresh-progress b { font-size: 22px; color: var(--accent); }
+.team-progress { display: block; height: 8px; overflow: hidden; border-radius: 999px; background: var(--color-surface); }
+.team-progress i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.team-fresh-progress small { color: var(--color-muted); }
+.team-ratings-charts, .team-sheet-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); }
+.team-comments h3, .team-corrections h3, .worker-ratings-head h3 { margin: 0 0 var(--space-2); font-size: var(--text-md); }
+.team-comments ul, .team-corrections ul, .team-shifts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.team-comments li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 10px; }
+.team-comments blockquote { margin: 0; font-size: var(--text-base, 15px); line-height: 1.5; }
+.team-comments small { color: var(--color-muted); }
+.worker-ratings { display: grid; gap: var(--space-3); }
+.worker-ratings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.team-week-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.team-corrections li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--color-warning) 40%, var(--color-border)); border-radius: 10px; background: var(--color-warning-soft); }
+.team-corrections li > div { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; font-size: var(--text-sm); }
+.team-sheet-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.team-sheet { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.team-sheet th, .team-sheet td { padding: 8px 10px; border-bottom: 1px solid var(--color-border-subtle, var(--color-border)); text-align: right; white-space: nowrap; }
+.team-sheet thead th { background: var(--color-surface); color: var(--color-muted); font-size: 12px; }
+.team-sheet thead th:first-child, .team-sheet tbody th { text-align: left; }
+.team-sheet td.is-zero { color: var(--color-muted); }
+.team-sheet-total { font-weight: 800; }
+.team-sheet-name { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; text-align: left; }
+.team-sheet-name span { display: grid; }
+.team-sheet-name small { font-size: 11px; }
+.team-sheet-detail td { text-align: left; background: var(--color-surface); white-space: normal; }
+.team-shifts li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg); font-size: var(--text-sm); }
+.team-shifts li.is-flagged { border-color: color-mix(in srgb, var(--color-warning) 50%, var(--color-border)); }
+.team-shifts li small { flex-basis: 100%; color: var(--color-muted); }
+.team-shifts li .secondary-button { margin-left: auto; }
+.team-editor { display: grid; gap: 10px; max-width: 560px; padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.team-editor label { display: grid; gap: 4px; font-size: var(--text-sm); font-weight: 600; }
+.team-editor-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.team-editor-row label { flex: 1 1 200px; }
+.team-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.team-upload { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.team-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.team-me-total { font-size: 22px; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .team-fresh-start { grid-template-columns: 1fr; }
+  .team-setting { grid-template-columns: 1fr; align-items: stretch; }
+}
+.workforce-page > *, .team-timesheets, .team-timesheets > *, .team-sheet-charts > * { min-width: 0; }
+.team-timesheets .panel-heading { flex-wrap: wrap; }

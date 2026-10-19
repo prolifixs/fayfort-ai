@@ -25,8 +25,51 @@ class StripeError(Exception):
         self.code = code
 
 
+_stored = {"key": "", "at": 0.0}
+STORED_KEY_SECONDS = 60
+
+
 def secret_key() -> str:
-    return settings.STRIPE_SECRET_KEY.strip()
+    """The server setting STRIPE_SECRET_KEY if set, else the key saved in Control Center -> Infrastructure ->
+    Connections (encrypted in Supabase Vault), re-read at most once a minute."""
+    if settings.STRIPE_SECRET_KEY.strip():
+        return settings.STRIPE_SECRET_KEY.strip()
+    if time.monotonic() - _stored["at"] > STORED_KEY_SECONDS:
+        try:
+            from app.infrastructure import store
+            found = store.get_integration_credentials("stripe") or {}
+            _stored["key"] = str(found.get("secret_key") or "").strip()
+        except Exception:
+            _stored["key"] = _stored["key"]  # keep the last good key if the database blips
+        _stored["at"] = time.monotonic()
+    return _stored["key"]
+
+
+def forget_stored_key() -> None:
+    _stored.update(key="", at=0.0)
+
+
+def key_source() -> str:
+    if settings.STRIPE_SECRET_KEY.strip():
+        return "server"
+    return "connections" if secret_key() else "none"
+
+
+def check_key(key: str) -> str:
+    """Ask Stripe whether a key works (read-only call). Returns 'test' or 'live'; raises StripeError."""
+    try:
+        response = httpx.get(f"{API}/balance", auth=(key, ""), headers={"Stripe-Version": API_VERSION}, timeout=15.0)
+    except httpx.HTTPError as exc:
+        raise StripeError(f"Stripe could not be reached: {exc.__class__.__name__}") from exc
+    if response.status_code == 401:
+        raise StripeError("Stripe didn't accept that key. Copy the secret key again from Stripe → Developers → API keys.", 401)
+    if response.status_code >= 400:
+        try:
+            message = (response.json().get("error") or {}).get("message")
+        except ValueError:
+            message = None
+        raise StripeError(message or f"Stripe error {response.status_code}", response.status_code)
+    return "live" if "_live_" in key else "test"
 
 
 def configured() -> bool:

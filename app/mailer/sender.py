@@ -118,7 +118,7 @@ def build_member_email(row: dict, preferences: dict) -> RenderedEmail | None:
         return None
     notifications = (supabase.table("member_notifications")
                      .select("id,notification_type,request_event_id,worker_message_id,review_id,review_status,"
-                             "schedule_event_id,created_at,read_at,banner_dismissed_at")
+                             "schedule_event_id,review_invite_id,worker_rating_prompt_id,created_at,read_at,banner_dismissed_at")
                      .eq("id", row["notification_id"]).eq("member_id", row["member_id"]).execute().data or [])
     projected = _project_notifications(notifications, row["member_id"]) if notifications else []
     if not projected:

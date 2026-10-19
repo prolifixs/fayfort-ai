@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { WorkerProvisioningPage } from "./WorkerPages";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { Avatar, FreshStartSetting, RatingBadge, RatingsSection, TimesheetsPanel, type RatingSummary } from "./WorkerTeam";
 
 export interface WorkerSummary {
   user_id: string;
@@ -19,6 +20,10 @@ export interface WorkerSummary {
   email_confirmed: boolean;
   open_work_count: number;
   invitation: { sent_at: string | null; expires_at: string | null; expired: boolean; count: number } | null;
+  photo_url?: string | null;
+  rating?: RatingSummary | null;
+  on_shift?: boolean;
+  on_break?: boolean;
 }
 
 interface WorkerProfile extends WorkerSummary {
@@ -137,6 +142,27 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
     );
   }, [directory, query, statusFilter, onlineOnly]);
 
+  const [view, setView] = useState<"workers" | "timesheets">(() => (window.location.hash === "#timesheets" ? "timesheets" : "workers"));
+  const tabs = (
+    <div className="team-tabs" role="tablist" aria-label="Workforce">
+      {(["workers", "timesheets"] as const).map((key) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={view === key}
+          className={view === key ? "is-active" : ""}
+          onClick={() => {
+            setView(key);
+            window.history.replaceState({}, "", key === "timesheets" ? "#timesheets" : window.location.pathname + window.location.search);
+          }}
+        >
+          {key === "workers" ? "Workers" : "Timesheets"}
+        </button>
+      ))}
+    </div>
+  );
+
   if (selected)
     return (
       <WorkerProfilePage
@@ -149,8 +175,17 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
       />
     );
 
+  if (view === "timesheets")
+    return (
+      <div className="workforce-page">
+        {tabs}
+        <TimesheetsPanel accessToken={accessToken} />
+      </div>
+    );
+
   return (
     <div className="workforce-page">
+      {tabs}
       <WorkerProvisioningPage accessToken={accessToken} />
       <section className="control-panel" aria-label="FayFort worker directory">
         <div className="panel-heading">
@@ -234,6 +269,7 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
                 <th scope="col">Last seen</th>
                 <th scope="col">Last sign-in</th>
                 <th scope="col">Open work</th>
+                <th scope="col">Rating</th>
                 <th scope="col">Two-step</th>
               </tr>
             </thead>
@@ -243,6 +279,7 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
                   <td>
                     <button type="button" className="workforce-name" onClick={() => open(worker.user_id)}>
                       <PresenceDot worker={worker} />
+                      <Avatar name={worker.display_name || worker.email} photo={worker.photo_url} size={32} onShift={worker.on_shift} />
                       <span>
                         <strong>{worker.display_name || worker.email || "Unnamed worker"}</strong>
                         {worker.display_name && <small>{worker.email}</small>}
@@ -257,17 +294,26 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
                       </small>
                     )}
                   </td>
-                  <td data-label="Last seen">{worker.online ? <strong className="online-text">Online now</strong> : <TimeAgo value={worker.last_seen_at} />}</td>
+                  <td data-label="Last seen">
+                    {worker.online ? <strong className="online-text">Online now</strong> : <TimeAgo value={worker.last_seen_at} />}
+                    {worker.on_shift && <small className="team-on-shift">{worker.on_break ? "On a break" : "On shift"}</small>}
+                  </td>
                   <td data-label="Last sign-in">
                     <TimeAgo value={worker.last_sign_in_at} />
                   </td>
                   <td data-label="Open work">{worker.open_work_count}</td>
+                  <td data-label="Rating">
+                    <RatingBadge rating={worker.rating} />
+                  </td>
                   <td data-label="Two-step">{worker.mfa_enrolled ? "On" : <span className="mfa-off">Not set up</span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+      </section>
+      <section className="control-panel" aria-label="Worker settings">
+        <FreshStartSetting accessToken={accessToken} />
       </section>
     </div>
   );
@@ -382,6 +428,7 @@ export function WorkerProfilePage({
         <>
           <header className="worker-profile-header">
             <PresenceDot worker={worker} />
+            <Avatar name={worker.display_name || worker.email} photo={worker.photo_url} size={56} onShift={worker.on_shift} />
             <div>
               <h2>{worker.display_name || worker.email || "Unnamed worker"}</h2>
               <p>
@@ -487,6 +534,30 @@ export function WorkerProfilePage({
               </div>
             </form>
           )}
+
+          <section aria-label="Customer ratings" className="worker-ratings">
+            <div className="worker-ratings-head">
+              <h3>Customer ratings</h3>
+              {worker.photo_url && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={async () => {
+                    try {
+                      await apiRequest(`/platform/workers/${worker.user_id}/photo`, accessToken, { method: "DELETE" });
+                      setWorker({ ...worker, photo_url: null });
+                      setNotice("Photo removed.");
+                    } catch (reason) {
+                      setError(reason instanceof Error ? reason.message : "The photo could not be removed.");
+                    }
+                  }}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+            <RatingsSection accessToken={accessToken} workerId={worker.user_id} audience="admin" />
+          </section>
 
           <section aria-label="Current work">
             <h3>Current work ({worker.current_work.length})</h3>

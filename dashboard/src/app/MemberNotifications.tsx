@@ -10,7 +10,7 @@ import "./notifications.css";
 
 export type MemberNotification = {
   id: string;
-  notification_type: "request_milestone" | "worker_reply" | "photo_review_status" | "recurring_schedule_update";
+  notification_type: "request_milestone" | "worker_reply" | "photo_review_status" | "recurring_schedule_update" | "review_invite" | "worker_rating";
   title: string;
   body: string;
   href: string;
@@ -33,6 +33,8 @@ const MEMBER_TONE: Record<MemberNotification["notification_type"], NoticeTone> =
   request_milestone: "order",
   photo_review_status: "photo",
   recurring_schedule_update: "repeat",
+  review_invite: "review",
+  worker_rating: "review",
 };
 function chatOf(href: string): string | null {
   try {
