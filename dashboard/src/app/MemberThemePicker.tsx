@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "../lib/api";
+import { ApiRequestError, apiRequest } from "../lib/api";
 import { exitMemberThemePreview, previewMemberTheme } from "./MemberThemeRuntime";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ThemeMiniPreview, ThemeSwatches, type MiniThemeDesign } from "./ThemeMiniPreview";
@@ -16,7 +16,13 @@ type ThemeChoice = {
   /** Published design, so every theme can be drawn before it's picked. Older APIs leave it out. */
   design?: MiniThemeDesign | null;
 };
-type ThemeCatalog = { member_tier: string; selected_theme: string; themes: ThemeChoice[] };
+/** Try-ons: 3 an hour for every member, counted by the server. */
+type TryStatus = { limit: number; left: number; next_at: string | null; seconds: number };
+type ThemeCatalog = { member_tier: string; selected_theme: string; themes: ThemeChoice[]; tries?: TryStatus | null };
+const clock = (iso: string | null | undefined) => {
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "later";
+};
 
 const BASE_DESIGN: MiniThemeDesign = {
   wrapper_style: "soft",
@@ -67,11 +73,16 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
     setError("");
     setNotice("");
     try {
-      if (theme.theme_id !== "base") await apiRequest(`/members/themes/${encodeURIComponent(theme.theme_id)}/preview`, accessToken);
-      previewMemberTheme(theme.theme_id);
+      const started = await apiRequest<{ until: string; tries: TryStatus }>(`/members/themes/${encodeURIComponent(theme.theme_id)}/try`, accessToken, { method: "POST" });
+      setCatalog((current) => (current ? { ...current, tries: started.tries } : current));
+      previewMemberTheme(theme.theme_id, started.until);
       setOpen(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Theme preview could not be loaded.");
+      if (reason instanceof ApiRequestError && reason.status === 429) {
+        const nextAt = reason.retryAt || null;
+        setCatalog((current) => (current ? { ...current, tries: { limit: 3, seconds: 15, ...(current.tries || {}), left: 0, next_at: nextAt } } : current));
+        setError(`You've used your 3 tries for this hour. Your next try is at ${clock(nextAt)}.`);
+      } else setError(reason instanceof Error ? reason.message : "The theme can't be tried right now.");
     }
   }
   async function apply(theme: ThemeChoice) {
@@ -99,6 +110,7 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
   }
   const designOf = (theme: ThemeChoice) => theme.design || (theme.theme_id === "base" ? BASE_DESIGN : null);
   const shown = catalog?.themes.find((theme) => theme.theme_id === focus) || null;
+  const tries = catalog?.tries || null;
   const shownDesign = shown ? designOf(shown) : null;
   return (
     <>
@@ -152,12 +164,21 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
                         {busy ? "Saving…" : "Use this theme"}
                       </button>
                     )}
-                    <button className="secondary-button" type="button" onClick={() => void tryOn(shown)}>
-                      Try it for 15 seconds
-                    </button>
+                    {shown.theme_id !== "base" && !shown.is_current && (
+                      <button className="secondary-button" type="button" disabled={tries?.left === 0} onClick={() => void tryOn(shown)}>
+                        Try it for 15 seconds
+                      </button>
+                    )}
                   </div>
+                  {tries && shown.theme_id !== "base" && !shown.is_current && (
+                    <p className={tries.left === 0 ? "mtp-tries is-out" : "mtp-tries"}>
+                      {tries.left === 0
+                        ? `No tries left this hour. Next try at ${clock(tries.next_at)}.`
+                        : `${tries.left} of ${tries.limit} tries left this hour.`}
+                    </p>
+                  )}
                   {shown.requires_paid && !shown.can_apply && (
-                    <p className="mtp-locked">Standard or Pro required to use this theme. You can still try it for 15 seconds.</p>
+                    <p className="mtp-locked">Standard or Pro required to use this theme. You can still try it on for 15 seconds.</p>
                   )}
                 </div>
                 <div className="mtp-list" role="radiogroup" aria-label="Themes">

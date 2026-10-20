@@ -21,6 +21,8 @@ from app.accounts.member_chat import create_member_chat_router
 from app.accounts.member_chat_review import create_member_chat_review_router
 from app.accounts.member_notifications import create_member_notifications_router
 from app.accounts.member_theme_admin import create_member_theme_admin_router
+from app.accounts.member_theme_tries import start_try, tries_status, try_running
+from app.accounts.member_identity import create_member_identity_router, identity_complete
 from app.accounts.member_profile_photo import create_member_profile_photo_router, _signed_url as signed_member_photo_url
 from app.accounts.operations import create_operations_router
 from app.accounts.store_team_router import create_store_team_router
@@ -337,6 +339,7 @@ def create_accounts_router() -> APIRouter:
     router.include_router(create_member_chat_review_router(require_verified_member, require_active_worker))
     router.include_router(create_member_notifications_router(require_verified_member))
     router.include_router(create_member_profile_photo_router(require_verified_member))
+    router.include_router(create_member_identity_router(require_verified_member))
     router.include_router(create_member_theme_admin_router(trusted_platform_admin))
     router.include_router(create_operations_router(trusted_fayfort_staff))
     router.include_router(create_store_team_router(trusted_fayfort_staff))
@@ -499,7 +502,7 @@ def create_accounts_router() -> APIRouter:
         try:
             response = (
                 supabase.table("member_profiles")
-                .select("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,onboarding_completed_at,created_at")
+                .select("user_id,display_name,first_name,last_name,username,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,onboarding_completed_at,created_at")
                 .eq("user_id", user_id)
                 .maybe_single()
                 .execute()
@@ -522,6 +525,8 @@ def create_accounts_router() -> APIRouter:
                                     "shipping_country": default.get("country")})
             except Exception:
                 logger.exception("Could not load member addresses")
+            # Name, surname and username are required before the member app opens (member_identity.py).
+            profile["identity_complete"] = identity_complete(profile)
             return {"profile": profile, **extras}
         except HTTPException:
             raise
@@ -542,7 +547,7 @@ def create_accounts_router() -> APIRouter:
             response = (supabase.table("member_profiles")
                 .update(updates)
                 .eq("user_id", user_id)
-                .select("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
+                .select("user_id,display_name,first_name,last_name,username,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,created_at")
                 .execute())
             rows = response.data or []
             if not rows:
@@ -639,19 +644,51 @@ def create_accounts_router() -> APIRouter:
                     "is_current": (profile.get("selected_theme") or "base") == theme["theme_id"],
                     "design": designs.get((theme["theme_id"], theme["published_revision"])),
                 })
-            return {"member_tier": tier, "selected_theme": profile.get("selected_theme") or "base", "themes": choices}
+            try:
+                tries = tries_status(user_id)
+            except Exception:
+                logger.warning("Could not count theme tries", exc_info=True)
+                tries = None
+            return {"member_tier": tier, "selected_theme": profile.get("selected_theme") or "base", "themes": choices,
+                    "tries": tries}
         except HTTPException:
             raise
         except Exception as exc:
             logger.exception("Could not list member themes")
             raise HTTPException(status_code=503, detail="Member themes could not be loaded.") from exc
 
+    @router.post("/members/themes/{theme_id}/try")
+    def try_member_theme(theme_id: str, authorization: str | None = Header(default=None)):
+        """Start a 15-second try-on. Three an hour for every member, counted here so it can't be reset."""
+        user_id = require_verified_member(authorization)
+        if theme_id == "base":
+            raise HTTPException(status_code=409, detail="FayFort base is free to use: choose it instead.")
+        try:
+            theme_result = (supabase.table("member_themes").select("theme_id,status,published_revision")
+                .eq("theme_id", theme_id).maybe_single().execute())
+            theme = theme_result.data if theme_result else None
+            if not theme or theme.get("status") != "published" or not theme.get("published_revision"):
+                raise HTTPException(status_code=404, detail="That published theme is not available to try.")
+            return start_try(user_id, theme_id)
+        except PermissionError as exc:
+            when = str(exc)
+            raise HTTPException(status_code=429, detail={"message": "You've used your 3 theme tries for this hour.",
+                                                         "retry_at": when or None}) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not start a theme try")
+            raise HTTPException(status_code=503, detail="The theme can't be tried right now.") from exc
+
     @router.get("/members/themes/{theme_id}/preview")
     def preview_published_member_theme(theme_id: str, authorization: str | None = Header(default=None)):
-        require_verified_member(authorization)
+        """The full-app design of a theme, only while a try-on of it is running (or for the member's own theme)."""
+        user_id = require_verified_member(authorization)
         if theme_id == "base":
             return {**_BASE_MEMBER_THEME, "revision": None}
         try:
+            if not try_running(user_id, theme_id):
+                raise HTTPException(status_code=403, detail="Start a try-on to preview this theme.")
             theme_result = (supabase.table("member_themes")
                 .select("theme_id,display_name,status,published_revision")
                 .eq("theme_id", theme_id).maybe_single().execute())

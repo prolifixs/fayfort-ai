@@ -60,10 +60,11 @@ class AddressTests(unittest.TestCase):
         self.assertEqual(address(phone="+234 803 000 0000").phone, "+234 803 000 0000")
 
     def test_completion_flags_the_missing_shipping_address(self):
-        empty = addr.profile_completion({"display_name": "Ada"}, [])
+        named = {"first_name": "Ada", "last_name": "Obi", "username": "adaobi"}
+        empty = addr.profile_completion(named, [])
         self.assertFalse(empty["address_ready"])
         self.assertEqual(empty["percent"], 40)
-        full = addr.profile_completion({"display_name": "Ada", "profile_photo_url": "x"},
+        full = addr.profile_completion({**named, "profile_photo_url": "x"},
                                        [{"is_default": True, "phone": "+2348030000000"}])
         self.assertEqual(full["percent"], 100)
 

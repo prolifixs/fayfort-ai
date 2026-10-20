@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import requests
@@ -229,14 +229,54 @@ def _fayfort_knowledge() -> tuple[str, str]:
         return "", ""
 
 
+EMPTY_CHAT_GRACE = timedelta(minutes=2)
+
+
+def _drop_empty_chats(member_id: str, keep: str | None) -> list[str]:
+    """Delete the member's chats that have no messages (not ones kept with a request). Returns the ids deleted.
+    Best effort: a failure here never stops the chat list from loading."""
+    try:
+        rows = (supabase.table("member_conversations").select("id,created_at,retention_hold,linked_request_id")
+                .eq("member_id", member_id).is_("archived_at", "null").limit(200).execute().data or [])
+        candidates = [r for r in rows if not r.get("retention_hold") and not r.get("linked_request_id") and str(r["id"]) != keep]
+        if not candidates:
+            return []
+        ids = [str(r["id"]) for r in candidates]
+        with_messages = {str(m["conversation_id"]) for m in (supabase.table("member_messages").select("conversation_id")
+                         .in_("conversation_id", ids).execute().data or [])}
+        cutoff = datetime.now(timezone.utc) - EMPTY_CHAT_GRACE
+        stale = []
+        for row in candidates:
+            if str(row["id"]) in with_messages:
+                continue
+            try:
+                created = datetime.fromisoformat(str(row.get("created_at")).replace("Z", "+00:00"))
+            except ValueError:
+                created = cutoff
+            if created <= cutoff:
+                stale.append(str(row["id"]))
+        if stale:
+            (supabase.table("member_conversations").delete().in_("id", stale).eq("member_id", member_id)
+             .eq("retention_hold", False).is_("linked_request_id", "null").execute())
+        return stale
+    except Exception:
+        logger.warning("Could not clear empty member chats", exc_info=True)
+        return []
+
+
 def create_member_chat_router(require_verified_member: Callable[[str | None], str]) -> APIRouter:
     router = APIRouter(tags=["member-chat"])
 
     @router.get("/members/conversations")
-    def list_member_conversations(archived: bool = False, authorization: str | None = Header(default=None)):
-        """The member's chats. Archived chats (docs/MEMBER_DASHBOARD_UX_PLAN.md §1) only with ?archived=true."""
+    def list_member_conversations(archived: bool = False, keep: uuid.UUID | None = None,
+                                  authorization: str | None = Header(default=None)):
+        """The member's chats. Archived chats (docs/MEMBER_DASHBOARD_UX_PLAN.md §1) only with ?archived=true.
+        Chats nobody has written in yet are left out and deleted (owner rule, 2026-10-19); `keep` is the chat open on
+        screen, and a chat made in the last EMPTY_CHAT_GRACE is only hidden, so a member about to type keeps it."""
         member_id = require_verified_member(authorization)
         try:
+            if not archived:
+                _drop_empty_chats(member_id, str(keep) if keep else None)
             query = (supabase.table("member_conversations")
                 .select("id,title,linked_request_id,retention_hold,last_activity_at,created_at,archived_at,archived_by")
                 .eq("member_id", member_id))
@@ -248,6 +288,13 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
                     .eq("member_id", member_id).not_.is_("archived_at", "null").execute())
                 archived_count = counted.count if isinstance(getattr(counted, "count", None), int) else len(counted.data or [])
             conversation_ids = [str(row["id"]) for row in rows if row.get("id")]
+            if not archived and conversation_ids:
+                # Empty chats made in the last two minutes aren't deleted yet, but they aren't listed either.
+                written = {str(m["conversation_id"]) for m in (supabase.table("member_messages").select("conversation_id")
+                           .in_("conversation_id", conversation_ids).execute().data or [])}
+                rows = [row for row in rows if str(row["id"]) in written or str(row["id"]) == (str(keep) if keep else None)
+                        or row.get("retention_hold") or row.get("linked_request_id")]
+                conversation_ids = [str(row["id"]) for row in rows]
             work_items = (supabase.table("operations_work_items")
                 .select("id,member_conversation_id,status")
                 .in_("member_conversation_id", conversation_ids).execute().data or []) if conversation_ids else []

@@ -210,3 +210,9 @@ Each batch gets tests and screenshots at phone, iPad, laptop and desktop.
     layout checks pass.
   - Both migrations were applied twice on PostgreSQL 16. The archive rules were checked there: delivered more than 3
     days ago is archived; recent, in progress, moved back and ordinary chats are not.
+
+## Name card, empty chats, theme tries (owner rules, 2026-10-19)
+
+- **Name, surname and username are required.** A member without all three sees "Tell us who you are" over the app until they save them; it can't be closed (only "Not you? Sign out"). First name and surname come prefilled from Google when available; the username is checked as they type (3 to 20 characters: lowercase letters, numbers, dots, underscores; unique; FayFort-like names reserved). Saving also sets the display name staff see ("First Surname"). They can change them later in Settings → Your name. The welcome tour waits until the card is done. API: `GET/PUT /members/me/identity`, `GET /members/me/username?u=` (`app/accounts/member_identity.py`); columns `member_profiles.first_name/last_name/username` (migration `20261019160000_member_identity.sql`).
+- **Empty chats are removed.** A chat nobody has written in isn't listed, and it's deleted when the member moves to another chat. The server also clears any left behind when the chat list loads (never the chat open on screen, one made in the last two minutes, or one kept with a request).
+- **Theme tries:** each try-on lasts 15 seconds and every member gets 3 an hour. The server counts them (`member_theme_tries`, migration `20261019170000_theme_tries.sql`) and only gives the full-app design while a try is running, so reloading or another browser can't reset it. The chooser shows "2 of 3 tries left this hour" and, when they're used, the time of the next try.

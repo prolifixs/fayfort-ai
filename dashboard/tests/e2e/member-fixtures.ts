@@ -142,7 +142,7 @@ const fixtures: Record<string, unknown> = {
 /** Twelve products, so the Browse grid has room for an in-feed ad. */
 export const manyProducts = Array.from({ length: 12 }, (_, i) => ({ ...products[i % products.length], id: `m${i}` }));
 
-export async function signedInMember(page: Page, options: { newMember?: boolean } = {}) {
+export async function signedInMember(page: Page, options: { newMember?: boolean; noName?: () => boolean } = {}) {
   await page.addInitScript(([session]) => {
     window.localStorage.setItem("sb-test-fayfort-auth-token", session);
   }, [JSON.stringify({
@@ -158,6 +158,10 @@ export async function signedInMember(page: Page, options: { newMember?: boolean 
   await page.route(`${API}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (options.newMember && path === "/members/me") return route.fulfill({ json: { ...(fixtures[path] as object), onboarding_completed: false } });
+    if (options.noName && path === "/members/me") {
+      const me = fixtures[path] as { profile: object };
+      return route.fulfill({ json: { ...me, profile: { ...me.profile, identity_complete: !options.noName() } } });
+    }
     const body = fixtures[path] ?? (path.startsWith("/members/shop/products/") ? { product: { ...products[0], description: "Soft 180% density body wave lace front wig, pre-plucked hairline, 22 inch." }, variants: [{ id: "v1", title: "22 inch", price: 96, available: true }, { id: "v2", title: "24 inch", price: 110, available: true }], media: [], pairs_with: [products[4], products[1]] } : {});
     return route.fulfill({ json: body });
   });

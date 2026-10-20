@@ -26,6 +26,7 @@ import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { RANK_NAMES, depositNote, useMemberPlan } from "./membershipApi";
 import { DirectoryPanel } from "./MemberPerks";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
+import { MemberIdentityGate } from "./MemberIdentity";
 import { MEMBER_TOUR, MemberTour, ProfileMeter, type ProfileCompletion, type TourStep } from "./accountExtras";
 import { SavedPanel } from "./ShopPanels";
 import { AdSlot, AdsProvider } from "./ads";
@@ -64,6 +65,7 @@ export function MemberChatPage() {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
   const [completion, setCompletion] = useState<ProfileCompletion | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
+  const [tourAfterIdentity, setTourAfterIdentity] = useState(false);
   // Tool names under the icons for a member's first few visits.
   const [toolLabels] = useState(() => chatToolLabelsVisible());
   const [accountDialog, setAccountDialog] = useState<MemberAccountDialogKind | null>(null);
@@ -88,6 +90,10 @@ export function MemberChatPage() {
   const [chats, setChats] = useState<MemberChat[]>([]);
   // Archive: finished chats kept as the record, out of the main list.
   const [archivedCount, setArchivedCount] = useState(0);
+  /** Chats started here that nobody has written in yet: not listed, and deleted when the member moves on
+   * (owner rule, 2026-10-19). The server also clears any left behind. */
+  const [unwrittenIds, setUnwrittenIds] = useState<string[]>([]);
+  const activeChatId = useRef<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archivedChats, setArchivedChats] = useState<MemberChat[] | null>(null);
   const [archiveSeen, setArchiveSeen] = useState(() => {
@@ -251,8 +257,10 @@ export function MemberChatPage() {
     }
   }
   const loadChats = useCallback(async (accessToken: string) => {
+    // The chat open on screen is never cleared away while the member is about to type in it.
+    const keep = activeChatId.current || new URLSearchParams(window.location.search).get("conversation");
     const result = await apiRequest<{ conversations: MemberChat[]; archived_count?: number | null }>(
-      "/members/conversations",
+      keep && /^[0-9a-f-]{36}$/i.test(keep) ? `/members/conversations?keep=${keep}` : "/members/conversations",
       accessToken,
     );
     setChats(result.conversations || []);
@@ -477,6 +485,7 @@ export function MemberChatPage() {
         method: "POST",
       });
       setChats((current) => [result.conversation, ...current]);
+      setUnwrittenIds((current) => [...current, result.conversation.id]);
       setActiveChat(result.conversation);
       setMessages([]);
       setProducts([]);
@@ -487,8 +496,18 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  /** Leaving a chat nobody wrote in deletes it. */
+  function dropIfUnwritten(next: MemberChat | null) {
+    const leaving = activeChat;
+    if (!token || !leaving || leaving.id === next?.id || !unwrittenIds.includes(leaving.id) || messages.length > 0) return;
+    if (leaving.retention_hold || leaving.linked_request_id) return;
+    setChats((current) => current.filter((item) => item.id !== leaving.id));
+    setUnwrittenIds((current) => current.filter((id) => id !== leaving.id));
+    void apiRequest("/members/conversations/" + leaving.id, token, { method: "DELETE" }).catch(() => undefined);
+  }
   async function chooseChat(chat: MemberChat) {
     if (!token) return;
+    dropIfUnwritten(chat);
     setSidebarOpen(false);
     setActivePanel("chat");
     setChatExpanded(false);
@@ -541,6 +560,7 @@ export function MemberChatPage() {
     try {
       const result = await apiRequest<{ conversation: MemberChat }>("/members/conversations", token, { method: "POST" });
       setChats((current) => [result.conversation, ...current]);
+      setUnwrittenIds((current) => [...current, result.conversation.id]);
       setActiveChat(result.conversation);
       setMessages([]);
       setProducts([]);
@@ -785,10 +805,21 @@ export function MemberChatPage() {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    activeChatId.current = activeChat?.id || null;
+  }, [activeChat]);
+  useEffect(() => {
+    if (activeChat && messages.length > 0 && unwrittenIds.includes(activeChat.id))
+      setUnwrittenIds((current) => current.filter((id) => id !== activeChat.id));
+  }, [activeChat, messages.length, unwrittenIds]);
   /** Profile completion and the first-visit tour come with the member profile. */
   function applyMe(me: MemberMe) {
     if (me.completion) setCompletion(me.completion);
-    if (me.onboarding_completed === false) setTourOpen(true);
+    // The tour waits until the member has filled in their name (the required card comes first).
+    if (me.onboarding_completed === false) {
+      if (me.profile?.identity_complete === false) setTourAfterIdentity(true);
+      else setTourOpen(true);
+    }
   }
   function refreshCompletion() {
     if (!token) return;
@@ -902,6 +933,7 @@ export function MemberChatPage() {
       </main>
     );
   }
+  const listedChats = chats.filter((chat) => !unwrittenIds.includes(chat.id));
   return (
     <AdsProvider accessToken={verified ? token : null} planKey={memberPlan?.tier} onUpgrade={openPlans}>
     <div className={sidebarOpen && !isDesktop ? "mapp sidebar-open" : "mapp"}>
@@ -962,12 +994,12 @@ export function MemberChatPage() {
           {archiveOpen && (
             <p className="mapp-history-note">Finished chats are kept here as your record. Nothing is deleted.</p>
           )}
-          {(archiveOpen ? archivedChats || [] : chats).length === 0 ? (
+          {(archiveOpen ? archivedChats || [] : listedChats).length === 0 ? (
             <p className="mapp-history-empty">
               {archiveOpen ? (archivedChats ? "Nothing archived yet." : "Loading…") : "Your chats will appear here."}
             </p>
           ) : (
-            (archiveOpen ? archivedChats || [] : chats).map((chat) => {
+            (archiveOpen ? archivedChats || [] : listedChats).map((chat) => {
               const kept = !!(chat.retention_hold || chat.linked_request_id);
               return (
                 <div
@@ -1141,6 +1173,22 @@ export function MemberChatPage() {
           onPick={(chat) => void sendProductTo(chat)}
           onNew={() => void sendProductTo("new")}
           onClose={() => setProductSheetOpen(false)}
+        />
+      )}
+      {token && profile?.identity_complete === false && (
+        <MemberIdentityGate
+          accessToken={token}
+          onSignOut={() => {
+            void supabaseClient?.auth.signOut().then(() => window.location.assign("/member/account"));
+          }}
+          onDone={(identity) => {
+            setProfile((current) => ({ ...(current || {}), ...identity, identity_complete: true }));
+            refreshCompletion();
+            if (tourAfterIdentity) {
+              setTourAfterIdentity(false);
+              setTourOpen(true);
+            }
+          }}
         />
       )}
       {tourOpen && <MemberTour steps={MEMBER_TOUR} onFinish={finishTour} beforeStep={prepareTourStep} />}

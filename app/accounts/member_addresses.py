@@ -154,8 +154,9 @@ def profile_completion(profile: dict, addresses: list[dict]) -> dict:
     default = next((a for a in addresses if a.get("is_default")), addresses[0] if addresses else None)
     items = [
         {"key": "email", "label": "Verify your email", "done": True},
-        {"key": "name", "label": "Add your name", "done": bool(str(profile.get("display_name") or "").strip()),
-         "why": "So our team knows who they're helping."},
+        {"key": "name", "label": "Add your name, surname and username",
+         "done": all(str(profile.get(key) or "").strip() for key in ("first_name", "last_name", "username")),
+         "required": True, "why": "So our team knows who they're helping."},
         {"key": "address", "label": "Add a shipping address", "done": bool(addresses), "required": True,
          "why": "Needed before you pay for an order, so we know where to deliver."},
         {"key": "phone", "label": "Add a phone number for delivery", "done": bool(default and default.get("phone")),

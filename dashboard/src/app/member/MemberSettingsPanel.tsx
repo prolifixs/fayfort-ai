@@ -14,6 +14,7 @@ import { MemberPlanComparison } from "./MemberAccountDialogs";
 import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
 import { PlanBilling } from "./PlanBilling";
 import { useMemberPlan } from "./membershipApi";
+import { MemberIdentityForm } from "./MemberIdentity";
 
 /** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
 export function MemberSettingsPanel({
@@ -210,6 +211,20 @@ export function MemberSettingsPanel({
       </section>
       <MemberSecuritySection email={accountEmail} hasPassword={providers.includes("email")} />
       <MemberEmailPreferences accessToken={token} />
+      {token && (
+        <section className="member-settings-section" aria-labelledby="member-settings-name">
+          <h2 id="member-settings-name">Your name</h2>
+          <p>Your name and surname help our team know who they're helping. Your username is how you're known around FayFort.</p>
+          <MemberIdentityForm
+            accessToken={token}
+            onSaved={(identity) => {
+              setProfile((current) => ({ ...(current || {}), ...identity, identity_complete: true }));
+              onProfileChange?.({ ...identity, identity_complete: true });
+              void reloadCompletion();
+            }}
+          />
+        </section>
+      )}
       <section className="member-settings-section" aria-labelledby="member-settings-photo">
         <h2 id="member-settings-photo">Profile photo</h2>
         <p>

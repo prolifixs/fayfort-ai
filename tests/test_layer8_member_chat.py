@@ -27,22 +27,58 @@ class Layer8MemberChatTests(unittest.TestCase):
         app.include_router(create_member_chat_router(verified_member))
         self.client = TestClient(app)
 
+    def chat_tables(self, conversations, written):
+        """One mock per table: conversations, messages (which chats have any) and work items."""
+        convs, messages, work = MagicMock(), MagicMock(), MagicMock()
+        listed = convs.select.return_value.eq.return_value
+        listed.is_.return_value.limit.return_value.execute.return_value.data = conversations  # the empty-chat sweep
+        listed.is_.return_value.order.return_value.limit.return_value.execute.return_value.data = conversations
+        listed.not_.is_.return_value.execute.return_value = MagicMock(count=2, data=[{}, {}])
+        messages.select.return_value.in_.return_value.execute.return_value.data = [{"conversation_id": cid} for cid in written]
+        work.select.return_value.in_.return_value.execute.return_value.data = []
+        tables = {"member_conversations": convs, "member_messages": messages, "operations_work_items": work}
+        return tables, convs, listed
+
     @patch("app.accounts.member_chat.supabase.table")
     def test_conversation_list_is_filtered_to_verified_member(self, table):
-        query = MagicMock()
-        listed = query.select.return_value.eq.return_value
-        listed.is_.return_value.order.return_value.limit.return_value.execute.return_value.data = [
-            {"id": CONVERSATION, "title": "Shoes", "retention_hold": False}
-        ]
-        listed.not_.is_.return_value.execute.return_value = MagicMock(count=2, data=[{}, {}])
-        table.return_value = query
+        tables, convs, listed = self.chat_tables([{"id": CONVERSATION, "title": "Shoes", "retention_hold": False,
+                                                    "created_at": "2026-10-01T00:00:00Z"}], [CONVERSATION])
+        table.side_effect = lambda name: tables.get(name, MagicMock())
         response = self.client.get("/members/conversations", headers={"Authorization": "Bearer member-token"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["conversations"][0]["id"], CONVERSATION)
         self.assertEqual(response.json()["archived_count"], 2)
         # The chat list leaves archived chats out.
-        listed.is_.assert_called_once_with("archived_at", "null")
-        query.select.return_value.eq.assert_called_with("member_id", MEMBER)
+        listed.is_.assert_any_call("archived_at", "null")
+        convs.select.return_value.eq.assert_called_with("member_id", MEMBER)
+        convs.delete.assert_not_called()
+
+    @patch("app.accounts.member_chat.supabase.table")
+    def test_empty_chats_are_deleted_except_the_open_one_new_ones_and_kept_ones(self, table):
+        EMPTY_OLD = "00000000-0000-0000-0000-000000000031"
+        EMPTY_NEW = "00000000-0000-0000-0000-000000000032"
+        OPEN = "00000000-0000-0000-0000-000000000033"
+        KEPT = "00000000-0000-0000-0000-000000000034"
+        now = datetime.now(timezone.utc).isoformat()
+        rows = [
+            {"id": CONVERSATION, "title": "Shoes", "retention_hold": False, "created_at": "2026-10-01T00:00:00Z"},
+            {"id": EMPTY_OLD, "title": "New chat", "retention_hold": False, "created_at": "2026-10-01T00:00:00Z"},
+            {"id": EMPTY_NEW, "title": "New chat", "retention_hold": False, "created_at": now},
+            {"id": OPEN, "title": "New chat", "retention_hold": False, "created_at": "2026-10-01T00:00:00Z"},
+            {"id": KEPT, "title": "Kept", "retention_hold": True, "linked_request_id": "r1", "created_at": "2026-10-01T00:00:00Z"},
+        ]
+        tables, convs, _ = self.chat_tables(rows, [CONVERSATION])
+        table.side_effect = lambda name: tables.get(name, MagicMock())
+        response = self.client.get(f"/members/conversations?keep={OPEN}", headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 200)
+        # Only the old empty chat is deleted; the brand-new one is just hidden; the open and kept ones stay listed.
+        convs.delete.return_value.in_.assert_called_once_with("id", [EMPTY_OLD])
+        convs.delete.return_value.in_.return_value.eq.assert_called_once_with("member_id", MEMBER)
+        listed_ids = [c["id"] for c in response.json()["conversations"]]
+        self.assertIn(CONVERSATION, listed_ids)
+        self.assertIn(OPEN, listed_ids)
+        self.assertIn(KEPT, listed_ids)
+        self.assertNotIn(EMPTY_NEW, listed_ids)
 
     @patch("app.accounts.member_chat.supabase.table")
     def test_archive_lists_only_archived_chats(self, table):

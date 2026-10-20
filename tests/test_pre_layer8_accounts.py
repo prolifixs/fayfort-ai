@@ -56,7 +56,7 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         self.assertIsNone(response.json()["profile"]["profile_photo_url"])
         # The profile row first; saved addresses (for profile completion) come from their own table.
         self.assertEqual(table.call_args_list[0].args, ("member_profiles",))
-        table.return_value.select.assert_any_call("user_id,display_name,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,onboarding_completed_at,created_at")
+        table.return_value.select.assert_any_call("user_id,display_name,first_name,last_name,username,points_balance,rank_level,subrank,member_tier,selected_theme,member_photo_path,shipping_phone,shipping_address_line1,shipping_address_line2,shipping_city,shipping_region,shipping_postal_code,shipping_country,onboarding_completed_at,created_at")
         table.return_value.select.return_value.eq.assert_any_call("user_id", USER)
 
     @patch("app.accounts.router.supabase.table")

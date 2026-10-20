@@ -64,8 +64,9 @@ class MemberThemeRuntimeTests(TestCase):
         self.assertEqual(table.call_args_list[0].args, ("member_profiles",))
         self.assertEqual(table.call_args_list[1].args, ("member_themes",))
 
+    @patch("app.accounts.router.try_running", return_value=True)
     @patch("app.accounts.router.supabase.table")
-    def test_member_can_preview_published_theme_without_changing_preference(self, table):
+    def test_member_can_preview_published_theme_without_changing_preference(self, table, running):
         theme = MagicMock()
         theme.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {"theme_id": "spring-dawn", "display_name": "Spring Dawn", "status": "published", "published_revision": 2}
         revision = MagicMock()
@@ -78,8 +79,9 @@ class MemberThemeRuntimeTests(TestCase):
         self.assertEqual(response.json()["design"], {**DESIGN, "font_family": "system"})  # older revisions without a font use the standard one
         self.assertEqual(table.call_count, 2)
 
+    @patch("app.accounts.router.try_running", return_value=True)
     @patch("app.accounts.router.supabase.table")
-    def test_unpublished_theme_cannot_be_previewed(self, table):
+    def test_unpublished_theme_cannot_be_previewed(self, table, running):
         theme = MagicMock()
         theme.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {"theme_id": "spring-dawn", "display_name": "Spring Dawn", "status": "draft", "published_revision": None}
         table.return_value = theme
@@ -88,6 +90,13 @@ class MemberThemeRuntimeTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(table.call_count, 1)
+
+    @patch("app.accounts.router.try_running", return_value=False)
+    @patch("app.accounts.router.supabase.table")
+    def test_preview_needs_a_running_try(self, table, running):
+        response = self.client.get("/members/themes/spring-dawn/preview", headers={"Authorization": "Bearer member-token"})
+        self.assertEqual(response.status_code, 403)
+        table.assert_not_called()
 
 
 if __name__ == "__main__":

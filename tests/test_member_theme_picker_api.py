@@ -81,7 +81,11 @@ class MemberThemePickerApiTests(TestCase):
             {"theme_id": "spring-dawn", "revision": 1, "palette_preset": "old", "wrapper_style": "clean", "colors": colors},
             {"theme_id": "spring-dawn", "revision": 2, "palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat"},
         ]
-        table.side_effect = lambda name: profiles if name == "member_profiles" else revisions if name == "member_theme_revisions" else themes
+        tries = MagicMock()
+        tries.select.return_value.eq.return_value.gte.return_value.order.return_value.limit.return_value.execute.return_value.data = [
+            {"theme_id": "spring-dawn", "started_at": "2026-10-19T10:00:00+00:00"}]
+        table.side_effect = lambda name: (profiles if name == "member_profiles" else revisions if name == "member_theme_revisions"
+                                          else tries if name == "member_theme_tries" else themes)
         response = self.client.get("/members/themes", headers={"Authorization": "Bearer member-token"})
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -89,6 +93,7 @@ class MemberThemePickerApiTests(TestCase):
         self.assertEqual(body["themes"][0]["design"]["colors"]["accent"], "#005A9C")
         self.assertEqual(body["themes"][1]["design"], {"palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat"})
         revisions.select.return_value.in_.assert_called_once_with("theme_id", ["spring-dawn"])
+        self.assertEqual(body["tries"], {"limit": 3, "left": 2, "next_at": None, "seconds": 15})
         self.assertEqual([theme["theme_id"] for theme in body["themes"]], ["base", "spring-dawn"])
         self.assertTrue(body["themes"][0]["can_apply"])
         self.assertFalse(body["themes"][1]["can_apply"])

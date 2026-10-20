@@ -160,3 +160,43 @@ describe("ask about a product", () => {
     }
   });
 });
+
+describe("empty chats", () => {
+  beforeEach(() => {
+    // The open chat already has a message, so New chat makes a fresh one.
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/members/conversations/chat-open/messages") && (init?.method || "GET") === "GET"
+        ? ok({ messages: [{ id: "x1", sender_type: "member", content: "Wigs please", related_product_ids: [], created_at: at }], products: [] })
+        : base(input, init));
+  });
+  it("doesn't list a new chat until something is written in it, and deletes it when the member moves on", async () => {
+    window.history.replaceState({}, "", "/member/chat");
+    render(<App />);
+    const chats = await screen.findByRole("region", { name: "Your chats" });
+    await within(chats).findByRole("button", { name: /^Wigs/ });
+    fireEvent.click(document.querySelector(".mapp-new-chat") as HTMLButtonElement);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/members/conversations") && init?.method === "POST")).toBe(true));
+    // The new, empty chat is open but not in the list.
+    expect(within(chats).queryByText("New chat")).not.toBeInTheDocument();
+    // Moving to another chat deletes the empty one.
+    fireEvent.click(within(chats).getByRole("button", { name: /^Wigs/ }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/members/conversations/chat-new") && init?.method === "DELETE")).toBe(true));
+  });
+
+  it("lists a new chat once the member writes in it, and never deletes it", async () => {
+    window.history.replaceState({}, "", "/member/chat");
+    render(<App />);
+    const chats = await screen.findByRole("region", { name: "Your chats" });
+    await within(chats).findByRole("button", { name: /^Wigs/ });
+    fireEvent.click(document.querySelector(".mapp-new-chat") as HTMLButtonElement);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/members/conversations") && init?.method === "POST")).toBe(true));
+    const box = await screen.findByRole("textbox", { name: /message/i });
+    fireEvent.change(box, { target: { value: "Do you have ankara in blue?" } });
+    fireEvent.submit(box.closest("form") as HTMLFormElement);
+    expect(await within(chats).findByText("Do you have ankara in blue?")).toBeInTheDocument();
+    fireEvent.click(within(chats).getByRole("button", { name: /^Wigs/ }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/members/conversations/chat-new") && init?.method === "DELETE")).toBe(false);
+  });
+});

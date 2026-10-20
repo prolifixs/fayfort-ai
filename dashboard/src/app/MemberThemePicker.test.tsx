@@ -49,3 +49,32 @@ describe("MemberThemePicker", () => {
   expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/members/me/theme") && init?.method === "PUT")).toBe(true);
  });
 });
+
+describe("MemberThemePicker try limit", () => {
+ afterEach(() => { cleanup(); vi.restoreAllMocks(); previewMemberTheme.mockClear(); });
+ it("starts each try on the server, shows the tries left, and stops at three an hour", async () => {
+  let left = 1;
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+   if (String(input).endsWith("/members/themes/koko-water/try") && init?.method === "POST") {
+    if (left === 0) return new Response(JSON.stringify({ detail: { message: "You've used your 3 theme tries for this hour.", retry_at: "2026-10-19T19:00:00Z" } }), { status: 429, headers: { "Content-Type": "application/json" } });
+    left -= 1;
+    return json({ theme_id: "koko-water", until: new Date(Date.now() + 15000).toISOString(), tries: { limit: 3, left, next_at: left === 0 ? "2026-10-19T19:00:00Z" : null, seconds: 15 } });
+   }
+   return json({ ...catalog, tries: { limit: 3, left, next_at: null, seconds: 15 } });
+  });
+  render(<MemberThemePicker accessToken="member-token" onApplied={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Browse themes" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /Koko Water/ }));
+  expect(screen.getByText("1 of 3 tries left this hour.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Try it for 15 seconds" }));
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/try") && init?.method === "POST")).toBe(true));
+  await waitFor(() => expect(previewMemberTheme).toHaveBeenCalled());
+  expect(previewMemberTheme.mock.calls.at(-1)?.[0]).toBe("koko-water");
+  expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/try") && init?.method === "POST")).toBe(true);
+  // Reopen: no tries left.
+  fireEvent.click(screen.getByRole("button", { name: "Browse themes" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /Koko Water/ }));
+  expect(screen.getByText(/No tries left this hour. Next try at/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Try it for 15 seconds" })).toBeDisabled();
+ });
+});
