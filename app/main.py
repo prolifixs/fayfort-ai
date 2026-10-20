@@ -825,6 +825,8 @@ app.include_router(create_member_commerce_router())
 from app.accounts.member_addresses import create_member_account_router  # noqa: E402
 app.include_router(create_member_account_router())
 app.include_router(create_admin_commerce_router())
+from app.commerce.sourcing_import import create_sourcing_import_router
+app.include_router(create_sourcing_import_router())
 app.include_router(create_shopify_webhook_router())
 from app.membership.router import create_membership_router
 app.include_router(create_membership_router())

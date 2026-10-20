@@ -14,12 +14,13 @@ export function Countdown({ endsAt }: { endsAt: string }) {
 
 export function PriceLine({ card }: { card: ShopCard }) {
   if (card.price === null || card.price === undefined) {
-    return <span className="shop-price muted">{card.source === "shopify" ? "" : "Sourced on request"}</span>;
+    return <span className="shop-price muted">{card.source === "shopify" ? "" : "Contact our team for a price"}</span>;
   }
   if (card.price_guide) {
     return (
       <span className="shop-price is-guide">
         <strong>From {money(card.price, card.currency)}</strong>
+        <small className="shop-price-est"> est.</small>
         {card.min_order ? <small> · min {card.min_order}</small> : null}
       </span>
     );

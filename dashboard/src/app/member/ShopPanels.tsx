@@ -189,18 +189,26 @@ export function ProductPanel({
                   ? "This one is a giveaway prize right now, so it's held back. Ask in the chat if you'd like one."
                   : "This listing is sourced on request. Ask about it in the chat or use Source it."}
               </p>
-              {detail.product.source !== "shopify" && (detail.product.min_order || detail.product.lead_time) ? (
+              {detail.product.source !== "shopify" ? (
                 <dl className="shop-sourcing-facts">
                   {detail.product.price_guide && detail.product.price ? (
                     <div>
-                      <dt>Price guide</dt>
+                      <dt>Rough price</dt>
                       <dd>
                         From {money(detail.product.price, detail.product.currency)}
                         {detail.product.price_max && detail.product.price_max > detail.product.price ? ` to ${money(detail.product.price_max, detail.product.currency)}` : ""}
-                        <small> · your quote comes after we source it</small>
+                        <small> · a rough estimate; our team confirms your final price</small>
                       </dd>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div>
+                      <dt>Price</dt>
+                      <dd>
+                        Contact our team for a price
+                        <small> · tap Ask in chat and we'll quote you</small>
+                      </dd>
+                    </div>
+                  )}
                   {detail.product.min_order ? (
                     <div>
                       <dt>Minimum order</dt>

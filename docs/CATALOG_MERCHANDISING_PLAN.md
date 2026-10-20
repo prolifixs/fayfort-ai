@@ -155,3 +155,12 @@ Without them Publish still works and tells the administrator to tick the sales c
 **Tests:** API 633 (27 new), dashboard 159 (6 new), layout 55 including 9 new checks at phone, laptop and desktop
 (`tests/e2e/store-team.spec.ts`). The three migrations were applied twice to a full local copy of the schema and
 exercised with real rows.
+
+## 10. Sourcing items imported from FayFort's Instagram (2026-10-20)
+
+Owner request: put every product from fayfort_preorder_chinashopping and fayfort_furnitures_china on the site as sourcing items, with a media limit, a category each, "contact team" when there is no price, and posted prices treated as rough estimates.
+
+- `POST /platform/commerce/sourcing/import` (platform admins, one item per call, `app/commerce/sourcing_import.py`). Creates or updates a `directory_products` row (source fayfort, availability sourcing) keyed by `import_ref` = `instagram:<post code>` (migration 20261020120000), so a re-run updates the same item.
+- Media is copied into the `product-media` bucket under `imports/<ref>/`, at most 5 pieces per item. Videos keep their cover as the poster. Only https links on Instagram/Facebook CDN hosts are fetched, without redirects, with size caps (15 MB image, 60 MB video). Media already copied is kept on a re-run unless `refresh_media` is set.
+- Prices: the USD price in the caption becomes the price guide (card "From $X est.", detail "Rough price … our team confirms your final price"). No price → card and detail say "Contact our team for a price".
+- Posts showing designer logos on low-priced bags and sandals were not imported; the owner decides on those.
