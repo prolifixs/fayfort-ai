@@ -1,7 +1,9 @@
 import Image from 'next/image'
+import { FAYFAY_SOCIAL_HANDLE } from '@/config/contact'
+import { PRICE_USD, PRICE_WAS_USD, formatPrice } from '../ebook/landed/config'
 import { Countdown } from './Countdown'
 import { getGoData, money } from './data'
-import { GoHeader, ICONS, RouteStrip, Ticket } from './GoParts'
+import { GoHeader, ICONS, RouteStrip, SocialLinks, Ticket } from './GoParts'
 
 export const revalidate = 300
 
@@ -17,6 +19,9 @@ export default async function GoPage() {
           <span>
             <strong>FayFay</strong>
             <small>Founder, based in Guangzhou</small>
+            <a href={`https://instagram.com/${FAYFAY_SOCIAL_HANDLE}`} target="_blank" rel="noreferrer">
+              @{FAYFAY_SOCIAL_HANDLE}
+            </a>
           </span>
         </div>
         <h1>Buy from China without the guesswork.</h1>
@@ -36,6 +41,21 @@ export default async function GoPage() {
             stub={<Countdown endsAt={giveaway.ends_at} />}
           />
         )}
+        <Ticket
+          href="/ebook/landed"
+          external
+          variant="book"
+          icon={<Image src="/images/landed/landed-front.jpg" alt="" width={66} height={99} />}
+          title="LANDED, by FayFay"
+          line="The Guangzhou sourcing directory: how buying in China really works, plus live supplier contacts."
+          stubLabel="Ebook"
+          stub={
+            <>
+              {PRICE_WAS_USD && <s>{formatPrice(PRICE_WAS_USD)}</s>}
+              {formatPrice(PRICE_USD)}
+            </>
+          }
+        />
         <Ticket
           href="/go/shop"
           icon={ICONS.bag}
@@ -76,6 +96,8 @@ export default async function GoPage() {
           stub="Quoted"
         />
       </nav>
+
+      <SocialLinks />
     </>
   )
 }

@@ -1496,7 +1496,7 @@ article.shop-tile,
 }
 
 /* Tools (consultation, tour guide, supplier directory, supplier contacts) */
-.member-tools{display:grid;gap:16px}
+.member-tools{display:grid;gap:16px;align-content:start}
 .member-tool-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .member-tool-tile{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:10px;padding:14px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg,14px);background:var(--color-bg);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
 .member-tool-tile svg{width:36px;height:36px;padding:7px;border-radius:10px;background:color-mix(in srgb,var(--color-accent) 12%,var(--color-bg));fill:none;stroke:var(--color-accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

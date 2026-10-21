@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FAYFORT_INSTAGRAM, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
+import { FAYFAY_SOCIAL_HANDLE, FAYFORT_INSTAGRAM, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
 import { FayfortLogo } from '../components/brand/FayfortLogo'
 
 /** The route strip: Guangzhou's airport code, a dashed flight path with a plane, and "you". Drawn in once on load. */
@@ -35,6 +35,7 @@ export function Ticket({
   icon,
   children,
   external = false,
+  variant,
 }: {
   href: string
   title: string
@@ -45,6 +46,7 @@ export function Ticket({
   icon: React.ReactNode
   children?: React.ReactNode
   external?: boolean
+  variant?: 'book'
 }) {
   const body = (
     <>
@@ -66,7 +68,7 @@ export function Ticket({
       )}
     </>
   )
-  const className = `go-ticket is-${tone}${stub !== undefined ? ' has-stub' : ''}`
+  const className = `go-ticket is-${tone}${stub !== undefined ? ' has-stub' : ''}${variant ? ` is-${variant}` : ''}`
   return external ? (
     <a className={className} href={href}>
       {body}
@@ -103,6 +105,9 @@ export function GoFooter() {
       <a href={`https://instagram.com/${FAYFORT_INSTAGRAM}`} target="_blank" rel="noreferrer">
         Instagram @{FAYFORT_INSTAGRAM}
       </a>
+      <a href={`https://instagram.com/${FAYFAY_SOCIAL_HANDLE}`} target="_blank" rel="noreferrer">
+        FayFay @{FAYFAY_SOCIAL_HANDLE}
+      </a>
       <p>FAYFORT International Trading, Guangzhou</p>
     </footer>
   )
@@ -119,7 +124,81 @@ export function GoPageHead({ kicker, title, lede }: { kicker: string; title: str
   )
 }
 
+/** Social accounts: FayFay's own (Instagram and TikTok, same handle) and FayFort's shop accounts. */
+export const SOCIALS: { group: string; links: { network: 'instagram' | 'tiktok'; handle: string; note: string }[] }[] = [
+  {
+    group: 'FayFay',
+    links: [
+      { network: 'instagram', handle: FAYFAY_SOCIAL_HANDLE, note: 'Daily life and buying in China' },
+      { network: 'tiktok', handle: FAYFAY_SOCIAL_HANDLE, note: 'Markets, factories and hauls' },
+    ],
+  },
+  {
+    group: 'FAYFORT',
+    links: [
+      { network: 'instagram', handle: FAYFORT_INSTAGRAM, note: 'News, giveaways and finds' },
+      { network: 'instagram', handle: 'fayfort_preorder_chinashopping', note: 'Preorders from China' },
+      { network: 'instagram', handle: 'fayfort_furnitures_china', note: 'Furniture from China' },
+    ],
+  },
+]
+
+const SOCIAL_URL = { instagram: 'https://instagram.com/', tiktok: 'https://www.tiktok.com/@' }
+const SOCIAL_NAME = { instagram: 'Instagram', tiktok: 'TikTok' }
+
+export function SocialLinks() {
+  return (
+    <section className="go-social" aria-labelledby="go-social-title">
+      <h2 id="go-social-title" className="go-section-title">
+        Follow along
+      </h2>
+      {SOCIALS.map(({ group, links }) => (
+        <div className="go-social-group" key={group}>
+          <p className="go-social-who">{group}</p>
+          <ul>
+            {links.map(({ network, handle, note }) => (
+              <li key={network + handle}>
+                <a href={SOCIAL_URL[network] + handle} target="_blank" rel="noreferrer" aria-label={`${SOCIAL_NAME[network]} @${handle}`}>
+                  <span className={`go-social-icon is-${network}`} aria-hidden="true">
+                    {network === 'instagram' ? ICONS.instagram : ICONS.tiktok}
+                  </span>
+                  <span className="go-social-copy">
+                    <strong>@{handle}</strong>
+                    <small>
+                      {SOCIAL_NAME[network]} · {note}
+                    </small>
+                  </span>
+                  <span className="go-social-go" aria-hidden="true">
+                    ↗
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 export const ICONS = {
+  instagram: (
+    <svg viewBox="0 0 24 24">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" />
+    </svg>
+  ),
+  tiktok: (
+    <svg viewBox="0 0 24 24">
+      <path d="M14 3.5v11.2a3.8 3.8 0 1 1-3.8-3.8M14 3.5c.4 2.6 2.2 4.4 5 4.6" />
+    </svg>
+  ),
+  book: (
+    <svg viewBox="0 0 24 24">
+      <path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h10" />
+    </svg>
+  ),
   gift: (
     <svg viewBox="0 0 24 24">
       <path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1.2C7 7 9.5 7 12 7zM12 7c1.5-3 5-3.5 5-1.2C17 7 14.5 7 12 7z" />
