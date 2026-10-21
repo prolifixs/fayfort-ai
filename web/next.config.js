@@ -1,5 +1,7 @@
 const SHOPIFY_STORE = 'https://8kjjz9-ei.myshopify.com'
 const CHAT_API = new URL(process.env.NEXT_PUBLIC_FAYFORT_API_URL || 'https://api.fayfort.com').origin
+// Product and giveaway photos on fayfort.com/go are served from FayFort's public product-media storage.
+const PRODUCT_MEDIA = 'https://lirauxdhnknfiqjnulxb.supabase.co'
 
 // Allowlist of what the public pages load: the site itself, Shopify for LANDED and Instagram embeds. The old
 // enterprise app's Supabase, Stripe and video hosts were dropped with it (owner decision D11).
@@ -10,7 +12,7 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://cdn.shopify.com`,
+  `img-src 'self' data: blob: https://cdn.shopify.com ${PRODUCT_MEDIA}`,
   "font-src 'self' data:",
   // FayFort AI chat help talks to the FayFort API from the browser.
   `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API}`,

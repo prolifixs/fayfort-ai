@@ -1419,3 +1419,116 @@ article.shop-tile,
   .member-identity-card { width: 100%; border-radius: var(--radius-xl) var(--radius-xl) 0 0; padding: var(--space-6) var(--space-4) calc(var(--space-5) + var(--safe-bottom)); }
   .member-identity-names { grid-template-columns: 1fr; }
 }
+
+/* Shop by category (Browse) */
+.shop-cat-tiles{display:grid;gap:9px;min-width:0;margin:6px 0 16px}
+.shop-cat-tiles h3{margin:0;font-size:var(--text-base)}
+.shop-cat-track{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,176px);gap:10px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x mandatory}
+.shop-cat-tile{position:relative;display:block;aspect-ratio:4/3;padding:0;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg,14px);background:var(--color-surface);cursor:pointer;scroll-snap-align:start;text-align:left}
+.shop-cat-tile img{width:100%;height:100%;object-fit:cover;display:block}
+.shop-cat-tile>span{position:absolute;inset:auto 0 0 0;display:grid;gap:1px;padding:22px 10px 8px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0));color:#fff}
+.shop-cat-tile strong{font-size:var(--text-sm);line-height:1.2}
+.shop-cat-tile small{font-size:var(--text-xs);opacity:.85}
+.shop-cat-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shop-top-filter{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:8px 12px;border-radius:var(--radius-md);background:var(--color-surface)}
+
+/* Chat welcome: popular picks grid */
+.shop-chat-picks{display:grid;gap:12px;width:min(860px,100%);margin:20px auto 0;text-align:left}
+.shop-chat-picks h3{margin:0;font-size:var(--text-base)}
+.shop-chat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.shop-chat-pick{display:grid;grid-template-rows:auto 1fr;padding:0;overflow:hidden;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg,14px);background:var(--color-bg);color:inherit;cursor:pointer;text-align:left}
+.shop-chat-pick img,.shop-chat-pick video{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--color-surface)}
+.shop-chat-pick>span{display:grid;gap:3px;padding:8px 10px 10px;min-width:0}
+.shop-chat-pick strong{font-size:var(--text-sm);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.shop-chat-pick:hover{border-color:var(--accent)}
+.shop-chat-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shop-chat-cats{display:flex;flex-wrap:wrap;gap:8px}
+.shop-chat-cats a{padding:7px 12px;border:1px solid var(--color-border-subtle);border-radius:999px;background:var(--color-surface);color:inherit;font-size:var(--text-sm);text-decoration:none}
+.shop-chat-cats a:hover{border-color:var(--accent);color:var(--accent)}
+.shop-chat-browse{justify-self:center;text-decoration:none}
+@media (max-width:720px){
+  .shop-chat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .shop-cat-track{grid-auto-columns:minmax(140px,44%)}
+}
+/* Rough prices: "From $3,690.00 est." wraps instead of being cut off on narrow tiles */
+.shop-price.is-guide{flex-wrap:wrap;column-gap:4px;row-gap:0}
+.shop-tile-copy .shop-price.is-guide strong{display:inline;overflow:visible;white-space:nowrap;-webkit-line-clamp:unset}
+.shop-tile-copy .shop-price small{overflow:visible;text-overflow:clip}
+
+/* ---------------------------------------------------------------------------------------------
+   Theme patterns (Ankara, Ghana Must Go). Placed only in calm spots so text stays readable:
+   1. a band under the top bar, 2. the sidebar header behind the logo (the logo sits on a solid chip),
+   3. a ribbon above the chat welcome heading, 4. the left edge of plan and tool cards.
+   Never behind chat messages, product grids or forms. "Bold" makes the band and ribbon larger and stronger.
+   --------------------------------------------------------------------------------------------- */
+.member-theme-runtime:not([data-theme-pattern="none"]) .mapp-topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 4px; pointer-events: none;
+  background-image: var(--theme-pattern); background-size: var(--theme-pattern-size); background-position: var(--theme-pattern-band, 0 0);
+}
+.member-theme-runtime[data-theme-pattern-strength="bold"]:not([data-theme-pattern="none"]) .mapp-topbar::after { height: 7px; }
+.member-theme-runtime:not([data-theme-pattern="none"]) .mapp-sidebar-head {
+  position: relative; margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2); padding: var(--space-3) var(--space-3);
+  border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden; isolation: isolate;
+}
+.member-theme-runtime:not([data-theme-pattern="none"]) .mapp-sidebar-head::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--color-surface) 35%, transparent), color-mix(in srgb, var(--color-surface) 80%, transparent)), var(--theme-pattern);
+  background-size: auto, var(--theme-pattern-size);
+}
+.member-theme-runtime[data-theme-pattern-strength="bold"]:not([data-theme-pattern="none"]) .mapp-sidebar-head::before {
+  background-image: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-surface) 45%, transparent)), var(--theme-pattern);
+}
+.member-theme-runtime:not([data-theme-pattern="none"]) .mapp-sidebar-head .mapp-brand {
+  padding: 6px 12px 6px 8px; border-radius: 999px; background: var(--color-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.member-theme-runtime:not([data-theme-pattern="none"]) .member-chat-welcome::before {
+  content: ""; display: block; width: 168px; height: 14px; margin: 0 auto 6px; border-radius: 999px; pointer-events: none;
+  background-image: var(--theme-pattern); background-size: var(--theme-pattern-size); background-position: var(--theme-pattern-band, 0 0);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+.member-theme-runtime[data-theme-pattern-strength="bold"]:not([data-theme-pattern="none"]) .member-chat-welcome::before { width: 240px; height: 22px; }
+.member-theme-runtime:not([data-theme-pattern="none"]) :is(.member-perk, .member-tool-tile) {
+  position: relative; overflow: hidden; padding-left: 20px;
+}
+.member-theme-runtime:not([data-theme-pattern="none"]) :is(.member-perk, .member-tool-tile)::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; pointer-events: none;
+  background-image: var(--theme-pattern); background-size: var(--theme-pattern-size);
+}
+
+/* Tools (consultation, tour guide, supplier directory, supplier contacts) */
+.member-tools{display:grid;gap:16px}
+.member-tool-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.member-tool-tile{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:10px;padding:14px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg,14px);background:var(--color-bg);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.member-tool-tile svg{width:36px;height:36px;padding:7px;border-radius:10px;background:color-mix(in srgb,var(--color-accent) 12%,var(--color-bg));fill:none;stroke:var(--color-accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.member-tool-tile span{display:grid;gap:3px;min-width:0}
+.member-tool-tile strong{font-size:var(--text-base)}
+.member-tool-tile small{color:var(--color-muted);font-size:var(--text-sm);line-height:1.4}
+.member-tool-tile:hover{border-color:var(--color-accent)}
+.member-tool-tile.is-on{border-color:var(--color-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--color-accent) 25%,transparent)}
+.member-tool-tile:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.member-tool-view{display:grid;gap:12px;scroll-margin-top:72px}
+.member-tool-view:empty{display:none}
+.member-settings-moved{margin:14px 0 0;padding:10px 12px;border-radius:var(--radius-md);background:var(--color-surface);font-size:var(--text-sm)}
+.member-settings-moved a{color:var(--color-accent);font-weight:var(--weight-strong)}
+/* Tour guide request */
+.member-tour-form{gap:12px}
+.member-tour-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.member-tour-form label{display:grid;gap:4px;font-size:var(--text-sm)}
+.member-tour-needs{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;border:0}
+.member-tour-needs legend{margin-bottom:6px;font-size:var(--text-sm);font-weight:var(--weight-strong)}
+.member-tour-needs label{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--color-border-subtle);border-radius:999px;cursor:pointer}
+.member-tour-needs label.is-on{border-color:var(--color-accent);background:color-mix(in srgb,var(--color-accent) 10%,var(--color-bg))}
+.member-tour-needs input{margin:0;accent-color:var(--color-accent)}
+.member-tour-pending{margin:0;color:var(--color-muted);font-size:var(--text-xs)}
+.member-perk-notice{margin:0;padding:8px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-accent) 8%,var(--color-bg));font-size:var(--text-sm)}
+@media (max-width:900px){.member-tool-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.member-tool-grid{grid-template-columns:1fr}.member-tool-tile{padding:12px}}
+
+/* Ghana Must Go: thin bands show the slice of the plaid with the red and black lines, not the woven checks. */
+.member-theme-runtime[data-theme-pattern="ghana-must-go"] { --theme-pattern-band: 0 -12px; }
+.member-tour-form input:not([type="checkbox"]), .member-tour-form select, .member-tour-form textarea {
+  width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--color-border-strong, var(--color-border)); border-radius: var(--radius-md);
+  background: var(--color-bg); color: var(--color-text); font: inherit; font-size: var(--text-sm);
+}
+.member-tour-form textarea { min-height: 84px; resize: vertical; }
+.member-tour-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }

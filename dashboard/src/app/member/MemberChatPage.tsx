@@ -19,12 +19,11 @@ import { MemberRequestsPanel } from "./MemberRequestsPanel";
 import { ProductMediaPreview } from "../workspace/DirectoryPages";
 import type { Cart, FindItResult, Giveaway, ShopCard, ShopHome, TrendCard } from "./commerceApi";
 import { shopSessionId, trackIntent } from "./commerceApi";
-import { FindItBlock, HotRails, ProductTile } from "./ShopComponents";
+import { ChatPicks, FindItBlock, HotRails, ProductTile } from "./ShopComponents";
 import { BrowsePanel, CartButton, OrdersPanel, ProductPanel } from "./ShopPanels";
 import { MemberAccountDialogs, type MemberAccountDialogKind } from "./MemberAccountDialogs";
 import { MemberSettingsPanel } from "./MemberSettingsPanel";
 import { RANK_NAMES, depositNote, useMemberPlan } from "./membershipApi";
-import { DirectoryPanel } from "./MemberPerks";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 import { MemberIdentityGate } from "./MemberIdentity";
 import { MEMBER_TOUR, MemberTour, ProfileMeter, type ProfileCompletion, type TourStep } from "./accountExtras";
@@ -33,13 +32,19 @@ import { AdSlot, AdsProvider } from "./ads";
 import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
 import { claimPendingSiteChat } from "./siteChatCarryOver";
 import { CHAT_TOOLS, chatToolLabelsVisible, type ChatToolKey } from "./chatTools";
+import { ToolsPanel, toolFromUrl, type ToolKey } from "./ToolsPanel";
 import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, type ProductRef } from "./productChat";
 
-type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "directory";
-const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "directory"];
+type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "tools";
+const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "tools"];
 function panelFromUrl(): MemberPanel {
-  const panel = new URLSearchParams(window.location.search).get("panel") as MemberPanel | null;
-  return panel && memberPanels.includes(panel) ? panel : "chat";
+  const panel = new URLSearchParams(window.location.search).get("panel");
+  // The supplier directory moved into Tools (2026-10-20); old links still land on it.
+  if (panel === "directory") return "tools";
+  return panel && memberPanels.includes(panel as MemberPanel) ? (panel as MemberPanel) : "chat";
+}
+function initialTool(): ToolKey | null {
+  return new URLSearchParams(window.location.search).get("panel") === "directory" ? "directory" : toolFromUrl();
 }
 /** Android "Share to FayFort" (web share target) and links into the chat prefill the composer. */
 function sharedText(): string {
@@ -893,7 +898,7 @@ export function MemberChatPage() {
     saved: "Saved products",
     requests: "Orders & requests",
     product: "Product",
-    directory: "Supplier directory",
+    tools: "Tools",
   };
   const split = activePanel !== "chat" && chatExpanded && isDesktop;
   const showChat = activePanel === "chat" || split;
@@ -907,7 +912,7 @@ export function MemberChatPage() {
     { panel: "catalog", label: "Browse", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
     { panel: "saved", label: "Saved products", icon: "M6 4h12v16l-6-4-6 4z" },
     { panel: "requests", label: "Orders & requests", icon: "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" },
-    { panel: "directory", label: "Supplier directory", icon: "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+    { panel: "tools", label: "Tools", icon: "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" },
   ];
   if (!dashboardAuthConfigured) return <SetupScreen />;
   if (authLoading || !token || !verified) {
@@ -1307,7 +1312,7 @@ export function MemberChatPage() {
               {activePanel === "requests" && (
                 <OrdersPanel accessToken={token} onAddressChange={refreshCompletion} onViewChat={(id) => void viewChat(id)} />
               )}
-              {activePanel === "directory" && <DirectoryPanel accessToken={token} onClose={() => selectMemberPanel("chat")} />}
+              {activePanel === "tools" && <ToolsPanel accessToken={token} initial={initialTool()} />}
               {activePanel === "saved" && <SavedPanel accessToken={token} onOpen={openProduct} onBrowse={() => selectMemberPanel("catalog")} />}
               {activePanel === "product" && productId && (
                 <ProductPanel
@@ -1381,10 +1386,19 @@ export function MemberChatPage() {
                               Describe a product, use, or category. I’ll help you explore active FayFort catalog
                               listings.
                             </p>
-                            <a href="/member/chat?panel=catalog">Browse products directly</a>
-                            {home && (
+                            {home ? (
+                              <ChatPicks
+                                rails={home.rails}
+                                tiles={home.category_tiles || []}
+                                onOpen={openProduct}
+                                browseHref="/member/chat?panel=catalog"
+                              />
+                            ) : (
+                              <a href="/member/chat?panel=catalog">Browse products directly</a>
+                            )}
+                            {home && home.giveaways.length > 0 && (
                               <HotRails
-                                rails={home.rails.slice(0, 4)}
+                                rails={[]}
                                 giveaways={home.giveaways}
                                 onOpen={openProduct}
                                 onWant={(trend) => void wantTrend(trend)}

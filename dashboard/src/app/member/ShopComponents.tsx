@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CategoryBarItem, FindItResult, Giveaway, Rail, ShopCard, StoreSectionTile, TrendCard } from "./commerceApi";
+import type { CategoryBarItem, CategoryTile, FindItResult, Giveaway, Rail, ShopCard, StoreSectionTile, TrendCard } from "./commerceApi";
 import { isTrend, money, timeLeft } from "./commerceApi";
 import { SaveProductButton } from "./accountExtras";
 
@@ -77,7 +77,7 @@ export function ProductTile({
         />
       )}
       <div className="shop-tile-copy">
-        <small>{card.group_name || card.category_ref || (card.source === "shopify" ? "FayFort store" : "Sourcing")}</small>
+        <small>{card.category_label || card.group_name || (card.source === "shopify" ? "FayFort store" : "Sourcing")}</small>
         <strong>{card.name}</strong>
         <PriceLine card={card} />
         {card.sale ? <Countdown endsAt={card.sale.ends_at} /> : null}
@@ -343,6 +343,91 @@ export function SectionTiles({
         </section>
       ))}
     </div>
+  );
+}
+
+/** Shop by category: a photo tile per top-level category (Browse). */
+export function CategoryTiles({ tiles, onChoose }: { tiles: CategoryTile[]; onChoose: (key: string) => void }) {
+  if (!tiles.length) return null;
+  return (
+    <section className="shop-cat-tiles" aria-label="Category tiles">
+      <h3>Shop by category</h3>
+      <div className="shop-cat-track">
+        {tiles.map((tile) => (
+          <button type="button" key={tile.key} className="shop-cat-tile" onClick={() => onChoose(tile.key)}>
+            <img src={tile.image_url} alt="" loading="lazy" />
+            <span>
+              <strong>{tile.label}</strong>
+              <small>
+                {tile.count} {tile.count === 1 ? "item" : "items"}
+              </small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Chat welcome: a grid of pictured products from the rails, category buttons and a Browse button. */
+export function ChatPicks({
+  rails,
+  tiles,
+  onOpen,
+  browseHref,
+  limit = 8,
+}: {
+  rails: Rail[];
+  tiles: CategoryTile[];
+  onOpen: (card: ShopCard) => void;
+  browseHref: string;
+  limit?: number;
+}) {
+  const seen = new Set<string>();
+  const picks: ShopCard[] = [];
+  // Take from each product rail in turn so the grid mixes categories.
+  const lists = rails.filter((rail) => rail.kind !== "trend").map((rail) => rail.items.filter((item): item is ShopCard => !isTrend(item)));
+  for (let round = 0; picks.length < limit && lists.some((list) => list.length > round); round += 1) {
+    for (const list of lists) {
+      const card = list[round];
+      if (card && card.media_url && !seen.has(card.id) && picks.length < limit) {
+        seen.add(card.id);
+        picks.push(card);
+      }
+    }
+  }
+  if (!picks.length && !tiles.length) return null;
+  return (
+    <section className="shop-chat-picks" aria-label="Popular picks">
+      {picks.length > 0 && (
+        <>
+          <h3>Popular picks</h3>
+          <div className="shop-chat-grid">
+            {picks.map((card) => (
+              <button type="button" key={card.id} className="shop-chat-pick" onClick={() => onOpen(card)} aria-label={`Open ${card.name}`}>
+                {card.media_type === "video" ? <video src={card.media_url || undefined} muted playsInline preload="metadata" /> : <img src={card.media_url || undefined} alt="" loading="lazy" />}
+                <span>
+                  <strong>{card.name}</strong>
+                  <PriceLine card={card} />
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {tiles.length > 0 && (
+        <nav className="shop-chat-cats" aria-label="Shop by category">
+          {tiles.slice(0, 5).map((tile) => (
+            <a key={tile.key} href={`${browseHref}&top=${encodeURIComponent(tile.key)}`}>
+              {tile.label}
+            </a>
+          ))}
+        </nav>
+      )}
+      <a className="primary-button shop-chat-browse" href={browseHref}>
+        Browse all products
+      </a>
+    </section>
   );
 }
 

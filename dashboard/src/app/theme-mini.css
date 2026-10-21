@@ -65,3 +65,11 @@
   .tp-stage .tp-card { grid-template-columns: 44px 1fr; }
   .tp-stage .tp-button { grid-column: 1 / -1; justify-self: start; }
 }
+
+/* Theme pattern (Ankara, Ghana Must Go): band at the top of the app and behind the logo, as in the member app. */
+.tp-patterned .tp-main { position: relative; padding-top: 18px; }
+.tp-band { position: absolute; top: 0; left: 0; right: 0; height: 5px; background-image: var(--tp-pattern); background-size: 32px 32px; }
+.tp-pattern-bold .tp-band { height: 8px; }
+.tp-thumb.tp-patterned .tp-main { padding-top: 12px; }
+.tp-patterned .tp-rail { background-image: linear-gradient(to bottom, transparent 0, var(--tp-page) 46px), var(--tp-pattern); background-size: auto, 32px 32px; background-repeat: no-repeat, repeat-x; }
+.tp-patterned .tp-logo { box-shadow: 0 0 0 3px var(--tp-page); }

@@ -491,11 +491,11 @@ class FindItTests(DbCase):
 
 
 class RailsAndCartTests(DbCase):
-    def test_rails_show_trending_ending_soon_back_in_stock_and_pools(self):
+    def test_rails_show_ending_soon_pools_and_giveaways(self):
         db = self.use(seeded_db(
             commerce_flash_sales=[{"id": "sale1", "title": "Weekend drop", "discount_type": "percentage", "value": 20,
-                                   "product_ids": ["p-wig"], "starts_at": ago(hours=1), "ends_at": ahead(hours=10),
-                                   "code": None, "status": "scheduled"}],
+                                   "product_ids": ["p-wig", "p-wig2", "p-dryer"], "starts_at": ago(hours=1),
+                                   "ends_at": ahead(hours=10), "code": None, "status": "scheduled"}],
             commerce_trend_items=[
                 {"id": "t1", "canonical_url": "https://tiktok.com/@a/video/1", "platform": "tiktok", "title": "Viral wig",
                  "status": "pooling", "pool_target": 10, "pool_price": 60, "pool_currency": "USD", "share_count": 8,
@@ -503,17 +503,60 @@ class RailsAndCartTests(DbCase):
             commerce_giveaways=[{"id": "g1", "title": "Wig giveaway", "description": "", "prize_text": "A wig",
                                  "starts_at": ago(days=1), "ends_at": ahead(days=1), "winner_count": 1, "status": "open"}],
         ))
-        db.rows["directory_products"][2]["restocked_at"] = ago(days=1)
         result = service.rails(MEMBER)
         keys = [rail["key"] for rail in result["rails"]]
-        for key in ("trending", "ending_soon", "back_in_stock", "almost_sourced", "under_price"):
-            self.assertIn(key, keys)
-        ending = next(r for r in result["rails"] if r["key"] == "ending_soon")["items"][0]
-        self.assertEqual(ending["sale"]["sale_price"], 96.0)
+        self.assertIn("ending_soon", keys)
+        self.assertIn("almost_sourced", keys)
+        self.assertNotIn("trending", keys)  # one link without a picture is not a rail
+        ending = next(r for r in result["rails"] if r["key"] == "ending_soon")["items"]
+        self.assertEqual(next(c for c in ending if c["id"] == "p-wig")["sale"]["sale_price"], 96.0)
         pool = next(r for r in result["rails"] if r["key"] == "almost_sourced")["items"][0]
         self.assertAlmostEqual(pool["pool"]["progress"], 0.7)
         self.assertEqual(result["giveaways"][0]["id"], "g1")
         self.assertFalse(result["intent"]["active"])
+
+    def test_rails_lead_with_sourcing_products_and_follow_the_rules(self):
+        furniture = {"source_ref": "09-004", "category": "Home, Furniture & Interior", "group_name": None, "product_type": "Dining tables"}
+        sofas = {"source_ref": "09-001", "category": "Home, Furniture & Interior", "group_name": None, "product_type": "Sofas"}
+        sourced = [product(f"s{i}", f"Marble table {i}", "09-004" if i % 2 else "09-001", price=None if i == 5 else 300.0 + i,
+                           source="fayfort", in_stock=None, created_at=ago(hours=i)) for i in range(1, 17)]
+        sourced.append(product("s-cheap", "Dessert stand", "09-001", price=7.0, source="fayfort", in_stock=None, created_at=ago(days=3)))
+        sourced.append(product("s-nophoto", "Mystery item", "09-004", price=40.0, source="fayfort", in_stock=None,
+                               media_url=None, media_type=None, created_at=ago(minutes=1)))
+        db = seeded_db(commerce_trend_items=[
+            {"id": f"t{i}", "canonical_url": f"https://tiktok.com/@a/video/{i}", "platform": "tiktok", "title": f"Clip {i}",
+             "image_url": "https://cdn/t.jpg" if i < 4 else None, "status": "open", "share_count": 3, "want_count": 0,
+             "last_shared_at": ago(hours=1)} for i in range(1, 6)])
+        db.rows["directory_categories"] += [furniture, sofas]
+        db.rows["directory_products"] += sourced
+        self.use(db)
+        result = service.rails(MEMBER)
+        keys = [rail["key"] for rail in result["rails"]]
+        self.assertEqual(keys[0], "new_sourcing")
+        self.assertEqual(result["rails"][0]["items"][0]["id"], "s1")
+        self.assertIn("top:Home, Furniture & Interior", keys)
+        self.assertEqual(next(r for r in result["rails"] if r["key"].startswith("top:"))["title"], "Furniture from China")
+        product_rails = [r for r in result["rails"] if r.get("kind") != "trend"]
+        seen = [c["id"] for r in product_rails for c in r["items"]]
+        self.assertEqual(len(seen), len(set(seen)), "a product repeats across rails")
+        self.assertNotIn("s-nophoto", seen)
+        self.assertTrue(all(len(r["items"]) >= service.RAIL_MIN for r in result["rails"]))
+        trending = next(r for r in result["rails"] if r["key"] == "trending")
+        self.assertEqual(len(trending["items"]), 3)
+        tile = next(t for t in result["category_tiles"] if t["key"] == "Home, Furniture & Interior")
+        self.assertEqual((tile["label"], tile["count"]), ("Furniture from China", 17))
+        cheap = service.cards([sourced[16]])[0]
+        self.assertEqual([b["label"] for b in cheap["badges"]][0], "Sourced from China")
+
+    def test_under_price_rail_takes_rough_estimates(self):
+        extra = [product(f"c{i}", f"Cake stand {i}", "hair-tools", price=3.0 + i, source="fayfort", in_stock=None) for i in range(4)]
+        db = seeded_db()
+        db.rows["directory_products"] = db.rows["directory_products"][:1] + extra
+        self.use(db)
+        result = service.rails(MEMBER)
+        rail_ids = {r["key"]: [c["id"] for c in r["items"]] for r in result["rails"]}
+        shown = [i for ids in rail_ids.values() for i in ids]
+        self.assertTrue(set(f"c{i}" for i in range(4)) <= set(shown))
 
     def test_for_you_rail_appears_once_member_shows_intent(self):
         self.use(seeded_db())

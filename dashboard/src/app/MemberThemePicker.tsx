@@ -4,6 +4,7 @@ import { exitMemberThemePreview, previewMemberTheme } from "./MemberThemeRuntime
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ThemeMiniPreview, ThemeSwatches, type MiniThemeDesign } from "./ThemeMiniPreview";
 import { themeFont } from "./themeFonts";
+import { themePattern } from "./themePatterns";
 import { themeTone } from "./themeTone";
 
 type ThemeChoice = {
@@ -150,6 +151,7 @@ export function MemberThemePicker({ accessToken, onApplied }: { accessToken: str
                       <p className="mtp-meta">
                         <ThemeSwatches colors={shownDesign.colors} />
                         <span>{themeFont(shownDesign.font_family).label}</span>
+                        {shownDesign.pattern && shownDesign.pattern !== "none" && <span>{themePattern(shownDesign.pattern).label} pattern</span>}
                         {themeTone(shownDesign.colors.page_background) === "dark" && <span>Dark</span>}
                       </p>
                     )}

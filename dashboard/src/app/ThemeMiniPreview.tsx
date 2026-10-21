@@ -1,6 +1,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { loadThemeFont, themeFont } from "./themeFonts";
 import { themeTone } from "./themeTone";
+import { patternImage } from "./themePatterns";
 import "./theme-mini.css";
 
 export type MiniThemeColors = {
@@ -18,6 +19,8 @@ export type MiniThemeDesign = {
   wrapper_style: "clean" | "soft" | "framed";
   colors: MiniThemeColors;
   font_family?: string | null;
+  pattern?: string | null;
+  pattern_strength?: "subtle" | "bold" | null;
 };
 
 /** The status colours the member app uses on this theme (tokens.css swaps them on dark themes). */
@@ -61,10 +64,12 @@ export function ThemeMiniPreview({
     "--tp-sale": status.sale,
     "--tp-logo": dark ? "#ffffff" : "#07276c",
     fontFamily: themeFont(fontKey).family,
+    ...(patternImage(design.pattern) ? { "--tp-pattern": patternImage(design.pattern) } : {}),
   } as CSSProperties;
+  const patterned = Boolean(patternImage(design.pattern));
   return (
     <div
-      className={`tp tp-${size} tp-wrap-${design.wrapper_style}${dark ? " tp-dark" : ""}`}
+      className={`tp tp-${size} tp-wrap-${design.wrapper_style}${dark ? " tp-dark" : ""}${patterned ? ` tp-patterned tp-pattern-${design.pattern_strength || "subtle"}` : ""}`}
       style={style}
       role="img"
       aria-label={label || `${name}: preview of the member app in this theme`}
@@ -79,6 +84,7 @@ export function ThemeMiniPreview({
         {size === "stage" && <span className="tp-nav short" />}
       </div>
       <div className="tp-main" aria-hidden="true">
+        {patterned && <span className="tp-band" />}
         {size === "stage" && (
           <div className="tp-top">
             <strong>{name}</strong>

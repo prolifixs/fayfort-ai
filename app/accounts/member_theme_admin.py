@@ -55,6 +55,8 @@ def create_member_theme_admin_router(trusted_platform_admin: Callable[[str | Non
             "wrapper_style": row["wrapper_style"],
             "colors": row["colors"],
             "font_family": row.get("font_family") or "system",
+            "pattern": row.get("pattern") or "none",
+            "pattern_strength": row.get("pattern_strength") or "subtle",
             "created_at": row.get("created_at"),
         }
 
@@ -66,7 +68,7 @@ def create_member_theme_admin_router(trusted_platform_admin: Callable[[str | Non
                 .select("theme_id,display_name,description,draft_display_name,draft_description,status,requires_paid,is_builtin,draft_revision,published_revision,created_at,updated_at")
                 .order("created_at").execute().data or [])
             revisions = (supabase.table("member_theme_revisions")
-                .select("theme_id,revision,palette_preset,wrapper_style,colors,font_family,created_at")
+                .select("theme_id,revision,palette_preset,wrapper_style,colors,font_family,pattern,pattern_strength,created_at")
                 .order("revision", desc=True).execute().data or [])
             by_theme: dict[str, list[dict]] = {}
             for row in revisions:

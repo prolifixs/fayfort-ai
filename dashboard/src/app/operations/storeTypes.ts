@@ -27,6 +27,8 @@ export type StoreListing = {
   cost: number | null;
   currency: string | null;
   price_guide_min: number | null;
+  /** Shop page the item was added from (sourcing items added by link). */
+  source_url?: string | null;
   price_guide_max: number | null;
   min_order: number | null;
   lead_time_min_days: number | null;

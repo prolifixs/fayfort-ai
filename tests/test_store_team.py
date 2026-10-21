@@ -366,7 +366,7 @@ class CardTests(Base):
         sourcing = self.product(price_min=12.0, price_max=18.0, created_at=ago(days=30), min_order=50)
         [a, b] = service.cards([shop, sourcing])
         self.assertEqual([x["label"] for x in a["badges"]], ["-40%", "Ships now", "New"])
-        self.assertEqual([x["label"] for x in b["badges"]], ["Sourced on request"])
+        self.assertEqual([x["label"] for x in b["badges"]], ["Sourced from China"])
         self.assertTrue(b["price_guide"])
         self.assertFalse(b["buyable"])
         self.assertEqual(b["min_order"], 50)
@@ -521,3 +521,76 @@ class RouterTests(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FromLinkTests(Base):
+    """Paste a shop product link to fill a sourcing listing (owner request, 2026-10-20)."""
+
+    def start_sourcing(self, **values):
+        listing, item = store_team.open_listing(kind="sourcing_item", actor_id=WORKER, actor_role="worker", values=values)
+        return store_team.get_listing(listing["id"])
+
+    @staticmethod
+    def jpeg() -> bytes:
+        from io import BytesIO
+        from PIL import Image
+        out = BytesIO()
+        Image.new("RGB", (2400, 1600), (200, 120, 90)).save(out, format="JPEG")
+        return out.getvalue()
+
+    def preview(self, **values):
+        from app.commerce.links import Preview
+        base = {"canonical_url": "https://shop.example.com/p/marble-table", "platform": "web", "status": "ok",
+                "title": "Marble dining table 1.8m", "description": "Natural marble top.",
+                "image_url": "https://img.example.com/t.jpg", "extra": {"price": "1,250.00", "currency": "USD"}}
+        base.update(values)
+        return lambda _url: Preview(**base)
+
+    def test_a_readable_shop_page_fills_name_price_and_one_shrunk_cover(self):
+        listing = self.start_sourcing()
+        result = store_team.fill_from_link(listing, "https://www.shop.example.com/p/marble-table?utm_source=x",
+                                           fetch=self.preview(), fetch_image=lambda _u: (self.jpeg(), "image/jpeg"))
+        saved = store_team.get_listing(listing["id"])
+        self.assertTrue(result["read"])
+        self.assertEqual(result["filled"], ["name", "description", "rough price", "cover photo"])
+        self.assertEqual((saved["title"], saved["price_guide_min"]), ("Marble dining table 1.8m", 1250.0))
+        self.assertEqual(saved["source_url"], "https://shop.example.com/p/marble-table")
+        self.assertEqual(len(saved["media"]), 1)
+        path, size, options = self.db.uploads[0]
+        self.assertTrue(path.endswith("/link-cover.jpg"))
+        from io import BytesIO
+        from PIL import Image
+        stored = Image.open(BytesIO(store_team.shrink_cover(self.jpeg())))
+        self.assertEqual(max(stored.size), store_team.COVER_MAX)
+
+    def test_a_blocked_page_keeps_the_link_and_says_what_to_do(self):
+        listing = self.start_sourcing(title="My own name")
+        result = store_team.fill_from_link(listing, "https://shop.example.com/p/1",
+                                           fetch=self.preview(title="Just a moment...", image_url=None, extra={}),
+                                           fetch_image=lambda _u: None)
+        saved = store_team.get_listing(listing["id"])
+        self.assertFalse(result["read"])
+        self.assertEqual(saved["title"], "My own name")
+        self.assertEqual(saved["source_url"], "https://shop.example.com/p/1")
+        self.assertIn("didn't let us read", result["notes"][0])
+
+    def test_the_same_link_cannot_be_listed_twice(self):
+        self.product(source_url="https://shop.example.com/p/marble-table", name="Marble table")
+        listing = self.start_sourcing()
+        with self.assertRaises(store_team.ListingError) as error:
+            store_team.fill_from_link(listing, "https://shop.example.com/p/marble-table", fetch=self.preview())
+        self.assertIn("already listed", str(error.exception))
+
+    def test_a_sourcing_item_can_go_to_review_without_a_price(self):
+        listing = self.start_sourcing(title="Rattan lights", category_ref="HAIR-WIG",
+                                      media=[{"media_type": "image", "url": "https://cdn.example.com/a.jpg", "source": "upload"}])
+        self.assertEqual(store_team.missing_details(listing), [])
+
+    def test_publishing_keeps_the_link_on_the_item(self):
+        listing = self.start_sourcing(title="Rattan lights", category_ref="HAIR-WIG", source_url="https://shop.example.com/p/9",
+                                      media=[{"media_type": "image", "url": "https://cdn.example.com/a.jpg", "source": "upload"}])
+        store_team.submit(listing, WORKER)
+        store_team.publish(store_team.get_listing(listing["id"]), ADMIN)
+        product = self.db.rows["directory_products"][-1]
+        self.assertEqual(product["source_url"], "https://shop.example.com/p/9")
+        self.assertIsNone(product["price_min"])

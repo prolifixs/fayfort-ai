@@ -1,0 +1,168 @@
+/* fayfort.com/go. A navy field with faint flight paths; the links are route tickets with a perforated stub.
+   Pink is kept for what is live (the giveaway) and the main action on a page. Mobile first, one column. */
+.go {
+  --go-navy: #02144e;
+  --go-deep: #042770;
+  --go-paper: #f4f5fa;
+  --go-ink: #02144e;
+  --go-blue: #0540f2;
+  --go-pink: #f20789;
+  --go-pink-deep: #b10362;
+  --go-soft: #c3cae3;
+  --go-muted: #4a5578;
+  --go-line: rgba(2, 20, 78, 0.14);
+  background: radial-gradient(120% 60% at 50% -10%, #0a2a86 0%, var(--go-navy) 55%) var(--go-navy);
+  color: #fff;
+  font-family: var(--sans);
+  min-height: 100svh;
+  overflow-x: hidden;
+  position: relative;
+}
+.go-field { fill: none; height: 100%; inset: 0; opacity: 0.22; pointer-events: none; position: absolute; stroke: #6f8cff; stroke-dasharray: 2 7; stroke-linecap: round; stroke-width: 1.2; width: 100%; }
+.go-column { display: grid; gap: 22px; margin-inline: auto; padding: 14px 16px 40px; position: relative; width: min(480px, 100%); }
+
+/* Top bar */
+.go-top { align-items: center; display: flex; justify-content: space-between; }
+.go-brand { align-items: center; color: #fff; display: inline-flex; font-size: 13px; font-weight: 800; gap: 10px; letter-spacing: 0.14em; min-height: 44px; }
+.go-logo { aspect-ratio: 995 / 1043; display: block; height: 30px; }
+.go-logo svg { display: block; height: 100%; width: auto; }
+.go-top-site { color: var(--go-soft); font-size: 13px; min-height: 44px; display: inline-flex; align-items: center; }
+.go-top-site:hover { color: #fff; }
+
+/* Hero */
+.go-hero { display: grid; gap: 14px; padding-top: 8px; }
+.go-founder { align-items: center; display: flex; gap: 12px; }
+.go-founder img { border: 2px solid var(--go-pink); border-radius: 50%; height: 56px; object-fit: cover; width: 56px; }
+.go-founder span { display: grid; }
+.go-founder strong { font-size: 15px; }
+.go-founder small { color: var(--go-soft); font-size: 13px; }
+.go h1 { color: #fff; font-family: var(--serif); font-size: clamp(34px, 9.6vw, 46px); font-weight: 400; letter-spacing: -0.03em; line-height: 1.02; margin: 4px 0 0; text-wrap: balance; }
+.go-lede { color: var(--go-soft); font-family: var(--serif); font-size: 18px; line-height: 1.5; margin: 0; max-width: 34em; }
+
+/* Route strip: the one animated moment */
+.go-route { align-items: center; display: grid; gap: 6px; grid-template-columns: auto 1fr auto; margin-top: 8px; padding: 12px 14px; border: 1px solid rgba(195, 202, 227, 0.22); border-radius: 16px; background: rgba(4, 39, 112, 0.55); }
+.go-route-end { display: grid; }
+.go-route-end b { font-size: 26px; font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: 0.04em; line-height: 1; }
+.go-route-end small { color: var(--go-soft); font-size: 12px; margin-top: 3px; }
+.go-route-end.is-you { text-align: right; }
+.go-route-end.is-you b { color: var(--go-pink); }
+.go-route-line { height: 40px; overflow: visible; width: 100%; }
+.go-route-path { fill: none; stroke: #8fa6ff; stroke-dasharray: 4 5; stroke-linecap: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.go-route-plane { fill: #fff; offset-path: path('M4 30 C 70 2, 150 2, 216 30'); offset-distance: 50%; offset-rotate: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .go-route-plane { animation: go-fly 2.4s cubic-bezier(0.45, 0, 0.2, 1) 0.3s both; }
+  .go-route-path { animation: go-draw 2.4s cubic-bezier(0.45, 0, 0.2, 1) 0.3s both; stroke-dasharray: 4 5; }
+}
+@keyframes go-fly { from { offset-distance: 0%; opacity: 0; } 12% { opacity: 1; } to { offset-distance: 50%; } }
+@keyframes go-draw { from { opacity: 0.2; } to { opacity: 1; } }
+
+/* Tickets */
+.go-tickets { display: grid; gap: 12px; }
+.go-ticket {
+  --notch: 11px;
+  background: var(--go-paper);
+  border-radius: 18px;
+  color: var(--go-ink);
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 84px;
+  position: relative;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 10px 24px -14px rgba(0, 0, 0, 0.6);
+}
+.go-ticket.has-stub {
+  grid-template-columns: 1fr auto;
+  /* Two half-circle notches cut where the stub tears off. */
+  -webkit-mask: radial-gradient(circle var(--notch) at calc(100% - var(--stub-w, 96px)) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+    radial-gradient(circle var(--notch) at calc(100% - var(--stub-w, 96px)) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+  mask: radial-gradient(circle var(--notch) at calc(100% - var(--stub-w, 96px)) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+    radial-gradient(circle var(--notch) at calc(100% - var(--stub-w, 96px)) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+}
+.go-ticket:active { transform: scale(0.985); }
+@media (hover: hover) { .go-ticket:hover { transform: translateY(-2px); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 18px 30px -16px rgba(0, 0, 0, 0.7); } }
+.go-ticket:focus-visible { outline: 3px solid var(--go-pink); outline-offset: 3px; }
+.go-ticket-main { align-items: flex-start; display: flex; gap: 12px; min-width: 0; padding: 16px; }
+.go-ticket-icon { background: #e3e8fb; border-radius: 12px; display: grid; flex: none; height: 42px; place-items: center; width: 42px; }
+.go-ticket-icon svg { fill: none; height: 22px; stroke: var(--go-blue); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 22px; }
+.go-ticket-copy { display: grid; gap: 4px; min-width: 0; }
+.go-ticket-copy strong { font-size: 17px; letter-spacing: -0.01em; line-height: 1.25; }
+.go-ticket-copy > span { color: var(--go-muted); font-size: 14px; line-height: 1.4; }
+.go-ticket-stub { align-content: center; border-left: 2px dashed var(--go-line); display: grid; gap: 2px; justify-items: center; padding: 10px 12px; text-align: center; width: var(--stub-w, 96px); }
+.go-ticket-stub small { color: var(--go-muted); font-size: 11px; }
+.go-ticket-stub b { font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -0.01em; line-height: 1.15; }
+.go-ticket.is-pink { background: var(--go-pink); color: #fff; }
+.go-ticket.is-pink .go-ticket-icon { background: rgba(255, 255, 255, 0.18); }
+.go-ticket.is-pink .go-ticket-icon svg { stroke: #fff; }
+.go-ticket.is-pink .go-ticket-copy > span, .go-ticket.is-pink .go-ticket-stub small { color: #ffe0f0; }
+.go-ticket.is-pink .go-ticket-stub { border-left-color: rgba(255, 255, 255, 0.4); }
+.go-thumbs { display: grid; gap: 6px; grid-template-columns: repeat(4, 1fr); margin-top: 8px; }
+.go-thumbs img { aspect-ratio: 1; border-radius: 10px; display: block; object-fit: cover; width: 100%; background: #dfe3f0; }
+
+/* Detail pages */
+.go-head { display: grid; gap: 10px; padding-top: 6px; }
+.go-kicker { color: var(--go-pink); font-size: 14px; font-weight: 700; margin: 0; }
+.go-panel { background: var(--go-paper); border-radius: 20px; color: var(--go-ink); display: grid; gap: 14px; padding: 18px; }
+.go-panel h2 { font-family: var(--serif); font-size: 24px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
+.go-panel p { color: var(--go-muted); font-size: 15px; line-height: 1.5; margin: 0; }
+.go-steps { counter-reset: go-step; display: grid; gap: 12px; list-style: none; margin: 0; padding: 0; }
+.go-steps li { counter-increment: go-step; display: grid; gap: 2px; grid-template-columns: 30px 1fr; }
+.go-steps li::before { align-self: start; background: var(--go-navy); border-radius: 50%; color: #fff; content: counter(go-step); display: grid; font-size: 13px; font-weight: 800; grid-row: span 2; height: 26px; place-items: center; width: 26px; }
+.go-steps strong { font-size: 15px; }
+.go-steps span { color: var(--go-muted); font-size: 14px; line-height: 1.45; }
+.go-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.go-chips li, .go-chips a { background: #e3e8fb; border-radius: 999px; color: var(--go-ink); font-size: 14px; font-weight: 600; padding: 8px 13px; }
+.go-chips a:hover { background: #d3dbfa; }
+.go-prices { display: grid; gap: 0; margin: 0; }
+.go-prices div { align-items: baseline; border-bottom: 1px solid var(--go-line); display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; }
+.go-prices div:last-child { border-bottom: 0; }
+.go-prices dt { font-size: 15px; font-weight: 600; }
+.go-prices dd { font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 800; margin: 0; text-align: right; }
+.go-prices dd small { color: var(--go-muted); display: block; font-size: 12px; font-weight: 500; }
+.go-cta { align-items: center; background: var(--go-pink); border-radius: 999px; color: #fff; display: flex; font-size: 17px; font-weight: 800; justify-content: center; min-height: 56px; padding: 0 24px; text-align: center; transition: background 0.18s ease, transform 0.18s ease; }
+.go-cta:hover { background: var(--go-pink-deep); }
+.go-cta:active { transform: scale(0.985); }
+.go-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.go-cta-note { color: var(--go-soft); font-size: 13px; margin: -8px 0 0; text-align: center; }
+.go-cta.is-quiet { background: transparent; border: 1.5px solid rgba(195, 202, 227, 0.5); }
+.go-cta.is-quiet:hover { background: rgba(255, 255, 255, 0.06); border-color: #fff; }
+
+/* Giveaway */
+.go-prize { background: var(--go-pink); border-radius: 22px; color: #fff; display: grid; overflow: hidden; }
+.go-prize img { aspect-ratio: 4 / 3; display: block; object-fit: cover; width: 100%; }
+.go-prize-body { display: grid; gap: 10px; padding: 18px; }
+.go-prize-body h2 { font-family: var(--serif); font-size: 28px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; margin: 0; }
+.go-prize-body p { color: #ffe0f0; font-size: 15px; line-height: 1.5; margin: 0; }
+.go-prize-facts { border-top: 2px dashed rgba(255, 255, 255, 0.4); display: grid; grid-template-columns: 1fr 1fr; margin-top: 4px; padding-top: 12px; }
+.go-prize-facts span { display: grid; gap: 2px; }
+.go-prize-facts small { color: #ffe0f0; font-size: 12px; }
+.go-prize-facts b { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 800; }
+
+/* Shop */
+.go-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.go-card { background: var(--go-paper); border-radius: 16px; color: var(--go-ink); display: grid; overflow: hidden; }
+.go-card img { aspect-ratio: 1; display: block; object-fit: cover; width: 100%; background: #dfe3f0; }
+.go-card span { display: grid; gap: 3px; padding: 10px 11px 12px; }
+.go-card small { color: var(--go-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.go-card strong { display: -webkit-box; font-size: 14px; line-height: 1.3; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.go-card em { font-size: 14px; font-style: normal; font-weight: 800; }
+.go-cats { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.go-cat { aspect-ratio: 16 / 10; border-radius: 16px; color: #fff; display: block; overflow: hidden; position: relative; }
+.go-cat img { height: 100%; object-fit: cover; width: 100%; }
+.go-cat span { background: linear-gradient(to top, rgba(2, 20, 78, 0.92), rgba(2, 20, 78, 0)); bottom: 0; display: grid; left: 0; padding: 24px 12px 10px; position: absolute; right: 0; }
+.go-cat strong { font-size: 15px; line-height: 1.2; }
+.go-cat small { color: var(--go-soft); font-size: 12px; }
+.go-section-title { color: #fff; font-family: var(--serif); font-size: 22px; font-weight: 400; margin: 6px 0 -8px; }
+
+/* Footer */
+.go-foot { border-top: 1px solid rgba(195, 202, 227, 0.18); display: grid; gap: 6px; justify-items: center; margin-top: 12px; padding-top: 20px; text-align: center; }
+.go-foot a { color: var(--go-soft); font-size: 14px; min-height: 32px; display: inline-flex; align-items: center; }
+.go-foot a:hover { color: #fff; }
+.go-foot p { color: #8a94b8; font-size: 12px; margin: 6px 0 0; }
+
+@media (min-width: 720px) {
+  .go-column { padding-top: 28px; gap: 26px; }
+  .go-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .go-column:has(.go-grid) { width: min(640px, 100%); }
+}
+/* The page colour behind the column, so short pages and overscroll stay navy. */
+html:has(.go), body:has(.go) { background: #02144e; }

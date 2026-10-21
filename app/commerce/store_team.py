@@ -14,6 +14,7 @@ administrator's Publish (or Archive, for retiring) touches its status.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -32,7 +33,7 @@ TREND_SHARES = 3
 LISTING_FIELDS = (
     "title", "description", "category_ref", "option_name", "option_values", "price", "compare_at_price", "cost",
     "currency", "price_guide_min", "price_guide_max", "min_order", "lead_time_min_days", "lead_time_max_days",
-    "availability_status", "planned_live_at",
+    "availability_status", "planned_live_at", "source_url",
 )
 WORK_TYPE = {"store_product": "list_store_product", "sourcing_item": "list_sourcing_item"}
 KIND_LABEL = {"store_product": "store product", "sourcing_item": "sourcing item"}
@@ -118,9 +119,7 @@ def missing_details(listing: dict) -> list[str]:
             missing.append("the option values (for example S, M, L)")
         if listing.get("compare_at_price") and listing.get("price") and float(listing["compare_at_price"]) <= float(listing["price"]):
             missing.append("a crossed-out price higher than the price (or none)")
-    else:
-        if not listing.get("price_guide_min"):
-            missing.append("a price guide (from)")
+    # A sourcing item may have no price: members then see "Contact our team for a price" (owner rule, 2026-10-20).
     return missing
 
 
@@ -130,7 +129,7 @@ def steps_done(listing: dict) -> dict[str, bool]:
     return {
         "details": bool(str(listing.get("title") or "").strip() and listing.get("category_ref")),
         "media": bool(listing.get("media")),
-        "price": bool(listing.get("price")) if store else bool(listing.get("price_guide_min")),
+        "price": bool(listing.get("price")) if store else True,
     }
 
 
@@ -219,6 +218,7 @@ def prefill_from_product(product: dict) -> dict:
         "lead_time_min_days": product.get("lead_time_min_days"),
         "lead_time_max_days": product.get("lead_time_max_days"),
         "availability_status": product.get("availability_status") or "sourcing",
+        "source_url": product.get("source_url"),
         "media": [{"media_type": m.get("media_type") or "image", "url": m["url"], "alt": m.get("alt"),
                    "source": m.get("source") or "existing"} for m in media if m.get("url")][:10],
     }
@@ -378,6 +378,7 @@ def save_sourcing_product(listing: dict, actor_id: str) -> str:
         "media_type": (first.get("media_type") or "image") if first else None,
         "media_source": ("instagram" if first.get("source") == "instagram" else "url") if first else None,
         "media_storage_path": None, "updated_by": actor_id, "retired_at": None, "retired_reason": None,
+        "source_url": listing.get("source_url"),
     }
     if listing.get("product_id"):
         db().table("directory_products").update(values).eq("id", str(listing["product_id"])).execute()
@@ -393,6 +394,112 @@ def save_sourcing_product(listing: dict, actor_id: str) -> str:
     if gallery:
         db().table("commerce_media").insert(gallery).execute()
     return product_id
+
+
+# ---------------------------------------------------------------------------------------------
+# Add a sourcing item from a product link (owner request, 2026-10-20)
+# ---------------------------------------------------------------------------------------------
+COVER_MAX = 1200
+GENERIC_TITLES = {"instagram", "login • instagram", "tiktok - make your day", "tiktok", "access denied", "just a moment...",
+                  "attention required! | cloudflare", "robot check", "captcha", "security check", "page not found"}
+
+
+def _price(value: Any) -> float | None:
+    try:
+        number = float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    return round(number, 2) if 0 < number < 10_000_000 else None
+
+
+def shrink_cover(content: bytes) -> bytes:
+    """One cover photo per link item, at most COVER_MAX px on the long side, saved as JPEG."""
+    from io import BytesIO
+    from PIL import Image
+    with Image.open(BytesIO(content)) as image:
+        image.load()
+        image = image.convert("RGB")
+        image.thumbnail((COVER_MAX, COVER_MAX))
+        out = BytesIO()
+        image.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue()
+
+
+def fill_from_link(listing: dict, url: str, *, fetch=None, fetch_image=None, bucket: str = "product-media") -> dict:
+    """Read a shop page and fill the empty parts of a sourcing listing: name, description, rough price and one
+    cover photo. Keeps the link on the listing. Returns {"listing", "read", "filled", "notes"}."""
+    from app.commerce import links
+    fetch = fetch or links.fetch_preview
+    fetch_image = fetch_image or links.fetch_image
+    if listing.get("kind") != "sourcing_item":
+        raise ListingError("Links fill sourcing items only.")
+    if listing["status"] not in EDITABLE:
+        raise ListingError("This listing is with an administrator.")
+    canonical = links.canonical_url(links.find_url(url) or url)
+    if not canonical:
+        raise ListingError("That doesn't look like a web link. Paste the full address, starting with https://")
+    product = one(db().table("directory_products").select("id,name").eq("source_url", canonical).eq("active", True)
+                  .limit(1).execute())
+    if product and str(product["id"]) != str(listing.get("product_id") or ""):
+        raise ListingError(f"This link is already listed as \u201c{product.get('name')}\u201d. Edit that item from Sourcing instead.")
+    other = one(db().table("store_listings").select("id,title").eq("source_url", canonical).in_("status", list(OPEN))
+                .neq("id", str(listing["id"])).limit(1).execute())
+    if other:
+        raise ListingError(f"Another listing in progress already uses this link ({other.get('title') or 'untitled'}).")
+    preview = fetch(canonical)
+    title = (preview.title or "").strip()
+    if title.casefold() in GENERIC_TITLES or len(title) < 3:
+        title = ""
+    platform = getattr(preview, "platform", "web")
+    changes: dict[str, Any] = {"source_url": canonical}
+    filled: list[str] = []
+    notes: list[str] = []
+    if title and not str(listing.get("title") or "").strip():
+        changes["title"] = title[:160]
+        filled.append("name")
+    description = (preview.description or "").strip()
+    if description and not str(listing.get("description") or "").strip():
+        changes["description"] = description[:2000]
+        filled.append("description")
+    extra = getattr(preview, "extra", None) or {}
+    price = _price(extra.get("price"))
+    currency = str(extra.get("currency") or "").upper()
+    if price and not listing.get("price_guide_min"):
+        changes["price_guide_min"] = price
+        if re.fullmatch(r"[A-Z]{3}", currency):
+            changes["currency"] = currency
+        filled.append("rough price")
+    media = list(listing.get("media") or [])
+    if preview.image_url and not media and title:
+        got = fetch_image(preview.image_url)
+        if got:
+            try:
+                cover = shrink_cover(got[0])
+                path = f"listings/{listing['id']}/link-cover.jpg"
+                storage = db().storage.from_(bucket)
+                storage.upload(path, cover, {"content-type": "image/jpeg", "upsert": "true"})
+                public = storage.get_public_url(path)
+                public_url = public if isinstance(public, str) else (public or {}).get("publicUrl") or (public or {}).get("publicURL")
+                if public_url:
+                    changes["media"] = [{"media_type": "image", "url": str(public_url).split("?", 1)[0],
+                                         "alt": (title or "Product")[:200], "source": "upload", "storage_path": path}]
+                    filled.append("cover photo")
+            except Exception:
+                logger.warning("Could not save the cover photo from a product link", exc_info=True)
+    if not title:
+        if platform == "instagram":
+            notes.append("Instagram doesn't let us read posts. Type the name and price, and upload a photo from the post.")
+        else:
+            notes.append("This shop didn't let us read the page. The link is saved; type the name and price and upload a photo.")
+    else:
+        if "cover photo" not in filled and not media:
+            notes.append("No photo could be taken from the page. Upload one.")
+        if "rough price" not in filled and not listing.get("price_guide_min"):
+            notes.append("The page shows no price we can read. Add a rough price, or leave it for \u201cContact our team\u201d.")
+    if "rough price" in filled and changes.get("currency") and changes["currency"] != "USD":
+        notes.append(f"The price is in {changes['currency']}. Check it before you send it for review.")
+    updated = update_listing(listing, changes)
+    return {"listing": updated, "read": bool(title), "filled": filled, "notes": notes}
 
 
 def cancel(listing: dict, actor_id: str, reason: str) -> dict:

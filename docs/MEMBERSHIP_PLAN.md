@@ -125,3 +125,14 @@ Close, Escape or a click outside.
 | Member UI | `dashboard/src/app/member/MemberPerks.tsx`, `MemberAccountDialogs.tsx`, `membershipApi.ts` |
 | Member billing UI | `dashboard/src/app/member/PlanBilling.tsx` (Member tier pop-up and /member/membership) |
 | Staff UI | `dashboard/src/app/staff/CommercePage.tsx` (Invoices and Member plans tabs) |
+
+## 10. Tour guide booking and Tools (owner request, 2026-10-20)
+
+**Tour guide in China** (physical presence, `app/membership/tours.py`, table `member_tour_bookings`, migration 20261021100000).
+- The member sends city (Guangzhou, Yiwu, Shenzhen, Shanghai or another city), arrival date, days, people, what they need (Canton Fair, wholesale markets, factory visits, interpreting, airport pickup), hotel area, WhatsApp and notes. A chat "Tour guide: <city>" opens and member support gets a `tour_booking` work item; admins are notified.
+- Every tour is quoted by staff (owner decision: no fixed day rate). Operations → Tour bookings → Send quote sends a Shopify invoice (`commerce_invoices.kind = 'tour'`) and posts the price in the chat. A new quote cancels the old unpaid invoice.
+- Paid → confirmed (Shopify order webhook, idempotent). Staff name the guide, then Mark done; Cancel cancels an unpaid invoice and tells the member.
+- Statuses: requested, quoted, confirmed, completed, cancelled. Tour revenue shows under "Other" in Revenue until a Tours stream is added.
+- **Pending completion** (shared with the virtual consultation): choosing a date from a live calendar and team availability. Both screens say dates are confirmed by the team in the chat.
+
+**Tools** (member app): the left menu's "Supplier directory" became **Tools**, one page with Virtual consultation, Tour guide in China, Supplier directory and Supplier contacts (contact credits). Consultation and contacts moved out of Settings (Settings links to Tools). Deep links: `/member/chat?panel=tools&tool=consultation|tour|directory|contacts`; old `?panel=directory` links open Tools on the directory.

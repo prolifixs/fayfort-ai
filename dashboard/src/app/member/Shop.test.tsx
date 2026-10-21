@@ -67,7 +67,7 @@ beforeEach(() => {
       }, 201);
     if (url.includes("/members/conversations/chat-1/messages")) return ok({ messages: [], products: [] });
     if (url.endsWith("/members/shop/home"))
-      return ok({ rails: [{ key: "ending_soon", title: "Ending soon", items: [wig] }, { key: "almost_sourced", title: "Almost sourced", kind: "trend", items: [trend] }], giveaways: [{ id: "g1", title: "Wig giveaway", description: "", prize_text: "A wig", ends_at: soon, status: "open", entered: false, won: false }], intent: { active: false } });
+      return ok({ rails: [{ key: "ending_soon", title: "Ending soon", items: [wig] }, { key: "almost_sourced", title: "Almost sourced", kind: "trend", items: [trend] }], giveaways: [{ id: "g1", title: "Wig giveaway", description: "", prize_text: "A wig", ends_at: soon, status: "open", entered: false, won: false }], intent: { active: false }, category_tiles: [{ key: "Home, Furniture & Interior", label: "Furniture from China", count: 22, image_url: "https://cdn.example/t.jpg" }] });
     if (url.endsWith("/members/cart/lines") && method === "PUT") {
       cartLines = [{ variant_id: "v1", quantity: 1, unit_price: 96, variant_title: "22 inch", available: true, product: wig }];
       return ok({ lines: cartLines, subtotal: 96, currency: "USD", impulse: { pairs_with: [], ending_soon: [] } });
@@ -100,15 +100,17 @@ afterEach(() => {
 });
 
 describe("shop inside the chat shell", () => {
-  it("shows Hot rails and giveaways on the welcome screen and enters a giveaway", async () => {
+  it("shows popular picks, category buttons and giveaways on the welcome screen and enters a giveaway", async () => {
     window.history.replaceState({}, "", "/member/chat");
     render(<App />);
-    const rail = await screen.findByRole("region", { name: "Ending soon" });
-    expect(within(rail).getByText("Body wave wig")).toBeInTheDocument();
-    expect(within(rail).getByText(/\$96\.00/)).toBeInTheDocument();
-    expect(within(rail).getByText(/left$/)).toBeInTheDocument();
-    const pool = screen.getByRole("region", { name: "Almost sourced" });
-    expect(within(pool).getByRole("progressbar", { name: "Pool progress" })).toHaveAttribute("aria-valuenow", "7");
+    const picks = await screen.findByRole("region", { name: "Popular picks" });
+    expect(within(picks).getByRole("button", { name: "Open Body wave wig" })).toHaveTextContent("$96.00");
+    expect(within(picks).queryByText("Viral wig")).not.toBeInTheDocument(); // links are not products
+    expect(within(picks).getByRole("link", { name: "Furniture from China" })).toHaveAttribute(
+      "href",
+      "/member/chat?panel=catalog&top=Home%2C%20Furniture%20%26%20Interior",
+    );
+    expect(within(picks).getByRole("link", { name: "Browse all products" })).toHaveAttribute("href", "/member/chat?panel=catalog");
     fireEvent.click(within(screen.getByRole("region", { name: "Giveaways" })).getByRole("button", { name: "Enter" }));
     expect(await screen.findByText("You're entered. Good luck!")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "You're in" })).toBeDisabled();

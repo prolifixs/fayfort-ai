@@ -3,7 +3,7 @@ import { useDismiss } from "../ui/useDismiss";
 import { apiRequest } from "../../lib/api";
 import type { Cart, ProductDetail, ShopCard, ShopHome, StoreSectionTile, TrendCard, Giveaway } from "./commerceApi";
 import { money, shopSessionId, trackIntent } from "./commerceApi";
-import { CategoryBar, Countdown, HotRails, PriceLine, ProductTile, SectionTiles, TrendTile } from "./ShopComponents";
+import { CategoryBar, CategoryTiles, Countdown, HotRails, PriceLine, ProductTile, SectionTiles, TrendTile } from "./ShopComponents";
 import { MemberRequestsPanel, type RequestSummary } from "./MemberRequestsPanel";
 import { ReviewPrompts } from "./ReviewPrompts";
 import { WorkerRatingPrompts } from "./WorkerRatingPrompts";
@@ -778,19 +778,28 @@ export function BrowsePanel({
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("");
   const [category, setCategory] = useState("");
+  // Shop by category: a top-level category ("Home, Furniture & Interior"); also opened from the chat welcome (?top=).
+  const [top, setTop] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("top") || "";
+    } catch {
+      return "";
+    }
+  });
   const [sort, setSort] = useState("for_you");
   const [inStock, setInStock] = useState(false);
   const [result, setResult] = useState<BrowseResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(
-    async (q: string, g: string, c: string, s: string, stock: boolean) => {
+    async (q: string, g: string, c: string, s: string, stock: boolean, t = "") => {
       setLoading(true);
       setError("");
       try {
         const params = new URLSearchParams({ sort: s });
         if (q.trim()) params.set("q", q.trim());
         if (g) params.set("group", g);
+        if (t) params.set("top", t);
         if (c) params.set("category_ref", c);
         if (stock) params.set("in_stock", "true");
         setResult(await apiRequest<BrowseResponse>(`/members/shop/products?${params}`, accessToken));
@@ -802,8 +811,9 @@ export function BrowsePanel({
     },
     [accessToken],
   );
+  const firstTop = useRef(top);
   useEffect(() => {
-    void load("", "", "", "for_you", false);
+    void load("", "", "", "for_you", false, firstTop.current);
   }, [load]);
   // "More to explore": the grid keeps loading as the member scrolls, inside the same filters.
   const loadMore = useCallback(async () => {
@@ -813,6 +823,7 @@ export function BrowsePanel({
       const params = new URLSearchParams({ sort, offset: String(result.products.length) });
       if (query.trim()) params.set("q", query.trim());
       if (group) params.set("group", group);
+      if (top) params.set("top", top);
       if (category) params.set("category_ref", category);
       if (inStock) params.set("in_stock", "true");
       const next = await apiRequest<BrowseResponse>(`/members/shop/products?${params}`, accessToken);
@@ -824,7 +835,7 @@ export function BrowsePanel({
     } finally {
       setLoadingMore(false);
     }
-  }, [result, loadingMore, sort, query, group, category, inStock, accessToken]);
+  }, [result, loadingMore, sort, query, group, top, category, inStock, accessToken]);
   useEffect(() => {
     const target = moreRef.current;
     if (!target || typeof IntersectionObserver === "undefined") return;
@@ -837,19 +848,27 @@ export function BrowsePanel({
   function search(event: FormEvent) {
     event.preventDefault();
     if (query.trim()) trackIntent(accessToken, [{ event_type: "search", query: query.trim().slice(0, 200) }]);
-    void load(query, group, category, sort, inStock);
+    void load(query, group, category, sort, inStock, top);
   }
   function chooseGroup(value: string) {
     setGroup(value);
     setCategory("");
+    setTop("");
     void load(query, value, "", sort, inStock);
   }
   function chooseCategory(value: string) {
     setCategory(value);
     if (value) trackIntent(accessToken, [{ event_type: "category", category_ref: value }]);
-    void load(query, group, value, sort, inStock);
+    void load(query, group, value, sort, inStock, top);
   }
-  const filtering = !!(query.trim() || group || category || inStock);
+  function chooseTop(value: string) {
+    setTop(value);
+    setGroup("");
+    setCategory("");
+    void load(query, "", "", sort, inStock, value);
+  }
+  const filtering = !!(query.trim() || group || category || inStock || top);
+  const topLabel = top ? (home?.category_tiles || []).find((tile) => tile.key === top)?.label || top : "";
   return (
     <section className="member-workspace-panel shop-browse">
       <header>
@@ -858,8 +877,17 @@ export function BrowsePanel({
         <p>What's moving right now, then everything by category.</p>
       </header>
       <CategoryBar items={home?.category_bar || []} group={group} category={category} onGroup={chooseGroup} onCategory={chooseCategory} />
+      {top && (
+        <p className="shop-top-filter">
+          <span>Showing {topLabel}</span>
+          <button type="button" className="secondary-button" onClick={() => chooseTop("")}>
+            Show everything
+          </button>
+        </p>
+      )}
       {!filtering && home ? (
         <>
+          <CategoryTiles tiles={home.category_tiles || []} onChoose={chooseTop} />
           <SectionTiles
             sections={home.sections || []}
             giveaways={home.giveaways}
@@ -912,7 +940,7 @@ export function BrowsePanel({
             value={sort}
             onChange={(event) => {
               setSort(event.target.value);
-              void load(query, group, category, event.target.value, inStock);
+              void load(query, group, category, event.target.value, inStock, top);
             }}
           >
             <option value="for_you">For you</option>
@@ -927,7 +955,7 @@ export function BrowsePanel({
             checked={inStock}
             onChange={(event) => {
               setInStock(event.target.checked);
-              void load(query, group, category, sort, event.target.checked);
+              void load(query, group, category, sort, event.target.checked, top);
             }}
           />
           Ships now

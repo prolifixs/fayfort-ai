@@ -374,7 +374,7 @@ function listingSteps(input: PlaybookInput): Step[] {
       title: "Details",
       how: store
         ? "Write a clear title and description and choose the FayFort category. If it comes in sizes or colours, add one option (for example Size) with its values."
-        : "Write a clear title and description and choose the FayFort category. Say what it's made of and what it's for: the AI uses this text to answer members.",
+        : "Quickest: paste the product's page link in Add from a product link and press Fill from link. It fills the name, description, a rough price and one photo when the shop allows it. Then check the title and description and choose the FayFort category. Say what it's made of and what it's for: the AI uses this text to answer members.",
       done: Boolean(listing?.steps?.details) || sent || live,
       target: "ops-listing-details",
     },
@@ -387,10 +387,10 @@ function listingSteps(input: PlaybookInput): Step[] {
     },
     {
       id: "price",
-      title: store ? "Price" : "Price guide",
+      title: store ? "Price" : "Rough price",
       how: store
         ? "Enter the price members pay. Add a crossed-out price only if it was really sold for more. Cost is staff-only and shows the margin."
-        : "Enter the price guide (from–to) a member can expect, the minimum order and the lead time. It's an estimate: the member still gets a real quote.",
+        : "Enter a rough price (from–to) a member can expect, the minimum order and the lead time. It's an estimate: the member still gets a real quote. No price? Leave it empty and members see Contact our team for a price.",
       done: Boolean(listing?.steps?.price) || sent || live,
       target: "ops-listing-price",
     },

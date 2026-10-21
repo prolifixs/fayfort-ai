@@ -6,6 +6,8 @@ export type ShopCard = {
   name: string;
   description?: string;
   category_ref?: string | null;
+  /** Readable category, for example "Dining tables". */
+  category_label?: string | null;
   group_name?: string | null;
   source?: "shopify" | "fayfort";
   availability_status?: string;
@@ -81,7 +83,11 @@ export type ShopHome = {
   intent: { active: boolean };
   sections?: StoreSectionTile[];
   category_bar?: CategoryBarItem[];
+  /** Shop by category: top-level categories with a cover picture. */
+  category_tiles?: CategoryTile[];
 };
+
+export type CategoryTile = { key: string; label: string; count: number; image_url: string };
 
 export type FindItResult = {
   kind: "link" | "words";

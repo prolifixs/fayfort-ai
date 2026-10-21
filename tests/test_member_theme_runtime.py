@@ -37,14 +37,14 @@ class MemberThemeRuntimeTests(TestCase):
         theme = MagicMock()
         theme.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {"theme_id": "spring-dawn", "display_name": "Spring Dawn", "status": "published", "requires_paid": True, "published_revision": 2}
         revision = MagicMock()
-        revision.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {"revision": 2, **DESIGN, "font_family": "quicksand"}
+        revision.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {"revision": 2, **DESIGN, "font_family": "quicksand", "pattern": "ankara", "pattern_strength": "bold"}
         table.side_effect = [profile, theme, revision]
 
         response = self.client.get("/members/me/theme", headers={"Authorization": "Bearer member-token"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["active_theme"]["theme_id"], "spring-dawn")
-        self.assertEqual(response.json()["active_theme"]["design"], {**DESIGN, "font_family": "quicksand"})
+        self.assertEqual(response.json()["active_theme"]["design"], {**DESIGN, "font_family": "quicksand", "pattern": "ankara", "pattern_strength": "bold"})
         self.assertIsNone(response.json()["fallback_reason"])
 
     @patch("app.accounts.router.supabase.table")
@@ -76,7 +76,7 @@ class MemberThemeRuntimeTests(TestCase):
         response = self.client.get("/members/themes/spring-dawn/preview", headers={"Authorization": "Bearer member-token"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["design"], {**DESIGN, "font_family": "system"})  # older revisions without a font use the standard one
+        self.assertEqual(response.json()["design"], {**DESIGN, "font_family": "system", "pattern": "none", "pattern_strength": "subtle"})  # older revisions without a font use the standard one
         self.assertEqual(table.call_count, 2)
 
     @patch("app.accounts.router.try_running", return_value=True)

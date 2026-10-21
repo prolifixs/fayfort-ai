@@ -137,20 +137,100 @@ def parse_open_graph(page: str, base_url: str) -> dict[str, str]:
         value = attrs.get("content")
         if key and value and key not in found:
             found[key] = html.unescape(value).strip()
-    title = found.get("og:title") or found.get("twitter:title")
+    ld = product_json_ld(page)
+    title = found.get("og:title") or found.get("twitter:title") or ld.get("title")
     if not title:
         match = _TITLE.search(page)
         title = html.unescape(match.group(1)).strip() if match else None
     image = found.get("og:image") or found.get("twitter:image")
+    image = image or ld.get("image_url")
     image = urljoin(base_url, image) if image else None
     return {key: value for key, value in {
         "title": title,
-        "description": found.get("og:description") or found.get("description") or found.get("twitter:description"),
+        "description": found.get("og:description") or found.get("description") or found.get("twitter:description")
+        or ld.get("description"),
         "image_url": image if image and image.startswith("https://") else None,
         "site_name": found.get("og:site_name"),
-        "price": found.get("product:price:amount") or found.get("og:price:amount"),
-        "currency": found.get("product:price:currency") or found.get("og:price:currency"),
+        "price": found.get("product:price:amount") or found.get("og:price:amount") or ld.get("price"),
+        "currency": found.get("product:price:currency") or found.get("og:price:currency") or ld.get("currency"),
     }.items() if value}
+
+
+_LD = re.compile(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.IGNORECASE | re.DOTALL)
+
+
+def product_json_ld(page: str) -> dict[str, str]:
+    """schema.org Product data many shops publish (name, image, offers.price). Empty when there is none."""
+    def products(node):
+        if isinstance(node, list):
+            for entry in node:
+                yield from products(entry)
+        elif isinstance(node, dict):
+            kind = node.get("@type")
+            kinds = kind if isinstance(kind, list) else [kind]
+            if "Product" in kinds:
+                yield node
+            for key in ("@graph", "mainEntity", "itemListElement"):
+                if key in node:
+                    yield from products(node[key])
+    for block in _LD.findall(page[:MAX_BYTES]):
+        try:
+            data = json.loads(html.unescape(block.strip()))
+        except ValueError:
+            continue
+        for item in products(data):
+            image = item.get("image")
+            if isinstance(image, list):
+                image = image[0] if image else None
+            if isinstance(image, dict):
+                image = image.get("url")
+            offers = item.get("offers")
+            if isinstance(offers, list):
+                offers = offers[0] if offers else None
+            price = currency = None
+            if isinstance(offers, dict):
+                price = offers.get("price") or offers.get("lowPrice")
+                currency = offers.get("priceCurrency")
+            out = {"title": item.get("name"), "description": item.get("description"), "image_url": image,
+                   "price": price, "currency": currency}
+            return {k: str(v).strip() for k, v in out.items() if v not in (None, "") and not isinstance(v, (dict, list))}
+    return {}
+
+
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+
+def fetch_image(url: str, *, client: httpx.Client | None = None,
+                resolver: Callable[[str], list[str]] = _resolve) -> tuple[bytes, str] | None:
+    """GET a public HTTPS image with the same address checks as pages. Returns (bytes, content type) or None."""
+    owned = client is None
+    http = client or httpx.Client(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False)
+    try:
+        current = url
+        for _ in range(4):
+            parts = urlsplit(current)
+            if parts.scheme != "https" or not parts.hostname or not _public_host(parts.hostname, resolver):
+                return None
+            with http.stream("GET", current, headers={"User-Agent": USER_AGENT, "Accept": "image/*"}) as response:
+                if response.status_code in (301, 302, 303, 307, 308) and response.headers.get("location"):
+                    current = urljoin(current, response.headers["location"])
+                    continue
+                kind = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                if response.status_code != 200 or kind not in IMAGE_TYPES:
+                    return None
+                body = b""
+                for chunk in response.iter_bytes():
+                    body += chunk
+                    if len(body) > IMAGE_MAX_BYTES:
+                        return None
+                return (body, kind) if body else None
+        return None
+    except (httpx.HTTPError, ValueError):
+        return None
+    finally:
+        if owned:
+            http.close()
 
 
 @dataclass

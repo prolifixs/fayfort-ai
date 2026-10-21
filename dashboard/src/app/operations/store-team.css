@@ -212,3 +212,11 @@
   .sc-nav h2 { width: 100%; margin: var(--space-1) 0 0; font-size: var(--text-lg); }
 }
 .sc-grid.is-week .sc-chip span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* Add from a product link (sourcing items) */
+.st-from-link-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.st-from-link-row input { flex: 1 1 240px; min-width: 0; }
+.st-from-link .st-callout p { margin: 0; }
+.st-from-link .st-callout p + p { margin-top: var(--space-1); }
+.st-from-link-source { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.st-from-link-source small { color: var(--color-muted); }

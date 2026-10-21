@@ -266,3 +266,11 @@ request events and shop orders, notification type `review_invite`); `app/site/re
 the API image installs `tesseract-ocr`. Dashboard: `staff/WebsiteReviewsSection.tsx`, `member/ReviewPrompts.tsx`.
 Website: `(site)/reviews/`. Tests: `tests/test_customer_reviews.py`, `WebsiteReviewsSection.test.tsx`,
 `web/tests/reviews.test.ts`, e2e `reviews.spec.ts`.
+
+## fayfort.com/go: link-in-bio pages (2026-10-20)
+
+For Instagram and TikTok bios. Standalone layout (no site header, footer or chat), mobile first, navy field with faint flight paths, links drawn as route tickets with a perforated stub; pink only for what is live (the giveaway) and the main action.
+- `/go` hub: FayFay's photo, "Buy from China without the guesswork.", the CAN → You route strip (the one animation, skipped with reduced motion), then tickets: live giveaway (with countdown, only when one is running), Shop (with 4 product photos), Find me a product (sourcing request), Book a consultation (from price), Tour guide in China (quoted).
+- `/go/giveaway`, `/go/shop`, `/go/consultation`, `/go/tour-guide`, `/go/request`: one page each, one main button into the member app (signed-out visitors sign in or join first).
+- Data: `GET /public/site/go` (app/site/go.py), read-only, no member data, cached 5 minutes. Product photos come from the public product-media storage, so `img-src` in next.config.js allows `lirauxdhnknfiqjnulxb.supabase.co`.
+- The proxy allows exactly these six paths; they are in the sitemap.

@@ -114,6 +114,7 @@ def create_member_commerce_router() -> APIRouter:
     def browse(authorization: str | None = Header(default=None), q: str = Query(default="", max_length=100),
                category_ref: str | None = Query(default=None, max_length=200),
                group: str | None = Query(default=None, max_length=100),
+               top: str | None = Query(default=None, max_length=120),
                sort: Literal["for_you", "newest", "price_low", "price_high"] = "for_you",
                in_stock: bool = False, saved_only: bool = False, limit: int = Query(default=60, ge=1, le=100),
                offset: int = Query(default=0, ge=0, le=5000)):
@@ -128,6 +129,9 @@ def create_member_commerce_router() -> APIRouter:
                 products = [p for p in products if p.get("category_ref") == category_ref]
             if group:
                 products = [p for p in products if groups.get(str(p.get("category_ref") or "")) == group]
+            if top:
+                tops = service.top_categories()
+                products = [p for p in products if tops.get(str(p.get("category_ref") or "")) == top]
             if in_stock:
                 products = [p for p in products if p.get("source") == "shopify" and p.get("in_stock")]
             query_terms = ranking.terms(q)

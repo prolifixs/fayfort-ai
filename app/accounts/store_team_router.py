@@ -57,7 +57,7 @@ class ListingUpdate(BaseModel):
     availability_status: Literal["available", "sourcing", "unavailable"] | None = None
     planned_live_at: datetime | None = None
     media_order: list[int] | None = Field(default=None, max_length=10)
-    clear: list[Literal["option_name", "compare_at_price", "cost", "price_guide_max", "min_order",
+    clear: list[Literal["option_name", "compare_at_price", "cost", "price_guide_min", "price_guide_max", "min_order",
                         "lead_time_min_days", "lead_time_max_days", "planned_live_at", "category_ref"]] = Field(default_factory=list)
 
     @field_validator("title", "description", "option_name")
@@ -107,6 +107,11 @@ class MediaUrl(BaseModel):
         if not value.startswith("https://"):
             raise ValueError("Use an https:// link.")
         return value
+
+
+class LinkInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(min_length=8, max_length=2000)
 
 
 class ReviewNote(BaseModel):
@@ -344,6 +349,17 @@ def create_store_team_router(trusted_fayfort_staff: Callable[[str | None], dict 
             return {"listing": store_team.listing_view(store_team.update_listing(listing, {"media": media}))}
         except Exception as exc:
             raise failure(exc, "The link could not be added.") from exc
+
+    @router.post("/operations/store/listings/{listing_id}/from-link")
+    def fill_from_link(listing_id: UUID, payload: LinkInput, authorization: str | None = Header(default=None)):
+        """Paste a shop product link: fills the empty name, description, rough price and one cover photo."""
+        staff = store_staff(authorization)
+        listing, _item = listing_and_item(listing_id, staff)
+        try:
+            result = store_team.fill_from_link(listing, payload.url, bucket=MEDIA_BUCKET)
+            return {**result, "listing": store_team.listing_view(result["listing"])}
+        except Exception as exc:
+            raise failure(exc, "The link could not be read. Try again, or fill the details by hand.") from exc
 
     @router.delete("/operations/store/listings/{listing_id}/media/{index}")
     def remove_media(listing_id: UUID, index: int, authorization: str | None = Header(default=None)):

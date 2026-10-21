@@ -404,7 +404,7 @@ interface InvoiceRow {
   invoice_url: string | null;
   request_id: string | null;
   trend_item_id: string | null;
-  kind?: "order" | "deposit" | "consultation" | "contact_credits";
+  kind?: "order" | "deposit" | "consultation" | "contact_credits" | "tour";
   deposit_credit?: number;
 }
 interface ReadyRow {
@@ -433,6 +433,7 @@ const INVOICE_KIND: Record<string, string> = {
   deposit: "Sourcing deposit",
   consultation: "Consultation",
   contact_credits: "Contact credits",
+  tour: "Tour guide",
 };
 
 function DepositsDue({ rows, accessToken, onSent, onError }: {

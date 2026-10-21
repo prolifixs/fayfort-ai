@@ -91,7 +91,8 @@ class MemberThemePickerApiTests(TestCase):
         body = response.json()
         # Every choice carries its published design so the chooser can draw it.
         self.assertEqual(body["themes"][0]["design"]["colors"]["accent"], "#005A9C")
-        self.assertEqual(body["themes"][1]["design"], {"palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat"})
+        self.assertEqual(body["themes"][1]["design"], {"palette_preset": "koko-water-navy", "wrapper_style": "soft", "colors": colors, "font_family": "montserrat",
+                                                     "pattern": "none", "pattern_strength": "subtle"})
         revisions.select.return_value.in_.assert_called_once_with("theme_id", ["spring-dawn"])
         self.assertEqual(body["tries"], {"limit": 3, "left": 2, "next_at": None, "seconds": 15})
         self.assertEqual([theme["theme_id"] for theme in body["themes"]], ["base", "spring-dawn"])

@@ -17,7 +17,7 @@ const draft = {
   compare_at_price: null, cost: null, currency: "USD", price_guide_min: null, price_guide_max: null, min_order: null,
   lead_time_min_days: null, lead_time_max_days: null, availability_status: "sourcing", media: [], planned_live_at: null,
   review_note: null, error: null, submitted_at: null, published_at: null, updated_at: "2026-10-18T10:00:00Z",
-  missing: ["a category", "at least one photo or video", "a price guide (from)"], steps: { details: false, media: false, price: false },
+  missing: ["a category", "at least one photo or video"], steps: { details: false, media: false, price: false },
 };
 let calls: { url: string; method: string; body?: unknown }[] = [];
 let listing: Record<string, unknown> = draft;
@@ -38,6 +38,10 @@ beforeEach(() => {
       ], shopify_connected: true, can_publish: canPublish });
     if (url.includes("/operations/store/products?tab=listings")) return ok({ listings: [listing] });
     if (url.endsWith("/operations/store/listings") && method === "POST") return ok({ listing });
+    if (url.includes("/operations/store/listings/l1/from-link")) {
+      listing = { ...listing, title: "Marble dining table", price_guide_min: 1250, source_url: "https://shop.example.com/p/table" };
+      return ok({ listing, read: true, filled: ["name", "rough price", "cover photo"], notes: [] });
+    }
     if (url.includes("/operations/store/listings/l1/publish")) {
       listing = { ...listing, status: "published" };
       return ok({ listing });
@@ -75,8 +79,18 @@ describe("Products workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "New sourcing item" }));
     expect(await screen.findByLabelText("Listing: Lace front wig")).toBeInTheDocument();
     expect(calls.some((c) => c.url.endsWith("/operations/store/listings") && c.method === "POST" && (c.body as { kind: string }).kind === "sourcing_item")).toBe(true);
-    expect((await screen.findByText(/Before review, add:/)).closest("p")).toHaveTextContent("a price guide (from)");
+    expect((await screen.findByText(/Before review, add:/)).closest("p")).toHaveTextContent("at least one photo or video");
     expect(screen.getByRole("figure", { name: "Member preview" })).toHaveTextContent("Request this item");
+  });
+
+  it("fills a sourcing listing from a product link and shows the source to staff", async () => {
+    render(<ListingEditor token="t" listingId="l1" categories={categories} />);
+    fireEvent.change(await screen.findByLabelText("Product link"), { target: { value: "https://shop.example.com/p/table" } });
+    fireEvent.click(screen.getByRole("button", { name: "Fill from link" }));
+    expect(await screen.findByText(/Filled in: name, rough price, cover photo/)).toBeInTheDocument();
+    expect(calls.find((c) => c.url.includes("/from-link"))?.body).toEqual({ url: "https://shop.example.com/p/table" });
+    expect(screen.getByRole("link", { name: "shop.example.com" })).toHaveAttribute("href", "https://shop.example.com/p/table");
+    expect(screen.getByText(/members don't see this link/)).toBeInTheDocument();
   });
 
   it("lets an administrator publish or send back, never a worker", async () => {
@@ -93,6 +107,27 @@ describe("Products workspace", () => {
     render(<ListingEditor token="t" listingId="l1" categories={categories} />);
     expect(await screen.findByText(/With an administrator for review/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Browse shop by category", () => {
+  it("opens a top category from its photo tile and can go back to everything", async () => {
+    render(
+      <BrowsePanel
+        accessToken="t"
+        onOpen={() => undefined}
+        onWant={() => undefined}
+        onEnter={() => undefined}
+        home={{ rails: [], giveaways: [], intent: { active: false },
+          category_tiles: [{ key: "Home, Furniture & Interior", label: "Furniture from China", count: 22, image_url: "https://cdn.example/t.jpg" }] }}
+      />,
+    );
+    const tiles = screen.getByRole("region", { name: "Category tiles" });
+    fireEvent.click(within(tiles).getByRole("button", { name: /Furniture from China/ }));
+    expect(await screen.findByText("Showing Furniture from China")).toBeInTheDocument();
+    await waitFor(() => expect(calls.some((c) => c.url.includes("top=Home%2C+Furniture+%26+Interior"))).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Show everything" }));
+    expect(screen.queryByText("Showing Furniture from China")).not.toBeInTheDocument();
   });
 });
 

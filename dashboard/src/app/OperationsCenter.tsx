@@ -41,10 +41,11 @@ import { ShiftGate } from "./ShiftGate";
 import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ProductsWorkspace } from "./operations/StoreTeam";
+import { ToursPanel } from "./operations/ToursPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
 
-type View = "queue" | "products" | "schedule" | "archive" | "guide" | "team" | "reports";
-const VIEWS: View[] = ["queue", "products", "schedule", "archive", "guide", "team", "reports"];
+type View = "queue" | "products" | "tours" | "schedule" | "archive" | "guide" | "team" | "reports";
+const VIEWS: View[] = ["queue", "products", "tours", "schedule", "archive", "guide", "team", "reports"];
 
 const SOURCE_LABEL: Record<string, string> = {
   shopify_order: "From a shop order",
@@ -146,6 +147,7 @@ export function OperationsCenterPage() {
     }
   }
   const storeTeam = canManage || departmentsForUser.includes("store_team");
+  const tourTeam = canManage || departmentsForUser.includes("member_support");
   function openWorkItem(id: string) {
     const url = new URL(window.location.href);
     url.searchParams.set("workItem", id);
@@ -166,6 +168,7 @@ export function OperationsCenterPage() {
   const tabs: [View, string][] = [
     ["queue", "Queue"],
     ...(storeTeam ? ([["products", "Products"]] as [View, string][]) : []),
+    ...(tourTeam ? ([["tours", "Tour bookings"]] as [View, string][]) : []),
     ["schedule", "Schedule"],
     ["archive", "Archive"],
     ["guide", "Guide"],
@@ -276,6 +279,7 @@ export function OperationsCenterPage() {
               onOpenWorkItem={openWorkItem}
             />
           )}
+          {view === "tours" && tourTeam && token && <ToursPanel token={token} onOpenWorkItem={openWorkItem} />}
           {view === "schedule" && (
             <SchedulePanel
               token={token}

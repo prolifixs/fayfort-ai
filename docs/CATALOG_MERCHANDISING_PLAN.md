@@ -164,3 +164,17 @@ Owner request: put every product from fayfort_preorder_chinashopping and fayfort
 - Media is copied into the `product-media` bucket under `imports/<ref>/`, at most 5 pieces per item. Videos keep their cover as the poster. Only https links on Instagram/Facebook CDN hosts are fetched, without redirects, with size caps (15 MB image, 60 MB video). Media already copied is kept on a re-run unless `refresh_media` is set.
 - Prices: the USD price in the caption becomes the price guide (card "From $X est.", detail "Rough price … our team confirms your final price"). No price → card and detail say "Contact our team for a price".
 - Posts showing designer logos on low-priced bags and sandals were not imported; the owner decides on those.
+
+## 11. Products first on Browse and the chat welcome, and adding sourcing items from a link (2026-10-20)
+
+Owner request: the old rails only showed Shopify items with a Buy button or views, so the new sourcing items were buried below the fold and the front showed a photo-less test item and a link tile with no picture.
+
+**Rails** (`service.rails`): built from pictured products only, a product appears in at most one product rail, and a rail with fewer than 3 items is hidden.
+Order: Picked for you (when the member shows intent) → New from FayFort sourcing (8 newest) → one rail per top-level category with at least 4 pictured items ("Furniture from China", "Kids' ride-ons and toys", "Kitchen and home", "Phones and gadgets", "Skates and outdoor"; other categories use their own name) → Ending soon → Back in stock → Under 25 USD (now includes rough-priced sourcing items) → Trending on TikTok & Instagram (only links with a picture, 3 or more) → Almost sourced → Popular this week (by heat, topped up with the newest pictured items).
+`/members/shop/home` also returns `category_tiles` (top-level category, label, count, cover picture), and `/members/shop/products` accepts `top=<top-level category>`.
+
+**Member screens**: the chat welcome shows "Popular picks" (8 pictured products mixed across the rails), category buttons that open Browse filtered (`?panel=catalog&top=`), and a Browse all products button; giveaways stay. Browse opens with a "Shop by category" photo row. Cards show a readable category (`category_label`) and sourcing items carry the "Sourced from China" tag.
+
+**Add from a product link** (Store team → New sourcing item): paste a shop product page and press Fill from link (`POST /operations/store/listings/{id}/from-link`). The server reads the page with the same SSRF-safe reader as Find It links (Open Graph, plus schema.org Product JSON-LD for name, image and price) and fills only empty parts: name, description, rough price (and its currency), and one cover photo shrunk to 1200 px and stored in `product-media`. The link is kept as `source_url` on the listing and the published item (migration 20261020140000) and a link already listed can't be listed twice. Shops that block readers (often Alibaba, 1688, AliExpress, Temu) and Instagram posts (without Meta oEmbed access) keep the link and tell the worker to type the name and price and upload a photo. The source link is shown to staff only; members never see the supplier's page.
+
+**Rough price is optional** for sourcing items: with none, members see "Contact our team for a price".

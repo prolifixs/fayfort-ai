@@ -76,3 +76,11 @@ describe('FayFort AI chat help', () => {
     expect(source).toContain('(min-width: 1024px) and (hover: hover)') // welcome bubble on desktop only
   })
 })
+
+describe('fayfort.com/go link-in-bio pages', () => {
+  it('are public pages, every other path stays closed', async () => {
+    const { isPublicSitePath } = await import('../src/proxy')
+    for (const path of ['/go', '/go/giveaway', '/go/shop', '/go/consultation', '/go/tour-guide', '/go/request']) expect(isPublicSitePath(path)).toBe(true)
+    expect(isPublicSitePath('/go/anything-else')).toBe(false)
+  })
+})

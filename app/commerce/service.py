@@ -56,6 +56,12 @@ def categories() -> list[dict]:
                    .select("source_ref,category,group_name,product_type,priority").limit(5000).execute()))
 
 
+def category_labels() -> dict[str, str]:
+    """category ref -> a readable label for cards (its product type, else its category)."""
+    return _cached("category_labels", 600, lambda: {str(c["source_ref"]): str(c.get("product_type") or c.get("category") or "")
+                                                     for c in categories()})
+
+
 def category_groups() -> dict[str, str]:
     return {str(c["source_ref"]): str(c.get("group_name") or "") for c in categories()}
 
@@ -140,7 +146,7 @@ def card_badges(product: dict, *, price: float | None, sale: dict | None, sale_p
     elif buyable:
         badges.append({"key": "ships", "label": "Ships now"})
     elif product.get("source") != "shopify":
-        badges.append({"key": "sourced", "label": "Sourced on request"})
+        badges.append({"key": "sourced", "label": "Sourced from China"})
     created = product.get("created_at")
     if created and ranking.parse_time(created) >= now - timedelta(days=7):
         badges.append({"key": "new", "label": "New"})
@@ -167,6 +173,7 @@ def card(product: dict, *, sales: dict[str, dict], heat: dict[str, float], group
         "name": product.get("name"),
         "description": (product.get("description") or "")[:280],
         "category_ref": product.get("category_ref"),
+        "category_label": category_labels().get(str(product.get("category_ref") or "")) or None,
         "group_name": groups.get(str(product.get("category_ref") or "")) or None,
         "source": product.get("source") or "fayfort",
         "availability_status": product.get("availability_status"),
@@ -423,15 +430,90 @@ def want_trend_item(member_id: str, trend_item_id: str, *, session_id: str, conv
 # ---------------------------------------------------------------------------------------------
 # Rails (front page) and impulse slots
 # ---------------------------------------------------------------------------------------------
+# Rails on Browse and the chat welcome (owner request, 2026-10-20): products first, only items with a real picture,
+# no rail with fewer than RAIL_MIN items, and a product shows in at most one product rail on the page.
+RAIL_MIN = 3
+RAIL_SIZE = 10
+GROUP_RAIL_MIN = 4
+TOP_TITLES = {
+    "Home, Furniture & Interior": "Furniture from China",
+    "Children & Baby": "Kids' ride-ons and toys",
+    "Kitchen & Household": "Kitchen and home",
+    "Electronics & Technology": "Phones and gadgets",
+    "Sports & Fitness": "Skates and outdoor",
+}
+
+
+def top_categories() -> dict[str, str]:
+    """category ref -> its top-level category name (for example "Home, Furniture & Interior")."""
+    return {str(c["source_ref"]): str(c.get("category") or "") for c in categories()}
+
+
+def has_picture(card: dict) -> bool:
+    return bool(card.get("media_url")) and str(card.get("media_url")).startswith("https://")
+
+
+def category_tiles(card_list: list[dict], tops: dict[str, str] | None = None, limit: int = 12) -> list[dict]:
+    """Shop by category: one tile per top-level category that has pictured products, with a cover picture."""
+    tops = tops if tops is not None else top_categories()
+    tiles: dict[str, dict] = {}
+    for item in card_list:
+        name = tops.get(str(item.get("category_ref") or ""))
+        if not name:
+            continue
+        tile = tiles.setdefault(name, {"key": name, "label": TOP_TITLES.get(name, name), "count": 0, "image_url": None})
+        tile["count"] += 1
+        if not tile["image_url"] and has_picture(item) and item.get("media_type") != "video":
+            tile["image_url"] = item["media_url"]
+    found = [t for t in tiles.values() if t["image_url"]]
+    found.sort(key=lambda t: (-t["count"], t["label"]))
+    return found[:limit]
+
+
 def rails(member_id: str, now: datetime | None = None) -> dict:
     now = now or now_utc()
     saved = saved_ids(member_id)
     intent = member_intent(member_id, now)
     products = load_products()
     ranked_all = ranked(products, intent, saved=saved)
+    pictured = [c for c in ranked_all if has_picture(c)]
+    tops = top_categories()
+    created = {str(p["id"]): str(p.get("created_at") or "") for p in products}
+    used: set[str] = set()
     result: list[dict] = []
+
+    def add(key: str, title: str, candidates: list[dict], minimum: int = RAIL_MIN, size: int = RAIL_SIZE) -> None:
+        items = [c for c in candidates if c["id"] not in used][:size]
+        if len(items) < minimum:
+            return
+        used.update(c["id"] for c in items)
+        result.append({"key": key, "title": title, "items": items})
+
     if intent.active:
-        result.append({"key": "for_you", "title": "Picked for what you're looking for", "items": ranked_all[:10]})
+        add("for_you", "Picked for what you're looking for", pictured)
+    newest_sourcing = sorted([c for c in pictured if c.get("source") != "shopify"],
+                             key=lambda c: created.get(c["id"], ""), reverse=True)
+    add("new_sourcing", "New from FayFort sourcing", newest_sourcing, size=8)
+    by_top: dict[str, list[dict]] = {}
+    for item in pictured:
+        name = tops.get(str(item.get("category_ref") or ""))
+        if name:
+            by_top.setdefault(name, []).append(item)
+    for name, items in sorted(by_top.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        if len(items) >= GROUP_RAIL_MIN:
+            add(f"top:{name}", TOP_TITLES.get(name, name), items, minimum=RAIL_MIN)
+    ending = [c for c in pictured if c.get("sale") and (ranking.parse_time(c["sale"]["ends_at"]) - now) <= timedelta(hours=72)]
+    ending.sort(key=lambda c: c["sale"]["ends_at"])
+    add("ending_soon", "Ending soon", ending)
+    by_id = {c["id"]: c for c in pictured}
+    restocked = [p for p in products if p.get("in_stock") and p.get("restocked_at")
+                 and ranking.parse_time(p["restocked_at"]) >= now - timedelta(days=7)]
+    add("back_in_stock", "Back in stock", [by_id[str(p["id"])] for p in restocked if str(p["id"]) in by_id])
+    limit_price = float(settings.COMMERCE_UNDER_PRICE)
+    shown_price = lambda c: (c.get("sale") or {}).get("sale_price") or c.get("price")
+    under = [c for c in pictured if (c.get("buyable") or c.get("price_guide")) and shown_price(c) is not None
+             and shown_price(c) <= limit_price]
+    add("under_price", f"Under {limit_price:g} {settings.COMMERCE_CURRENCY}", under)
     week = iso(now - timedelta(days=7))
     trends = rows(db().table("commerce_trend_items").select(TREND_FIELDS).in_("status", ["open", "pooling", "sourcing"])
                   .gte("last_shared_at", week).order("share_count", desc=True).limit(30).execute())
@@ -439,35 +521,21 @@ def rails(member_id: str, now: datetime | None = None) -> dict:
                                                           .eq("member_id", member_id).execute())}
     linked_ids = [str(t["linked_product_id"]) for t in trends if t.get("linked_product_id")]
     linked = {c["id"]: c for c in cards(load_products(ids=linked_ids), saved=saved)} if linked_ids else {}
-    social = [t for t in trends if t.get("platform") in ("tiktok", "instagram") or t.get("share_count", 0) >= 2]
-    if social:
+    social = [t for t in trends if (t.get("platform") in ("tiktok", "instagram") or t.get("share_count", 0) >= 2)
+              and str(t.get("image_url") or "").startswith("https://")]
+    if len(social) >= RAIL_MIN:
         result.append({"key": "trending", "title": "Trending on TikTok & Instagram", "kind": "trend",
-                       "items": [trend_card(t, member_wants=member_wants, linked=linked) for t in social[:10]]})
-    by_id = {c["id"]: c for c in ranked_all}
-    ending = [c for c in by_id.values() if c.get("sale")
-              and (ranking.parse_time(c["sale"]["ends_at"]) - now) <= timedelta(hours=72)]
-    ending.sort(key=lambda c: c["sale"]["ends_at"])
-    if ending:
-        result.append({"key": "ending_soon", "title": "Ending soon", "items": ending[:10]})
-    restocked = [p for p in products if p.get("in_stock") and p.get("restocked_at")
-                 and ranking.parse_time(p["restocked_at"]) >= now - timedelta(days=7)]
-    if restocked:
-        result.append({"key": "back_in_stock", "title": "Back in stock",
-                       "items": [by_id[str(p["id"])] for p in restocked if str(p["id"]) in by_id][:10]})
+                       "items": [trend_card(t, member_wants=member_wants, linked=linked) for t in social[:RAIL_SIZE]]})
     pools = [t for t in trends if t.get("status") == "pooling" and t.get("pool_target")
              and int(t.get("want_count") or 0) / int(t["pool_target"]) >= 0.5]
     pools.sort(key=lambda t: -int(t.get("want_count") or 0) / int(t["pool_target"]))
     if pools:
         result.append({"key": "almost_sourced", "title": "Almost sourced", "kind": "trend",
-                       "items": [trend_card(t, member_wants=member_wants, linked=linked) for t in pools[:10]]})
-    limit_price = float(settings.COMMERCE_UNDER_PRICE)
-    under = [c for c in ranked_all if c.get("buyable") and ((c.get("sale") or {}).get("sale_price") or c.get("price") or 1e9) <= limit_price]
-    if under:
-        result.append({"key": "under_price", "title": f"Under {limit_price:g} {settings.COMMERCE_CURRENCY}", "items": under[:10]})
+                       "items": [trend_card(t, member_wants=member_wants, linked=linked) for t in pools[:RAIL_SIZE]]})
     if not intent.active:
-        hot = sorted([c for c in ranked_all if c["heat"] > 0], key=lambda c: -c["heat"])
-        if hot:
-            result.append({"key": "popular", "title": "Popular on FayFort this week", "items": hot[:10]})
+        hot = sorted([c for c in pictured if c["heat"] > 0], key=lambda c: -c["heat"])
+        newest = sorted(pictured, key=lambda c: created.get(c["id"], ""), reverse=True)
+        add("popular", "Popular on FayFort this week", hot + [c for c in newest if c not in hot])
     giveaways = open_giveaways(member_id, now)
     from app.commerce import merch_sections
     try:
@@ -476,7 +544,7 @@ def rails(member_id: str, now: datetime | None = None) -> dict:
         logger.exception("Could not load store sections")
         sections = []
     return {"rails": result, "giveaways": giveaways, "intent": intent.summary(), "sections": sections,
-            "category_bar": category_bar(products)}
+            "category_bar": category_bar(products), "category_tiles": category_tiles(pictured, tops)}
 
 
 def category_bar(products: list[dict] | None = None, limit: int = 12) -> list[dict]:
@@ -773,6 +841,12 @@ def record_order(order: dict, *, backfill: bool = False) -> dict:
         # Idempotent, so a retried webhook finishes the job if an earlier attempt stopped half way.
         from app.membership import service as membership
         membership.invoice_paid(invoice)
+    if invoice and order.get("financial_status") == "paid" and invoice.get("kind") == "tour":
+        from app.membership import tours
+        try:
+            tours.invoice_paid(invoice)
+        except Exception:
+            logger.exception("Could not confirm a paid tour booking")
     newly_paid = order.get("financial_status") == "paid" and (previous or {}).get("financial_status") != "paid"
     if member_id and attributes.get("fayfort_member_id") and newly_paid:
         product_gids = [li["product_id"] for li in values["line_items"] if li.get("product_id")]

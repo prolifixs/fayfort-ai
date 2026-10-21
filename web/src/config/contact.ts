@@ -15,7 +15,7 @@ export const JOIN_URL = `${APP_URL}/member/signup`
 export const SIGN_IN_URL = `${APP_URL}/member/account`
 export const CHAT_URL = `${APP_URL}/member/chat`
 export const BROWSE_URL = `${APP_URL}/member/chat?panel=catalog`
-export const DIRECTORY_URL = `${APP_URL}/member/chat?panel=directory`
+export const DIRECTORY_URL = `${APP_URL}/member/chat?panel=tools&tool=directory`
 export const REQUESTS_URL = `${APP_URL}/member/chat?panel=requests`
 
 // Working hours (the same as the chat assistant tells customers).

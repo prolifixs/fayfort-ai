@@ -11,7 +11,6 @@ import { formatMemberTier } from "./memberShared";
 import { AddressBook, ProfileCompletionCard, type ProfileCompletion } from "./accountExtras";
 import { FayfortLoader } from "../brand/FayfortLogo";
 import { MemberPlanComparison } from "./MemberAccountDialogs";
-import { ConsultationCard, ContactCreditsCard } from "./MemberPerks";
 import { PlanBilling } from "./PlanBilling";
 import { useMemberPlan } from "./membershipApi";
 import { MemberIdentityForm } from "./MemberIdentity";
@@ -42,7 +41,7 @@ export function MemberSettingsPanel({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(memberSoundsEnabled);
-  const { plan, reload: reloadPlan } = useMemberPlan(token);
+  const { reload: reloadPlan } = useMemberPlan(token);
   function planChanged() {
     reloadPlan();
     onPlanChange?.();
@@ -185,11 +184,10 @@ export function MemberSettingsPanel({
         </p>
         <MemberPlanComparison currentTier={formatMemberTier(profile?.member_tier)} />
         <PlanBilling accessToken={token} onChange={planChanged} />
-        <div className="member-perks">
-          <h3 className="member-perks-title">Your plan perks</h3>
-          <ConsultationCard accessToken={token} plan={plan || null} onChange={planChanged} />
-          <ContactCreditsCard accessToken={token} status={plan?.contacts} />
-        </div>
+        <p className="member-settings-moved">
+          Consultations, the tour guide, the supplier directory and supplier contacts are in{" "}
+          <a href="/member/chat?panel=tools">Tools</a>.
+        </p>
       </section>
       <section className="member-settings-section" aria-labelledby="member-settings-signin">
         <h2 id="member-settings-signin">Sign-in methods</h2>

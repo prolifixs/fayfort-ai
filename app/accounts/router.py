@@ -46,8 +46,15 @@ _BASE_MEMBER_THEME = {
             "border": "#637180", "focus": "#005A9C",
         },
         "font_family": "system",
+        "pattern": "none",
+        "pattern_strength": "subtle",
     },
 }
+
+
+def _pattern_of(row: dict) -> dict:
+    """Theme pattern (Ankara, Ghana Must Go) and its strength; older revisions have none."""
+    return {"pattern": row.get("pattern") or "none", "pattern_strength": row.get("pattern_strength") or "subtle"}
 
 
 class WorkerInvite(BaseModel):
@@ -340,6 +347,8 @@ def create_accounts_router() -> APIRouter:
     router.include_router(create_member_notifications_router(require_verified_member))
     router.include_router(create_member_profile_photo_router(require_verified_member))
     router.include_router(create_member_identity_router(require_verified_member))
+    from app.membership.tours import create_tours_router
+    router.include_router(create_tours_router(require_verified_member, trusted_fayfort_staff))
     router.include_router(create_member_theme_admin_router(trusted_platform_admin))
     router.include_router(create_operations_router(trusted_fayfort_staff))
     router.include_router(create_store_team_router(trusted_fayfort_staff))
@@ -584,7 +593,7 @@ def create_accounts_router() -> APIRouter:
             if theme.get("requires_paid") and member_tier not in {"standard", "pro"}:
                 return {"selected_theme": selected_theme, "active_theme": _BASE_MEMBER_THEME, "fallback_reason": "plan_ineligible"}
             revision_result = (supabase.table("member_theme_revisions")
-                .select("revision,palette_preset,wrapper_style,colors,font_family")
+                .select("revision,palette_preset,wrapper_style,colors,font_family,pattern,pattern_strength")
                 .eq("theme_id", selected_theme).eq("revision", theme["published_revision"]).maybe_single().execute())
             revision = revision_result.data if revision_result else None
             if not revision:
@@ -594,7 +603,7 @@ def create_accounts_router() -> APIRouter:
                 "display_name": theme["display_name"],
                 "revision": revision["revision"],
                 "design": {**{key: revision[key] for key in ("palette_preset", "wrapper_style", "colors")},
-                           "font_family": revision.get("font_family") or "system"},
+                           "font_family": revision.get("font_family") or "system", **_pattern_of(revision)},
             }, "fallback_reason": None}
         except HTTPException:
             raise
@@ -627,12 +636,12 @@ def create_accounts_router() -> APIRouter:
             ids = [theme["theme_id"] for theme in published if theme.get("published_revision")]
             if ids:
                 revision_rows = (supabase.table("member_theme_revisions")
-                    .select("theme_id,revision,palette_preset,wrapper_style,colors,font_family")
+                    .select("theme_id,revision,palette_preset,wrapper_style,colors,font_family,pattern,pattern_strength")
                     .in_("theme_id", ids).execute().data or [])
                 for row in revision_rows:
                     designs[(row["theme_id"], row["revision"])] = {
                         **{key: row[key] for key in ("palette_preset", "wrapper_style", "colors")},
-                        "font_family": row.get("font_family") or "system",
+                        "font_family": row.get("font_family") or "system", **_pattern_of(row),
                     }
             for theme in published:
                 if not theme.get("published_revision"):
@@ -696,14 +705,14 @@ def create_accounts_router() -> APIRouter:
             if not theme or theme.get("status") != "published" or not theme.get("published_revision"):
                 raise HTTPException(status_code=404, detail="That published theme is not available to preview.")
             revision_result = (supabase.table("member_theme_revisions")
-                .select("revision,palette_preset,wrapper_style,colors,font_family")
+                .select("revision,palette_preset,wrapper_style,colors,font_family,pattern,pattern_strength")
                 .eq("theme_id", theme_id).eq("revision", theme["published_revision"]).maybe_single().execute())
             revision = revision_result.data if revision_result else None
             if not revision:
                 raise HTTPException(status_code=404, detail="That published theme is not available to preview.")
             return {"theme_id": theme_id, "display_name": theme["display_name"], "revision": revision["revision"],
                 "design": {**{key: revision[key] for key in ("palette_preset", "wrapper_style", "colors")},
-                           "font_family": revision.get("font_family") or "system"}}
+                           "font_family": revision.get("font_family") or "system", **_pattern_of(revision)}}
         except HTTPException:
             raise
         except Exception as exc:

@@ -59,6 +59,10 @@ THEME_FONTS = ("system", "poppins", "quicksand", "nunito", "montserrat", "dm-san
 ThemeFont = Literal["system", "poppins", "quicksand", "nunito", "montserrat", "dm-sans", "playfair", "lora"]
 
 
+THEME_PATTERNS = ("none", "ankara", "ghana-must-go")
+ThemePattern = Literal["none", "ankara", "ghana-must-go"]
+
+
 class ThemeDesign(BaseModel):
     """Persistable, versioned theme payload with accessible color pairings."""
 
@@ -68,6 +72,10 @@ class ThemeDesign(BaseModel):
     wrapper_style: Literal["clean", "soft", "framed"]
     colors: ThemeColors
     font_family: ThemeFont = "system"
+    # A cultural pattern placed in a few calm spots (top band, sidebar header, chat welcome, card edge), never behind
+    # text-heavy content. Keep in step with dashboard/src/app/themePatterns.ts.
+    pattern: ThemePattern = "none"
+    pattern_strength: Literal["subtle", "bold"] = "subtle"
 
     @field_validator("palette_preset")
     @classmethod

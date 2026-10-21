@@ -240,8 +240,7 @@ function draftChanges(listing: StoreListing, draft: Draft) {
     setOrClear("compare_at_price", num(draft.compare_at_price));
     setOrClear("cost", num(draft.cost));
   } else {
-    const guide = num(draft.price_guide_min);
-    if (guide !== null && !Number.isNaN(guide)) body.price_guide_min = guide;
+    setOrClear("price_guide_min", num(draft.price_guide_min));
     setOrClear("price_guide_max", num(draft.price_guide_max));
     setOrClear("min_order", num(draft.min_order));
     setOrClear("lead_time_min_days", num(draft.lead_time_min_days));
@@ -277,6 +276,8 @@ export function ListingEditor({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [shopLink, setShopLink] = useState("");
+  const [linkReport, setLinkReport] = useState<{ read: boolean; filled: string[]; notes: string[] } | null>(null);
   const [backNote, setBackNote] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -349,6 +350,20 @@ export function ListingEditor({
       if (fileRef.current) fileRef.current.value = "";
     }, "Uploaded.");
   }
+  async function fillFromLink() {
+    if (!listing || !shopLink.trim()) return;
+    if (dirty && draft) await save();
+    await act(async () => {
+      const data = await apiRequest<{ listing: StoreListing; read: boolean; filled: string[]; notes: string[] }>(
+        `/operations/store/listings/${listing.id}/from-link`,
+        token,
+        { method: "POST", body: JSON.stringify({ url: shopLink.trim() }) },
+      );
+      accept(data.listing);
+      setLinkReport({ read: data.read, filled: data.filled, notes: data.notes });
+      setShopLink("");
+    });
+  }
   async function moveMedia(index: number, delta: number) {
     if (!listing) return;
     const order = listing.media.map((_, i) => i);
@@ -408,6 +423,60 @@ export function ListingEditor({
       )}
       <div className="st-editor-grid">
         <div className="st-editor-form">
+          {!store && (
+            <section className="st-block st-from-link" aria-label="Add from a product link">
+              <h4>
+                Add from a product link <small>optional · fills what's empty</small>
+              </h4>
+              {editable && (
+                <div className="st-from-link-row">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    aria-label="Product link"
+                    placeholder="https://… a product page from any shop"
+                    value={shopLink}
+                    maxLength={2000}
+                    onChange={(event) => setShopLink(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void fillFromLink();
+                      }
+                    }}
+                  />
+                  <button type="button" className="secondary-button" disabled={busy || !shopLink.trim()} onClick={() => void fillFromLink()}>
+                    {busy ? "Reading…" : "Fill from link"}
+                  </button>
+                </div>
+              )}
+              {linkReport && (
+                <div className={linkReport.read ? "st-callout" : "st-callout is-warning"} role="status">
+                  {linkReport.filled.length ? <p>Filled in: {linkReport.filled.join(", ")}. Check them before review.</p> : null}
+                  {linkReport.notes.map((note) => (
+                    <p key={note}>{note}</p>
+                  ))}
+                </div>
+              )}
+              {listing.source_url ? (
+                <p className="st-from-link-source">
+                  Source:{" "}
+                  <a href={listing.source_url} target="_blank" rel="noreferrer noopener">
+                    {(() => {
+                      try {
+                        return new URL(listing.source_url).hostname.replace(/^www\./, "");
+                      } catch {
+                        return listing.source_url;
+                      }
+                    })()}
+                  </a>{" "}
+                  <small>· staff only, members don't see this link</small>
+                </p>
+              ) : (
+                !editable && <p className="operations-muted">Added by hand.</p>
+              )}
+            </section>
+          )}
           <section id="ops-listing-details" className="st-block" aria-label="Details">
             <h4>Details</h4>
             <Field label="Title">
@@ -531,7 +600,10 @@ export function ListingEditor({
           </section>
 
           <section id="ops-listing-price" className="st-block" aria-label={store ? "Price" : "Price guide"}>
-            <h4>{store ? "Price" : "Price guide"}</h4>
+            <h4>
+              {store ? "Price" : "Rough price"}
+              {!store && <small> optional · leave empty and members see "Contact our team for a price"</small>}
+            </h4>
             {store ? (
               <div className="st-row">
                 <Field label="Price">
@@ -547,7 +619,7 @@ export function ListingEditor({
             ) : (
               <>
                 <div className="st-row">
-                  <Field label="From">
+                  <Field label="From (rough estimate)">
                     <input type="number" min="0.01" step="0.01" value={draft.price_guide_min} disabled={!editable} onChange={(event) => update({ price_guide_min: event.target.value })} />
                   </Field>
                   <Field label="To (optional)">
