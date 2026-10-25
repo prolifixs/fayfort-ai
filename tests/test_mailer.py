@@ -399,6 +399,8 @@ class EmailApiTests(unittest.TestCase):
         sender.deliver(row, switches={c: True for c in sender.CATEGORIES},
                        send=lambda **kw: sent.append(kw) or "msg")
         self.assertEqual(sent[0]["headers"], {"List-Unsubscribe": "<https://a/b>"})
+        # Marked sent with its address kept (the outbox needs a member or an address).
+        self.assertEqual((row["status"], row["to_email"]), ("sent", "v@example.com"))
 
     def test_newsletter_test_goes_to_the_admin_only(self):
         letter = self.client.post("/platform/newsletters", headers=AUTH,

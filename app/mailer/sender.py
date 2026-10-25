@@ -173,7 +173,9 @@ def deliver(row: dict, *, switches: dict[str, bool], send: Callable[..., str] = 
                           headers=headers or None, idempotency_key=f"fayfort-outbox-{row['id']}")
         _update(row["id"], {"status": "sent", "subject": rendered.subject[:200], "sent_at": now_utc().isoformat(),
                             "provider_message_id": message_id[:200] or None, "last_error": None,
-                            "to_email": to if category == "account_security" else None})
+                            # A row with no member (LANDED buyers, newsletter sign-ups) keeps its address: the outbox
+                            # requires a member or an address, and it's the only record of who it went to.
+                            "to_email": to if category == "account_security" or not row.get("member_id") else None})
         return "sent"
     except EmailSendError as exc:
         attempts = int(row.get("attempts") or 1)
