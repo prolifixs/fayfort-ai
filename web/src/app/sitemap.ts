@@ -18,6 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ['/about-us', 0.7],
     ['/terms', 0.3],
     ['/terms-ebooks', 0.3],
+    ['/cookies', 0.2],
   ]
   return pages.map(([path, priority]) => ({ url: `${SITE}${path}`, changeFrequency: 'monthly', priority }))
 }

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useMemo, useR
 import type { ReactNode } from "react";
 import { API_BASE, apiRequest } from "../../lib/api";
 import "./ads.css";
+import { readConsent } from "../../lib/consent";
 
 /**
  * Ads on the member dashboard (docs/ADS_PLAN.md).
@@ -54,8 +55,16 @@ const AdsContext = createContext<AdsContextValue | null>(null);
 
 const GOOGLE_SCRIPT_ID = "fayfort-adsbygoogle";
 
+/** Personalised Google ads only with the visitor's marketing consent (lib/consent.ts); otherwise non-personalised. */
+function applyAdConsent() {
+  const queue = (window.adsbygoogle = window.adsbygoogle || []) as unknown[] & { requestNonPersonalizedAds?: number };
+  queue.requestNonPersonalizedAds = readConsent()?.marketing ? 0 : 1;
+}
+
 function loadGoogleScript(client: string) {
-  if (typeof document === "undefined" || document.getElementById(GOOGLE_SCRIPT_ID)) return;
+  if (typeof document === "undefined") return;
+  applyAdConsent();
+  if (document.getElementById(GOOGLE_SCRIPT_ID)) return;
   const script = document.createElement("script");
   script.id = GOOGLE_SCRIPT_ID;
   script.async = true;

@@ -10,12 +10,13 @@ const PRODUCT_MEDIA = 'https://lirauxdhnknfiqjnulxb.supabase.co'
 // also needs 'unsafe-eval' for fast refresh.
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com`,
+  // Meta Pixel and TikTok Pixel load only after the visitor accepts marketing cookies (src/consent).
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com https://connect.facebook.net https://analytics.tiktok.com`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://cdn.shopify.com ${PRODUCT_MEDIA}`,
+  `img-src 'self' data: blob: https://cdn.shopify.com ${PRODUCT_MEDIA} https://www.facebook.com`,
   "font-src 'self' data:",
   // FayFort AI chat help talks to the FayFort API from the browser.
-  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API}`,
+  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API} https://www.facebook.com https://connect.facebook.net https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokw.us`,
   // Instagram's own player for the posts and reels on the home page (Control Center → Website).
   `frame-src ${SHOPIFY_STORE} https://www.instagram.com`,
   "worker-src 'self' blob:",

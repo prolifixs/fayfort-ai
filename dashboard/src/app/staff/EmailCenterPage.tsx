@@ -310,7 +310,8 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
   const [editing, setEditing] = useState<Newsletter | null>(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [preview, setPreview] = useState<{ html: string; recipients: number } | null>(null);
+  const [preview, setPreview] = useState<{ html: string; recipients: number; members?: number; visitors?: number } | null>(null);
+  const [visitorCounts, setVisitorCounts] = useState<{ confirmed: number; pending: number; unsubscribed: number } | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -318,7 +319,12 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
 
   const load = useCallback(async () => {
     try {
-      setLetters((await apiRequest<{ newsletters: Newsletter[] }>("/platform/newsletters", accessToken)).newsletters);
+      const result = await apiRequest<{ newsletters: Newsletter[]; visitor_subscribers?: { confirmed: number; pending: number; unsubscribed: number } | null }>(
+        "/platform/newsletters",
+        accessToken,
+      );
+      setLetters(result.newsletters);
+      setVisitorCounts(result.visitor_subscribers || null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Newsletters could not be loaded.");
     }
@@ -357,8 +363,11 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
       if (!saved) return;
       if (action === "save") setNotice("Draft saved.");
       if (action === "preview") {
-        const result = await apiRequest<{ html: string; recipients: number }>(`/platform/newsletters/${saved.id}/preview`, accessToken);
-        setPreview({ html: result.html, recipients: result.recipients });
+        const result = await apiRequest<{ html: string; recipients: number; members?: number; visitors?: number }>(
+          `/platform/newsletters/${saved.id}/preview`,
+          accessToken,
+        );
+        setPreview({ html: result.html, recipients: result.recipients, members: result.members, visitors: result.visitors });
       }
       if (action === "test") {
         const result = await apiRequest<{ sent_to: string }>(`/platform/newsletters/${saved.id}/test`, accessToken, { method: "POST" });
@@ -366,7 +375,7 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
       }
       if (action === "send") {
         const result = await apiRequest<{ recipients: number }>(`/platform/newsletters/${saved.id}/send`, accessToken, { method: "POST" });
-        setNotice(`Sending to ${result.recipients} member${result.recipients === 1 ? "" : "s"}. Follow progress in Sent emails.`);
+        setNotice(`Sending to ${result.recipients} subscriber${result.recipients === 1 ? "" : "s"}. Follow progress in Sent emails.`);
         setEditing(null);
         setConfirming(false);
       }
@@ -385,8 +394,14 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
           <h2>Newsletter</h2>
           <p>
             Write a subject and a message. Leave a blank line between paragraphs; links like https://fayfort.com become
-            clickable. It goes to every member with a confirmed email who hasn't unsubscribed. Staff accounts are left out.
+            clickable. It goes to every member with a confirmed email who hasn't unsubscribed, and to visitors who signed up
+            on fayfort.com and confirmed their email. Staff accounts are left out.
           </p>
+          {visitorCounts && (
+            <p className="muted">
+              Visitor subscribers: {visitorCounts.confirmed} confirmed, {visitorCounts.pending} waiting to confirm.
+            </p>
+          )}
         </div>
       </div>
       {notice && <p role="status">{notice}</p>}
@@ -438,7 +453,7 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
                 setConfirming(true);
               }}
             >
-              Send to members…
+              Send to subscribers…
             </button>
             <button type="button" className="text-button" disabled={busy} onClick={() => setEditing(null)}>
               Close
@@ -447,9 +462,15 @@ function NewsletterPanel({ accessToken }: { accessToken: string }) {
           {confirming && preview && (
             <div className="worker-confirm" role="alertdialog" aria-label="Confirm newsletter send">
               <p>
-                Send “{subject.trim()}” to {preview.recipients} member{preview.recipients === 1 ? "" : "s"} now? This can't be
-                undone.
+                Send “{subject.trim()}” to {preview.recipients} {preview.recipients === 1 ? "person" : "people"}
+                {preview.visitors ? ` (${preview.members ?? 0} members, ${preview.visitors} newsletter sign-ups)` : ""} now? This
+                can't be undone.
               </p>
+              {preview.recipients > 100 && (
+                <p className="form-error">
+                  Resend's free plan sends about 100 emails a day. Upgrade the Resend plan first, or most of these will fail.
+                </p>
+              )}
               <div>
                 <button type="button" className="primary-button" disabled={busy} onClick={() => void run("send")}>
                   {busy ? "Sending…" : `Send to ${preview.recipients}`}

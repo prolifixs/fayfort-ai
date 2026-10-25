@@ -274,3 +274,35 @@ For Instagram and TikTok bios. Standalone layout (no site header, footer or chat
 - `/go/giveaway`, `/go/shop`, `/go/consultation`, `/go/tour-guide`, `/go/request`: one page each, one main button into the member app (signed-out visitors sign in or join first).
 - Data: `GET /public/site/go` (app/site/go.py), read-only, no member data, cached 5 minutes. Product photos come from the public product-media storage, so `img-src` in next.config.js allows `lirauxdhnknfiqjnulxb.supabase.co`.
 - The proxy allows exactly these six paths; they are in the sitemap.
+
+## Cookies, visitor newsletter and visitor popups (owner request, 2026-10-25)
+
+**Owner decisions:** Meta Pixel and TikTok Pixel; the banner shown to every visitor with marketing off until they agree;
+the newsletter pitched as weekly China finds plus early access to giveaways; popups on fayfort.com and in the app's catalog
+for signed-out visitors.
+
+**Cookie consent** (`web/src/consent/`, `dashboard/src/lib/consent.ts`, `dashboard/src/app/consent/`)
+- One cookie on `.fayfort.com`, `ff_consent=m1|m0.t<ms>`, shared by fayfort.com and app.fayfort.com; asked again after 6 months.
+- Banner: Accept all / Necessary only / Choose (Necessary always on, Marketing switch). "Cookie settings" in every footer
+  (site, /go, LANDED) and in the member app's Settings → Privacy reopens it. Policy at fayfort.com/cookies.
+- Marketing: Meta Pixel and TikTok Pixel load only after consent, with page views on every route. The owner sets
+  `NEXT_PUBLIC_META_PIXEL_ID` and `NEXT_PUBLIC_TIKTOK_PIXEL_ID` in Vercel (web project); without an ID a pixel stays off.
+  Switching marketing off deletes `_fbp`, `_fbc`, `_ttp` and reloads the page.
+- Google AdSense in the app requests non-personalised ads unless marketing consent is given.
+- Vercel Analytics (no cookies) keeps running for everyone.
+
+**Visitor newsletter** (`app/mailer/subscribers.py`, migration `20261025120000_newsletter_subscribers.sql`)
+- `POST /public/newsletter/subscribe` (rate limited) sends "Confirm your email"; the link opens fayfort.com/newsletter,
+  which confirms by script (so mail-app link scanners can't). Unsubscribe from a newsletter link asks first; the
+  List-Unsubscribe header gives mail apps one-click unsubscribe.
+- Control Center → Emails → Newsletter sends to members and confirmed visitors together; a visitor who is also a member
+  gets the member copy only. It shows visitor counts, and warns above ~100 recipients (Resend free plan).
+- Confirmation emails use the newsletter email type: switching Newsletter off in Control Center also pauses them.
+- Sign-up forms: site footer, /go, the newsletter popup, fayfort.com/newsletter.
+
+**Visitor popups** (`web/src/consent/VisitorPopups.tsx`, `dashboard/src/app/consent/VisitorPopups.tsx`)
+- Never for members (`ff_member=1`, set when anyone signs in on app.fayfort.com), never before the cookie choice, at most one
+  per visit, none for 7 days after closing (30 after subscribing).
+- First visit: 4 product cards from `/public/site/go` after 25 seconds or half a page (fayfort.com) or after 4 seconds on the
+  app's signed-out catalog and products pages; from the second visit, or when leaving the page on a computer: the newsletter.
+- Not shown on LANDED, the terms, the cookie policy or the newsletter page; on fayfort.com/go/shop only the newsletter.

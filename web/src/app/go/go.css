@@ -182,11 +182,18 @@
 .go-cat small { color: var(--go-soft); font-size: 12px; }
 .go-section-title { color: #fff; font-family: var(--serif); font-size: 22px; font-weight: 400; margin: 6px 0 -8px; }
 
+/* Newsletter on /go */
+.go-newsletter { background: rgba(4, 39, 112, 0.55); border: 1px solid rgba(195, 202, 227, 0.2); border-radius: 18px; display: grid; gap: 10px; padding: 18px; }
+.go-newsletter .go-section-title { margin: 0; }
+.go-newsletter > p { color: var(--go-soft); font-size: 14px; line-height: 1.5; margin: 0; }
+
 /* Footer */
 .go-foot { border-top: 1px solid rgba(195, 202, 227, 0.18); display: grid; gap: 6px; justify-items: center; margin-top: 12px; padding-top: 20px; text-align: center; }
 .go-foot a { color: var(--go-soft); font-size: 14px; min-height: 32px; display: inline-flex; align-items: center; }
 .go-foot a:hover { color: #fff; }
 .go-foot p { color: #8a94b8; font-size: 12px; margin: 6px 0 0; }
+.go-foot .go-foot-legal { margin: 0; }
+.go-foot .go-foot-legal a, .go-foot .ffc-settings-link { color: #8a94b8; font-size: 12px; min-height: 32px; }
 
 @media (min-width: 720px) {
   .go-column { padding-top: 28px; gap: 26px; }

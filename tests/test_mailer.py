@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.mailer import render, resend_client, sender
 from app.mailer.router import create_email_router
+from app.mailer.subscribers import create_public_newsletter_router
 
 ADMIN = "00000000-0000-0000-0000-0000000000a1"
 MEMBER = "00000000-0000-0000-0000-0000000000c1"
@@ -81,6 +82,10 @@ class Query:
                 item.setdefault("unsubscribe_token", TOKEN)
             if self.table == "newsletters":
                 item.setdefault("status", "draft")
+            if self.table == "newsletter_subscribers":
+                item.setdefault("status", "pending")
+                item.setdefault("confirm_token", str(uuid.uuid4()))
+                item.setdefault("unsubscribe_token", str(uuid.uuid4()))
             if self.table == "email_outbox":
                 item.setdefault("status", "queued")
             rows.append(item)
@@ -269,6 +274,7 @@ class EmailApiTests(unittest.TestCase):
                               "created_at": datetime.now(timezone.utc).isoformat()}],
             "newsletters": [], "member_email_preferences": [],
             "fayfort_workers": [{"user_id": WORKER}],
+            "newsletter_subscribers": [],
         })
         users = [user(ADMIN, "admin@example.com", admin=True), user(MEMBER, "m@example.com"),
                  user(OTHER, "o@example.com"), user(WORKER, "w@example.com"),
@@ -279,6 +285,7 @@ class EmailApiTests(unittest.TestCase):
         self.patches = [
             patch("app.mailer.router.supabase", self.db.client),
             patch("app.mailer.sender.supabase", self.db.client),
+            patch("app.mailer.subscribers.supabase", self.db.client),
             patch("app.mailer.router.trusted_platform_admin",
                   side_effect=lambda h: {"user_id": ADMIN} if h == "Bearer admin-token" else None),
         ]
@@ -286,6 +293,7 @@ class EmailApiTests(unittest.TestCase):
             p.start()
         app = FastAPI()
         app.include_router(create_email_router())
+        app.include_router(create_public_newsletter_router())
         self.client = TestClient(app)
 
     def tearDown(self):
@@ -337,13 +345,60 @@ class EmailApiTests(unittest.TestCase):
                 patch("app.mailer.router.delivery_configured", return_value=True):
             sent = self.client.post(f"/platform/newsletters/{letter['id']}/send", headers=AUTH)
             self.assertEqual(sent.status_code, 200)
-            self.assertEqual(sent.json(), {"recipients": 1})
+            self.assertEqual(sent.json(), {"recipients": 1, "members": 1, "visitors": 0})
             queued = [r for r in self.db.rows["email_outbox"] if r.get("newsletter_id") == letter["id"]]
             self.assertEqual([r["member_id"] for r in queued], [MEMBER])
             self.assertEqual(self.client.post(f"/platform/newsletters/{letter['id']}/send", headers=AUTH).status_code, 409)
         self.assertEqual(self.client.put(f"/platform/newsletters/{letter['id']}", headers=AUTH,
                                          json={"subject": "x", "body_text": "y"}).status_code, 409)
         self.assertIn("newsletter_sent", self.db.audit())
+
+    def test_visitor_signs_up_confirms_gets_the_newsletter_and_unsubscribes(self):
+        signed = self.client.post("/public/newsletter/subscribe", json={"email": " Visitor@Example.com ", "source": "site_popup"})
+        self.assertEqual(signed.status_code, 202, signed.text)
+        [subscriber] = self.db.rows["newsletter_subscribers"]
+        self.assertEqual((subscriber["email"], subscriber["status"], subscriber["source"]), ("visitor@example.com", "pending", "site_popup"))
+        [confirm_mail] = [r for r in self.db.rows["email_outbox"] if r.get("template") == "newsletter_confirm"]
+        self.assertEqual(confirm_mail["to_email"], "visitor@example.com")
+        self.assertIn(f"newsletter?confirm={subscriber['confirm_token']}", confirm_mail["payload"]["html"])
+        # Signing up again within minutes doesn't send a second confirmation, and the answer is the same.
+        self.assertEqual(self.client.post("/public/newsletter/subscribe", json={"email": "visitor@example.com"}).status_code, 202)
+        self.assertEqual(len([r for r in self.db.rows["email_outbox"] if r.get("template") == "newsletter_confirm"]), 1)
+        self.assertEqual(self.client.post("/public/newsletter/subscribe", json={"email": "not-an-email"}).status_code, 422)
+        self.assertEqual(self.client.post("/public/newsletter/confirm", json={"token": str(uuid.uuid4())}).status_code, 404)
+        self.assertEqual(self.client.post("/public/newsletter/confirm", json={"token": subscriber["confirm_token"]}).status_code, 200)
+        self.assertEqual(subscriber["status"], "confirmed")
+        # A member who also subscribed as a visitor gets the member copy only.
+        self.db.rows["newsletter_subscribers"].append({"id": "s2", "email": "m@example.com", "status": "confirmed",
+                                                       "unsubscribe_token": str(uuid.uuid4())})
+        letter = self.client.post("/platform/newsletters", headers=AUTH,
+                                  json={"subject": "Finds", "body_text": "New this week"}).json()["newsletter"]
+        preview = self.client.get(f"/platform/newsletters/{letter['id']}/preview", headers=AUTH).json()
+        self.assertEqual((preview["members"], preview["visitors"]), (2, 1))
+        with patch("app.mailer.router.settings.EMAIL_DELIVERY_ENABLED", True), \
+                patch("app.mailer.router.delivery_configured", return_value=True), \
+                patch("app.mailer.subscribers.settings.PUBLIC_API_URL", "https://api.fayfort.com"):
+            sent = self.client.post(f"/platform/newsletters/{letter['id']}/send", headers=AUTH).json()
+        self.assertEqual(sent, {"recipients": 3, "members": 2, "visitors": 1})
+        [visitor_copy] = [r for r in self.db.rows["email_outbox"] if r.get("template") == "newsletter_visitor"]
+        self.assertEqual(visitor_copy["to_email"], "visitor@example.com")
+        self.assertIn(f"newsletter?unsubscribe={subscriber['unsubscribe_token']}", visitor_copy["payload"]["html"])
+        self.assertIn("subscribed to the FayFort newsletter", visitor_copy["payload"]["text"])
+        self.assertTrue(visitor_copy["payload"]["headers"]["List-Unsubscribe"].startswith("<https://api.fayfort.com/public/newsletter/unsubscribe/one-click?token="))
+        listed = self.client.get("/platform/newsletters", headers=AUTH).json()
+        self.assertEqual(listed["visitor_subscribers"]["confirmed"], 2)
+        self.assertEqual(self.client.post("/public/newsletter/unsubscribe", json={"token": subscriber["unsubscribe_token"]}).status_code, 200)
+        self.assertEqual(subscriber["status"], "unsubscribed")
+
+    def test_visitor_newsletter_rows_carry_their_unsubscribe_headers(self):
+        sent = []
+        row = {"id": "v1", "category": "newsletter", "to_email": "v@example.com", "attempts": 1,
+               "payload": {"subject": "S", "html": "<p>x</p>", "text": "x",
+                           "headers": {"List-Unsubscribe": "<https://a/b>", "X-Evil": "1"}}}
+        self.db.rows["email_outbox"].append(row)
+        sender.deliver(row, switches={c: True for c in sender.CATEGORIES},
+                       send=lambda **kw: sent.append(kw) or "msg")
+        self.assertEqual(sent[0]["headers"], {"List-Unsubscribe": "<https://a/b>"})
 
     def test_newsletter_test_goes_to_the_admin_only(self):
         letter = self.client.post("/platform/newsletters", headers=AUTH,

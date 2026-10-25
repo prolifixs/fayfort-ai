@@ -19,8 +19,19 @@ import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
 // Member app styles (tokens are loaded first in main.tsx).
 import "./member/member.css";
 import { FayfortLoader } from "./brand/FayfortLogo";
+import { ConsentLayer } from "./consent/ConsentLayer";
 
+/** Every app.fayfort.com page, plus the cookie banner (one choice shared with fayfort.com). */
 export function App() {
+  return (
+    <>
+      <AppRoutes />
+      <ConsentLayer />
+    </>
+  );
+}
+
+function AppRoutes() {
   if (window.location.pathname === "/operations")
     return (
       <StaffRoute>

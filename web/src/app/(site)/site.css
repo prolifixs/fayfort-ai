@@ -236,3 +236,15 @@
   .review-more { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .review-card { transition: none; } .review-card:hover { transform: none; } }
+
+/* Footer newsletter strip and the newsletter page (2026-10-25) */
+.footer-newsletter { align-items: center; border-bottom: 1px solid var(--line); display: grid; gap: 16px 40px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); padding-block: 34px; }
+.footer-newsletter span { color: var(--pink); display: block; font-size: 12px; font-weight: 750; letter-spacing: .12em; margin-bottom: 6px; text-transform: uppercase; }
+.footer-newsletter p { font-family: var(--serif); font-size: 22px; line-height: 1.3; margin: 0; }
+.footer-newsletter .ffn-fine { color: var(--on-dark-muted); font-family: var(--sans); font-size: 12.5px; }
+.footer-newsletter { border-bottom-color: rgba(195, 202, 227, .16); }
+.newsletter-status { display: grid; gap: 14px; max-width: 560px; }
+.newsletter-status h2 { font-family: var(--serif); font-size: 30px; font-weight: 400; margin: 0; }
+.newsletter-status p { margin: 0; }
+.newsletter-status button.button { border: 0; cursor: pointer; font: inherit; font-weight: 750; }
+@media (max-width: 760px) { .footer-newsletter { grid-template-columns: 1fr; } .footer-newsletter p { font-size: 19px; } }

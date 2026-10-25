@@ -34,6 +34,7 @@ import { claimPendingSiteChat } from "./siteChatCarryOver";
 import { CHAT_TOOLS, chatToolLabelsVisible, type ChatToolKey } from "./chatTools";
 import { ToolsPanel, toolFromUrl, type ToolKey } from "./ToolsPanel";
 import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, type ProductRef } from "./productChat";
+import { VisitorPopups } from "../consent/VisitorPopups";
 
 type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "tools";
 const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "tools"];
@@ -935,6 +936,7 @@ export function MemberChatPage() {
         ) : (
           <p role="status">{error || "Checking verified member access…"}</p>
         )}
+        {!authLoading && !token && <VisitorPopups />}
       </main>
     );
   }

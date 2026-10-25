@@ -14,6 +14,7 @@ import { MemberPlanComparison } from "./MemberAccountDialogs";
 import { PlanBilling } from "./PlanBilling";
 import { useMemberPlan } from "./membershipApi";
 import { MemberIdentityForm } from "./MemberIdentity";
+import { CookieSettingsLink } from "../consent/CookieBanner";
 
 /** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
 export function MemberSettingsPanel({
@@ -187,6 +188,15 @@ export function MemberSettingsPanel({
         <p className="member-settings-moved">
           Consultations, the tour guide, the supplier directory and supplier contacts are in{" "}
           <a href="/member/chat?panel=tools">Tools</a>.
+        </p>
+      </section>
+      <section className="member-settings-section" aria-labelledby="member-settings-privacy">
+        <h2 id="member-settings-privacy">Privacy</h2>
+        <p>
+          Choose which cookies FayFort may use on this browser. <CookieSettingsLink className="text-button" /> ·{" "}
+          <a className="text-button" href="https://www.fayfort.com/cookies" target="_blank" rel="noreferrer">
+            Cookie policy
+          </a>
         </p>
       </section>
       <section className="member-settings-section" aria-labelledby="member-settings-signin">

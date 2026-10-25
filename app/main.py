@@ -818,6 +818,8 @@ from app.workforce.router import create_workforce_router
 app.include_router(create_workforce_router())
 from app.mailer.router import create_email_router
 app.include_router(create_email_router())
+from app.mailer.subscribers import create_public_newsletter_router
+app.include_router(create_public_newsletter_router())
 from app.commerce.member_router import create_member_commerce_router
 from app.commerce.admin_router import create_admin_commerce_router
 from app.commerce.webhooks import create_shopify_webhook_router

@@ -8,6 +8,7 @@ import { SetupScreen } from "../SetupScreen";
 import { ProductMediaPreview } from "../workspace/DirectoryPages";
 import { MemberRequestsPanel } from "./MemberRequestsPanel";
 import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
+import { VisitorPopups } from "../consent/VisitorPopups";
 
 export function MemberProductsPage() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -121,10 +122,13 @@ export function MemberProductsPage() {
         {authLoading ? (
           <FayfortLoader label="Checking your member sign-in…" />
         ) : !accessToken ? (
-          <p role="status">
-            Sign in to a verified member account to browse and save products.{" "}
-            <a href="/member/account">Member sign in</a>
-          </p>
+          <>
+            <p role="status">
+              Sign in to a verified member account to browse and save products.{" "}
+              <a href="/member/account">Member sign in</a>
+            </p>
+            <VisitorPopups />
+          </>
         ) : !verified ? (
           <p role="status">{error || "Checking verified member access…"}</p>
         ) : (

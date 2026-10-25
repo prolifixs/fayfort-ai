@@ -86,8 +86,8 @@ def notification_email(*, category: str, title: str, body: str, url: str,
     return RenderedEmail(subject=subject, html=html_body, text=text)
 
 
-def newsletter_email(*, subject: str, body_text: str, unsubscribe_url: str | None) -> RenderedEmail:
-    footer = "You're getting this because you have a FayFort member account."
+def newsletter_email(*, subject: str, body_text: str, unsubscribe_url: str | None,
+                     footer: str = "You're getting this because you have a FayFort member account.") -> RenderedEmail:
     html_body = shell(heading=subject, intro_html=text_to_html_paragraphs(body_text), button_label=None,
                       button_url=None, footer_note=footer, unsubscribe_url=unsubscribe_url)
     text = f"{subject}\n\n{body_text.strip()}\n\n{footer}"

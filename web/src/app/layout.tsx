@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
+import CookieBanner from '../consent/CookieBanner'
+import MarketingPixels from '../consent/MarketingPixels'
+import VisitorPopups from '../consent/VisitorPopups'
 
 // Public FAYFORT site (fayfort.com). The member and staff app lives in ../dashboard (app.fayfort.com);
 // the old enterprise providers (auth, Stripe, toasts) were not carried over — see web/README.md.
@@ -18,6 +21,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         {children}
         <Analytics />
+        {/* Cookie choice first; marketing pixels only after consent; visitor popups only once the choice is made. */}
+        <CookieBanner />
+        <MarketingPixels />
+        <VisitorPopups />
       </body>
     </html>
   )

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.config.settings import settings
 from app.database.client import supabase
 from app.directory.identity import trusted_platform_admin
+from app.mailer import subscribers
 from app.mailer.render import newsletter_email
 from app.mailer.resend_client import EmailSendError, delivery_configured, send_email
 from app.mailer.sender import CATEGORIES, MEMBER_CATEGORIES, member_preferences, now_utc
@@ -262,7 +263,12 @@ def create_email_router() -> APIRouter:
                 bucket[item["status"]] = bucket.get(item["status"], 0) + 1
         for row in rows:
             row["delivery"] = delivered.get(row["id"], {})
-        return {"newsletters": rows}
+        try:
+            visitors = subscribers.counts()
+        except Exception:
+            logger.warning("Newsletter subscriber counts could not be read", exc_info=True)
+            visitors = None
+        return {"newsletters": rows, "visitor_subscribers": visitors}
 
     @router.post("/platform/newsletters", status_code=201)
     def create_newsletter(payload: NewsletterInput, authorization: str | None = Header(default=None)):
@@ -300,7 +306,10 @@ def create_email_router() -> APIRouter:
         require_admin(authorization)
         row = draft(str(newsletter_id))
         rendered = newsletter_email(subject=row["subject"], body_text=row["body_text"], unsubscribe_url="#unsubscribe")
-        return {"subject": rendered.subject, "html": rendered.html, "recipients": len(newsletter_recipients())}
+        members = len(newsletter_recipients())
+        visitors = len(subscribers.visitor_recipients())
+        return {"subject": rendered.subject, "html": rendered.html, "recipients": members + visitors,
+                "members": members, "visitors": visitors, "daily_limit": 100}
 
     @router.post("/platform/newsletters/{newsletter_id}/test")
     def test_newsletter(newsletter_id: UUID, authorization: str | None = Header(default=None)):
@@ -329,12 +338,13 @@ def create_email_router() -> APIRouter:
         if not delivery_configured() or not settings.EMAIL_DELIVERY_ENABLED:
             raise HTTPException(status_code=409, detail="Email delivery is off on the server, so nothing would be sent.")
         recipients = newsletter_recipients()
-        if not recipients:
-            raise HTTPException(status_code=409, detail="No subscribed members to send to.")
+        visitors = subscribers.visitor_recipients()
+        if not recipients and not visitors:
+            raise HTTPException(status_code=409, detail="No subscribers to send to.")
         # Claim the newsletter first so a double click can't send it twice.
         claimed = (supabase.table("newsletters").update({
             "status": "sending", "sent_by": admin["user_id"], "sent_at": now_utc().isoformat(),
-            "recipient_count": len(recipients),
+            "recipient_count": len(recipients) + len(visitors),
         }).eq("id", str(newsletter_id)).eq("status", "draft").execute().data or [])
         if not claimed:
             raise HTTPException(status_code=409, detail="This newsletter was already sent.")
@@ -344,9 +354,13 @@ def create_email_router() -> APIRouter:
                  "newsletter_id": str(newsletter_id)}
                 for member_id in recipients[start:start + 500]
             ], on_conflict="newsletter_id,member_id", ignore_duplicates=True).execute()
+        # Visitors who subscribed on fayfort.com (members among them already got the member copy above).
+        subscribers.queue_newsletter(row, visitors)
         supabase.table("newsletters").update({"status": "sent"}).eq("id", str(newsletter_id)).execute()
-        _audit(admin["user_id"], "newsletter_sent", {"newsletter_id": str(newsletter_id), "recipients": len(recipients)})
-        return {"recipients": len(recipients)}
+        total = len(recipients) + len(visitors)
+        _audit(admin["user_id"], "newsletter_sent", {"newsletter_id": str(newsletter_id), "recipients": total,
+                                                     "visitors": len(visitors)})
+        return {"recipients": total, "members": len(recipients), "visitors": len(visitors)}
 
     # ---- Members ----------------------------------------------------------------------------
 

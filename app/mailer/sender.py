@@ -166,6 +166,9 @@ def deliver(row: dict, *, switches: dict[str, bool], send: Callable[..., str] = 
                 return _skip(row, "nothing to send")
             rendered = RenderedEmail(subject=payload.get("subject", "FayFort"), html=payload["html"],
                                      text=payload.get("text", ""))
+            extra = payload.get("headers")
+            if isinstance(extra, dict):
+                headers = {str(k): str(v) for k, v in extra.items() if k in ("List-Unsubscribe", "List-Unsubscribe-Post")}
         message_id = send(to=to, subject=rendered.subject, html=rendered.html, text=rendered.text,
                           headers=headers or None, idempotency_key=f"fayfort-outbox-{row['id']}")
         _update(row["id"], {"status": "sent", "subject": rendered.subject[:200], "sent_at": now_utc().isoformat(),

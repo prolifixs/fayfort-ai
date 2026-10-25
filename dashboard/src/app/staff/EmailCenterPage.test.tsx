@@ -42,9 +42,9 @@ beforeEach(() => {
       return ok({ newsletter: letter }, 201);
     }
     if (url.endsWith("/platform/newsletters/n1") && method === "PUT") return ok({ newsletter: { ...letters[0], ...JSON.parse(String(init?.body)) } });
-    if (url.endsWith("/platform/newsletters/n1/preview")) return ok({ subject: "s", html: "<html><body>Preview body</body></html>", recipients: 42 });
+    if (url.endsWith("/platform/newsletters/n1/preview")) return ok({ subject: "s", html: "<html><body>Preview body</body></html>", recipients: 42, members: 40, visitors: 2 });
     if (url.endsWith("/platform/newsletters/n1/test")) return ok({ sent_to: "admin@example.com" });
-    if (url.endsWith("/platform/newsletters/n1/send")) return ok({ recipients: 42 });
+    if (url.endsWith("/platform/newsletters/n1/send")) return ok({ recipients: 42, members: 40, visitors: 2 });
     if (url.endsWith("/members/me/email-preferences"))
       return ok({ preferences: { conversations: method === "PUT" ? false : true, fulfillment: true, notifications: true, newsletter: true } });
     if (url.endsWith("/email/unsubscribe")) return ok({ unsubscribed: [JSON.parse(String(init?.body)).category] });
@@ -104,13 +104,13 @@ describe("newsletter", () => {
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hello members\n\nNew sourcing trips." } });
     fireEvent.click(screen.getByRole("button", { name: "Send a test to me" }));
     expect(await screen.findByText("Test sent to admin@example.com.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Send to members…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send to subscribers…" }));
     const confirm = await screen.findByRole("alertdialog", { name: "Confirm newsletter send" });
-    expect(confirm).toHaveTextContent("to 42 members now");
+    expect(confirm).toHaveTextContent("to 42 people (40 members, 2 newsletter sign-ups) now");
     expect(screen.getByTitle("Newsletter preview")).toHaveAttribute("srcdoc", expect.stringContaining("Preview body"));
     expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/send"))).toBe(false);
     fireEvent.click(within(confirm).getByRole("button", { name: "Send to 42" }));
-    expect(await screen.findByText(/Sending to 42 members/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sending to 42 subscribers/)).toBeInTheDocument();
     const send = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/platform/newsletters/n1/send"));
     expect(send?.[1]).toMatchObject({ method: "POST" });
   });

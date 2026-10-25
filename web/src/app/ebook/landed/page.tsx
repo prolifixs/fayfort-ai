@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion'
 import { ArrowDown, ArrowRight, Check, ClipboardCheck, Factory, MapPin, PackageSearch, RotateCcw, SearchCheck, ShieldCheck, Store, X } from 'lucide-react'
 import ShopifyBuyButton from '../../components/ShopifyBuyButton'
+import { CookieSettingsLink } from '../../../consent/CookieBanner'
 import DirectoryCarousel from './DirectoryCarousel'
 import { FAYFORT_INSTAGRAM, JOIN_URL, SOURCING_ENQUIRY_URL, SUPPORT_EMAIL } from '@/config/contact'
 import { BASEROW_CLOSES, CHECKOUT_URL, PRICE_USD, PRICE_WAS_USD, formatPrice } from './config'
@@ -303,7 +304,7 @@ export default function LandedPage() {
         <div><a className="brand footer-brand" href="#top"><span className="brand-mark">L</span><span><strong>LANDED</strong><small>by FayFay</small></span></a><p>FAYFORT International Trading<br />Published by The Hard Way Press</p></div>
         <div><span>Contact</span><a href={`mailto:${SUPPORT_EMAIL}`}>Corrections: {SUPPORT_EMAIL}</a><a href={SOURCING_ENQUIRY_URL}>Sourcing enquiries</a><a href={`https://instagram.com/${FAYFORT_INSTAGRAM}`} target="_blank" rel="noreferrer">Instagram: @{FAYFORT_INSTAGRAM}</a></div>
         <div><span>Legal</span><a href="/terms-ebooks">Access &amp; Licence Terms</a><a href="/terms-ebooks#refunds">Refund Policy</a><a href="/terms">Terms</a><a href="/about-us">About FAYFORT</a></div>
-      </div><div className="shell footer-bottom"><p>© 2026 FayFay / FAYFORT International Trading. WondaTechnologies LV, Nevada.</p></div></footer>
+      </div><div className="shell footer-bottom"><p>© 2026 FayFay / FAYFORT International Trading. WondaTechnologies LV, Nevada.</p><p><a href="/cookies">Cookies</a> · <CookieSettingsLink /></p></div></footer>
       <AnimatePresence>
         {showMobileCta && <motion.a
           className="mobile-buy"

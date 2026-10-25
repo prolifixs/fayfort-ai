@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { FAYFAY_SOCIAL_HANDLE, FAYFORT_INSTAGRAM, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
 import { FayfortLogo } from '../components/brand/FayfortLogo'
+import { CookieSettingsLink } from '../../consent/CookieBanner'
+import NewsletterForm from '../../consent/NewsletterForm'
 
 /** The route strip: Guangzhou's airport code, a dashed flight path with a plane, and "you". Drawn in once on load. */
 export function RouteStrip({ to = 'You', toNote = 'Delivered' }: { to?: string; toNote?: string }) {
@@ -109,7 +111,23 @@ export function GoFooter() {
         FayFay @{FAYFAY_SOCIAL_HANDLE}
       </a>
       <p>FAYFORT International Trading, Guangzhou</p>
+      <p className="go-foot-legal">
+        <a href="/cookies">Cookies</a> · <CookieSettingsLink />
+      </p>
     </footer>
+  )
+}
+
+/** Newsletter sign-up on the /go page. */
+export function GoNewsletter() {
+  return (
+    <section className="go-newsletter" aria-labelledby="go-newsletter-title">
+      <h2 id="go-newsletter-title" className="go-section-title">
+        New finds, every week
+      </h2>
+      <p>The best products we source in China, plus early access to our giveaways.</p>
+      <NewsletterForm source="go" className="is-dark" />
+    </section>
   )
 }
 

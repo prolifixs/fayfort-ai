@@ -3,7 +3,7 @@ import { FAYFAY_SOCIAL_HANDLE } from '@/config/contact'
 import { PRICE_USD, PRICE_WAS_USD, formatPrice } from '../ebook/landed/config'
 import { Countdown } from './Countdown'
 import { getGoData, money } from './data'
-import { GoHeader, ICONS, RouteStrip, SocialLinks, Ticket } from './GoParts'
+import { GoHeader, GoNewsletter, ICONS, RouteStrip, SocialLinks, Ticket } from './GoParts'
 
 export const revalidate = 300
 
@@ -96,6 +96,8 @@ export default async function GoPage() {
           stub="Quoted"
         />
       </nav>
+
+      <GoNewsletter />
 
       <SocialLinks />
     </>
