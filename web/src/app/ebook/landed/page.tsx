@@ -7,8 +7,11 @@ import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring, useTra
 import { ArrowDown, ArrowRight, Check, ClipboardCheck, Factory, MapPin, PackageSearch, RotateCcw, SearchCheck, ShieldCheck, Store, X } from 'lucide-react'
 import ShopifyBuyButton from '../../components/ShopifyBuyButton'
 import DirectoryCarousel from './DirectoryCarousel'
-import { FAYFORT_INSTAGRAM, SOURCING_ENQUIRY_URL, SUPPORT_EMAIL } from '@/config/contact'
-import { CHECKOUT_URL, PRICE_USD, PRICE_WAS_USD, formatPrice } from './config'
+import { FAYFORT_INSTAGRAM, JOIN_URL, SOURCING_ENQUIRY_URL, SUPPORT_EMAIL } from '@/config/contact'
+import { BASEROW_CLOSES, CHECKOUT_URL, PRICE_USD, PRICE_WAS_USD, formatPrice } from './config'
+
+// Sign-up for LANDED buyers: the dashboard explains their free directory addresses (?from=landed).
+const LANDED_SIGNUP = `${JOIN_URL}?from=landed`
 
 const failures = [
   {
@@ -63,7 +66,8 @@ const included = [
 
 const faqs: [string, ReactNode][] = [
   ['Is this a physical book?', 'No. You get the PDF immediately, plus access to the live directory. A paperback is coming.'],
-  ['What does “live directory” actually mean?', 'A web-based version of the address list that gets corrected and added to continuously. Every entry carries the date it was compiled and its verification status. The book is a snapshot of it.'],
+  ['What does “live directory” actually mean?', 'A web-based version of the address list that gets corrected and added to continuously. Every entry carries the date it was compiled and its verification status. The book is a snapshot of it. It lives in your free FayFort account.'],
+  ['I bought LANDED before. What happens to my Baserow access?', <>The live directory has moved from the Baserow tables to FayFort. Every entry you have in Baserow is on FayFort, including the ones marked as not yet confirmed. The Baserow tables and their passwords stop working on {BASEROW_CLOSES}. <a href={LANDED_SIGNUP}>Create a free FayFort account</a> with the email you bought LANDED with and the addresses unlock for you automatically. Bought with a different email? Claim your access in the Supplier directory with your order number.</>],
   ['Do I need to speak Chinese?', 'No. Every entry we have carries the address in Chinese characters. Screenshot it and show it to your driver — that is the single most practical thing in the directory.'],
   ['How current is it?', 'Directory data compiled to 15 August 2026, and updated continuously after that. Every entry shows its own date. Anything older than a year should be treated as a strong lead rather than a fact, and the directory tells you which is which.'],
   ['Are the addresses guaranteed?', 'No, and we say so throughout. Markets move and stalls change hands. Confirm before you travel — never book a flight or commit money on the strength of an entry without checking it. Where we could not confirm something, the entry says so.'],
@@ -126,6 +130,12 @@ export default function LandedPage() {
   return (
     <main id="top">
       <a className="skip-link" href="#content">Skip to content</a>
+      <div className="landed-notice" role="note">
+        <div className="shell landed-notice-inner">
+          <p><strong>The live directory has moved to FayFort.</strong> Same entries as the Baserow tables, kept up to date there. The Baserow tables close on {BASEROW_CLOSES}.</p>
+          <a href={LANDED_SIGNUP}>Bought LANDED? Sign up free <ArrowRight size={14} aria-hidden="true" /></a>
+        </div>
+      </div>
       <header className="site-header"><div className="shell header-inner">
         <a className="brand" href="#top" aria-label="Landed home"><span className="brand-mark">L</span><span><strong>LANDED</strong><small>by FayFay</small></span></a>
         <a className="header-cta" href="#checkout">{directoryCta} <ArrowRight size={15} /></a>
@@ -245,6 +255,11 @@ export default function LandedPage() {
               <p>So this isn’t a file. Your purchase includes access to the live directory — the full, searchable, continuously corrected version. Entries are added as they are verified. Corrections are logged with the date they were made. When a reader tells us a market has moved, it gets checked and published, and the next person doesn’t lose the morning that reader lost.</p>
               <p>That is also why access is personal and not transferable. Someone passing you a copied file is passing you a photograph of somewhere that has probably moved.</p>
               <ul className="tick-list">{directoryFeatures.map((feature) => <li key={feature}><Check />{feature}</li>)}</ul>
+              <div className="landed-move">
+                <p className="landed-move-kicker">Already a reader?</p>
+                <p>The live directory now lives on FayFort. Every entry from the Baserow tables is there, and the Baserow tables close on {BASEROW_CLOSES}. Sign up with the email you bought LANDED with and the addresses unlock for you automatically.</p>
+                <a className="landed-move-cta" href={LANDED_SIGNUP}>Create your free FayFort account <ArrowRight size={15} aria-hidden="true" /></a>
+              </div>
             </div>
             <figure className="directory-figure">
               <motion.div {...reveal}><DirectoryCarousel /></motion.div>

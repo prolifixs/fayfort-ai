@@ -55,7 +55,7 @@ export function ToolsPanel({ accessToken, initial }: { accessToken: string; init
     } catch {
       /* the address bar is a convenience */
     }
-    window.setTimeout(() => document.getElementById("member-tool-view")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+    window.setTimeout(() => document.getElementById("member-tool-view")?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 30);
   }
   return (
     <section className="member-workspace-panel member-tools" aria-labelledby="member-tools-title">

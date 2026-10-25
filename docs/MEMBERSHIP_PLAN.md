@@ -136,3 +136,37 @@ Close, Escape or a click outside.
 - **Pending completion** (shared with the virtual consultation): choosing a date from a live calendar and team availability. Both screens say dates are confirmed by the team in the chat.
 
 **Tools** (member app): the left menu's "Supplier directory" became **Tools**, one page with Virtual consultation, Tour guide in China, Supplier directory and Supplier contacts (contact credits). Consultation and contacts moved out of Settings (Settings links to Tools). Deep links: `/member/chat?panel=tools&tool=consultation|tour|directory|contacts`; old `?panel=directory` links open Tools on the directory.
+
+## 11. LANDED buyers move from Baserow to FayFort (owner request, 2026-10-25)
+
+LANDED was sold with password-protected Baserow views as its live directory, sent in the Shopify order email. The Baserow
+tables close on **30 November 2026**; the directory lives on FayFort (the Baserow tables already sync into it by webhook).
+
+**Owner decisions (2026-10-25)**
+- LANDED owners get the **address** of every market and service provider in the **25 October 2026 snapshot**, free, including
+  entries not yet confirmed. Supplier contacts (names, phone/WeChat, stall) and anything added after the snapshot use contact
+  credits like for everyone else.
+- Every directory record is listed for every member with its verification label (Verified / Not yet confirmed / Sources
+  disagree). Before this, services, hotels and restaurants showed only verified records.
+- Everyone bought through Shopify; no buyers outside it.
+
+**How it works**
+- `public.landed_owners`: one row per Shopify order of the LANDED product (matched by product handle `landed`, or a line item
+  title starting "LANDED"). Filled by a one-off "Read buyers from Shopify" and then by the order webhooks. Refunded or voided
+  orders lose access.
+- `public.landed_snapshot`: the (record type, source_key) pairs in the snapshot, written by the migration. Keyed by source_key
+  so the Baserow sync updating a row keeps it in the snapshot.
+- Linking: a member whose confirmed email matches a purchase email is linked automatically the first time they open the
+  directory. Otherwise they claim with order number and purchase email (Tools, Supplier directory). An order linked to
+  another account is refused.
+- API (app/membership/landed.py): `GET /members/landed`, `POST /members/landed/claim`; platform admins: `GET /platform/landed`,
+  `POST /platform/landed/sync`, `POST /platform/landed/send` (`kind` notice or reminder, `dry_run` true by default).
+- Emails: Control Center, Emails, LANDED buyers. The notice ("Your LANDED directory is moving to FayFort") once per buyer;
+  the reminder only to buyers who haven't signed up. At most 95 a day (Resend free plan); the rest go the next day.
+  Sent through the email outbox as service notices; replies go to support@.
+- fayfort.com: notice bar and "Already a reader?" box on the LANDED page, a FAQ entry, Ebook and Directory Terms sections 4
+  and 5 rewritten (dated 25 October 2026). Sign-up at `/member/signup?from=landed` explains the free addresses.
+
+**Owner to do**
+- Change the Shopify order email for LANDED so new buyers are sent to FayFort sign-up instead of Baserow passwords.
+- Put a short note at the top of each shared Baserow view, and switch the views off on 30 November.

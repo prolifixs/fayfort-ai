@@ -85,6 +85,42 @@ describe("member plan perks", () => {
     expect(screen.getByText("wx-li")).toBeInTheDocument();
   });
 
+  it("LANDED owners see the address free and others can claim with their order number", async () => {
+    let owner = false;
+    const claims: unknown[] = [];
+    const landedStatus = () => ({ owner, order_name: owner ? "#1001" : null, snapshot_date: "25 October 2026",
+      baserow_closes: "30 November 2026", includes: "" });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/members/landed/claim")) {
+        claims.push(JSON.parse(String(init?.body)));
+        owner = true;
+        return ok(landedStatus());
+      }
+      if (url.endsWith("/members/landed")) return ok(landedStatus());
+      if (url.includes("/members/directory?"))
+        return ok({
+          results: [owner ? { ...market, verified: false, verification: "unknown", landed: true, private: { address_en: "12 Wig Road" } }
+            : { ...market, verified: false, verification: "unknown" }],
+          contacts,
+        });
+      return ok({});
+    });
+    render(<DirectoryPanel accessToken="t" />);
+    const list = await screen.findByRole("list");
+    expect(within(list).getByText("Not yet confirmed")).toBeInTheDocument();
+    expect(screen.queryByText("12 Wig Road")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Claim your access" }));
+    fireEvent.change(screen.getByLabelText("Order number"), { target: { value: "#1001" } });
+    fireEvent.change(screen.getByLabelText("Purchase email"), { target: { value: "me@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Claim access" }));
+    expect(await screen.findByText(/LANDED owner · order #1001/)).toBeInTheDocument();
+    expect(claims).toEqual([{ order_name: "#1001", email: "me@example.com" }]);
+    expect(await screen.findByText("12 Wig Road")).toBeInTheDocument();
+    expect(screen.getByText("Free with LANDED")).toBeInTheDocument();
+    expect(screen.getByText("Stall and contact details are locked.")).toBeInTheDocument();
+  });
+
   it("books a paid consultation and shows the payment link", async () => {
     const booked: unknown[] = [];
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {

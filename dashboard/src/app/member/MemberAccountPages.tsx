@@ -39,6 +39,8 @@ export function MemberAccountPage() {
   );
   // Arriving from FayFort AI on fayfort.com (?site_chat=…): that conversation follows the member into their chat.
   const [siteChatCode] = useState(() => rememberSiteChatCode());
+  // Arriving from the LANDED page or the LANDED buyer email (?from=landed).
+  const [fromLanded] = useState(() => new URLSearchParams(window.location.search).get("from") === "landed");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState<PasswordPair>({ password: "", confirm: "" });
@@ -194,6 +196,12 @@ export function MemberAccountPage() {
         </p>
         {siteChatCode && !profile && (
           <p className="quiet-note site-chat-carry-note">Your chat with FayFort AI will be waiting in your FayFort chat.</p>
+        )}
+        {fromLanded && !profile && (
+          <p className="quiet-note landed-signup-note">
+            Bought LANDED? Use the email you bought it with and the addresses from your LANDED directory unlock
+            automatically. Bought with another email? You can claim your access with your order number once you're in.
+          </p>
         )}
         {!profile && (
           <>

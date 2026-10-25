@@ -795,6 +795,18 @@ article.shop-tile,
 .member-directory-fields dt{color:var(--color-muted);font-size:var(--text-2xs);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .member-directory-fields dd{margin:2px 0 0;color:var(--color-text);font-size:var(--text-sm);overflow-wrap:anywhere}
 .member-directory-private{display:grid;gap:10px;padding:10px;border-radius:var(--radius-sm);background:var(--color-surface)}
+.member-directory-badge.unconfirmed{color:var(--color-muted);font-weight:600}
+.member-directory-private.is-landed{gap:6px}
+.member-directory-landed{justify-self:start;padding:2px 8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--color-accent) 14%,var(--color-bg));color:var(--color-accent);font-size:var(--text-2xs);font-weight:700}
+.member-landed{display:grid;gap:6px;padding:12px 14px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg);font-size:var(--text-sm)}
+.member-landed.is-owner{border-color:color-mix(in srgb,var(--color-accent) 40%,var(--color-border-subtle));background:color-mix(in srgb,var(--color-accent) 7%,var(--color-bg))}
+.member-landed strong{font-size:var(--text-base)}
+.member-landed span{color:var(--color-muted);line-height:1.45}
+.member-landed-ask{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0}
+.member-landed-form{display:grid;gap:10px}
+.member-landed-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.member-landed-fields label{display:grid;gap:4px;font-weight:600}
+.member-landed-actions{display:flex;justify-content:flex-end;gap:8px}
 .member-directory-locked{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-muted);font-size:var(--text-sm)}
 .member-directory-notice{margin:0;padding:10px 12px;border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-warning);font-size:var(--text-sm)}
 .member-rank-next{display:grid;gap:6px;margin:10px 0 2px}

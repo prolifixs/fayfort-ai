@@ -517,3 +517,16 @@ h1 em, h2 em { color: var(--pink); font-weight: 400; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* LANDED: the live directory moved from Baserow to FayFort (2026-10-25) */
+.landed-notice { background: var(--ink); color: var(--on-dark); font-size: 14px; line-height: 1.45; }
+.landed-notice-inner { align-items: center; display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; padding-block: 10px; }
+.landed-notice p { margin: 0; }
+.landed-notice strong { color: #fff; }
+.landed-notice a { align-items: center; color: var(--pink-light); display: inline-flex; font-weight: 700; gap: 6px; min-height: 32px; white-space: nowrap; }
+.landed-notice a:hover { color: #fff; }
+.landed-move { border: 1px solid rgba(195, 202, 227, .28); border-left: 3px solid var(--pink); display: grid; gap: 10px; margin-top: 28px; padding: 18px 20px; }
+.landed-move p { margin: 0; }
+.landed-move-kicker { color: var(--pink-light); font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.landed-move-cta { align-items: center; color: #fff; display: inline-flex; font-weight: 700; gap: 8px; text-decoration: underline; text-underline-offset: 4px; }
+.landed-move-cta:hover { color: var(--pink-light); }

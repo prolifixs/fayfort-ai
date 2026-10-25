@@ -7,6 +7,7 @@ import {
   type ContactStatus,
   type DirectoryRecord,
   type DirectoryType,
+  type LandedStatus,
   type MemberPlanSummary,
   formatMoney,
 } from "./membershipApi";
@@ -257,6 +258,97 @@ function Fields({ values, skip }: { values: Record<string, unknown>; skip?: Set<
   );
 }
 
+function verificationBadge(record: DirectoryRecord) {
+  if (record.verified) return <small className="member-directory-badge">Verified</small>;
+  if (record.verification === "conflicting") return <small className="member-directory-badge unconfirmed">Sources disagree</small>;
+  return <small className="member-directory-badge unconfirmed">Not yet confirmed</small>;
+}
+
+/** LANDED buyers (app/membership/landed.py): owners see the LANDED snapshot's addresses free; others can claim. */
+export function LandedAccessCard({ accessToken, onChange }: { accessToken: string; onChange?: (owner: boolean) => void }) {
+  const [status, setStatus] = useState<LandedStatus | null>(null);
+  const [open, setOpen] = useState(false);
+  const [orderName, setOrderName] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    apiRequest<LandedStatus>("/members/landed", accessToken)
+      .then((result) => live && setStatus(result))
+      .catch(() => live && setStatus(null));
+    return () => {
+      live = false;
+    };
+  }, [accessToken]);
+  async function claim(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<LandedStatus>("/members/landed/claim", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ order_name: orderName, email }),
+      });
+      setStatus(result);
+      setOpen(false);
+      onChange?.(result.owner);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your LANDED access could not be claimed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!status) return null;
+  if (status.owner) {
+    return (
+      <div className="member-landed is-owner" role="status">
+        <strong>LANDED owner{status.order_name ? ` · order ${status.order_name}` : ""}</strong>
+        <span>
+          The addresses from your LANDED directory are unlocked for you. Supplier contacts, and entries added after{" "}
+          {status.snapshot_date}, use contact credits.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="member-landed">
+      {open ? (
+        <form className="member-landed-form" onSubmit={(event) => void claim(event)}>
+          <strong>Claim your LANDED access</strong>
+          <span>Enter the order number from your LANDED receipt and the email you bought it with.</span>
+          <div className="member-landed-fields">
+            <label>
+              Order number
+              <input value={orderName} required maxLength={40} placeholder="#1001" onChange={(event) => setOrderName(event.target.value)} />
+            </label>
+            <label>
+              Purchase email
+              <input type="email" value={email} required maxLength={320} onChange={(event) => setEmail(event.target.value)} />
+            </label>
+          </div>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="member-landed-actions">
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button className="primary-button" disabled={busy}>
+              {busy ? "Checking…" : "Claim access"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="member-landed-ask">
+          <span>Bought the LANDED book? Its directory addresses are free for you.</span>
+          <button type="button" className="text-button" onClick={() => setOpen(true)}>
+            Claim your access
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Supplier directory panel in the member chat: search, unlock, and "My contacts". */
 export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; onClose?: () => void }) {
   const [type, setType] = useState<DirectoryType | "mine">("market");
@@ -315,7 +407,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
       <div className="member-directory-header">
         <div>
           <h2>Supplier directory</h2>
-          <p>Verified markets, suppliers and services in China. Unlock a record to see its address and contacts.</p>
+          <p>Markets, suppliers and services in China. Entries we haven't confirmed yet are marked. Unlock a record to see its address and contacts.</p>
         </div>
         {onClose && (
           <button type="button" className="secondary-button" onClick={onClose}>
@@ -358,6 +450,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
           <button className="primary-button">Search</button>
         </form>
       )}
+      <LandedAccessCard accessToken={accessToken} onChange={() => void search(type, query)} />
       {(type === "market" || type === "service_provider" || type === "mine") && (
         <ContactCreditsCard accessToken={accessToken} status={status} compact />
       )}
@@ -380,7 +473,7 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
             <li className={record.unlocked ? "unlocked" : undefined}>
               <div className="member-directory-title">
                 <strong>{record.title}</strong>
-                {record.verified && <small className="member-directory-badge">Verified</small>}
+                {verificationBadge(record)}
                 {record.free && <small className="member-directory-badge free">Free</small>}
               </div>
               {!!record.public.categories?.length && (
@@ -395,12 +488,20 @@ export function DirectoryPanel({ accessToken, onClose }: { accessToken: string; 
                   ))}
                 </div>
               ) : !record.unlocked ? (
+                <>
+                {record.landed && record.private && (
+                  <div className="member-directory-private is-landed">
+                    <small className="member-directory-landed">Free with LANDED</small>
+                    <Fields values={record.private} />
+                  </div>
+                )}
                 <div className="member-directory-locked">
-                  <span>Address, stall and contact details are locked.</span>
+                  <span>{record.landed ? "Stall and contact details are locked." : "Address, stall and contact details are locked."}</span>
                   <button type="button" className="primary-button" disabled={busy === record.id} onClick={() => void unlock(record)}>
                     {busy === record.id ? "Unlocking…" : unlockLabel}
                   </button>
                 </div>
+                </>
               ) : null}
             </li>
             </Fragment>

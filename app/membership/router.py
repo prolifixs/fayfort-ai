@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.commerce import shopify
 from app.commerce.member_router import _Limiter, verified_member
-from app.membership import directory, plans, ranks, service
+from app.config.settings import settings
+from app.directory.identity import trusted_platform_admin
+from app.membership import directory, landed, plans, ranks, service
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,24 @@ class UnlockInput(BaseModel):
 class RedeemInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     reward: Literal["contact_credit"]
+
+
+class LandedClaimInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    order_name: str = Field(min_length=1, max_length=40)
+    email: str = Field(min_length=3, max_length=320)
+
+
+class LandedSendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["notice", "reminder"]
+    dry_run: bool = True
+    limit: int = Field(default=landed.DAILY_SEND_LIMIT, ge=1, le=landed.DAILY_SEND_LIMIT)
+
+
+class LandedSyncInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    since: str = Field(default="2025-01-01", pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CreditInput(BaseModel):
@@ -117,6 +137,68 @@ def create_membership_router() -> APIRouter:
             return {"consultation": service.book_consultation(member_id, payload.topic)}
         except Exception as exc:
             raise _invoice_failure(exc, "Your consultation could not be booked.") from exc
+
+    # ---- LANDED owners (app/membership/landed.py) ----------------------------------------------
+    claims = _Limiter(5)
+
+    @router.get("/members/landed")
+    def landed_status(authorization: str | None = Header(default=None)):
+        member_id = verified_member(authorization)
+        try:
+            return landed.status(member_id)
+        except Exception as exc:
+            raise _fail("Your LANDED access could not be checked.", exc) from exc
+
+    @router.post("/members/landed/claim")
+    def landed_claim(payload: LandedClaimInput, authorization: str | None = Header(default=None)):
+        member_id = verified_member(authorization)
+        claims.check(member_id)
+        try:
+            return landed.claim(member_id, payload.order_name, payload.email)
+        except landed.LandedError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        except Exception as exc:
+            raise _fail("Your LANDED access could not be claimed.", exc) from exc
+
+    def _admin(authorization: str | None) -> dict:
+        admin = trusted_platform_admin(authorization)
+        if not admin:
+            raise HTTPException(status_code=403, detail="Platform administrator access is required.")
+        return admin
+
+    @router.get("/platform/landed")
+    def landed_summary(authorization: str | None = Header(default=None)):
+        _admin(authorization)
+        try:
+            return landed.summary()
+        except Exception as exc:
+            raise _fail("LANDED buyers could not be loaded.", exc) from exc
+
+    @router.post("/platform/landed/sync")
+    def landed_sync(payload: LandedSyncInput, authorization: str | None = Header(default=None)):
+        _admin(authorization)
+        if not shopify.admin_configured():
+            raise HTTPException(status_code=409, detail="Shopify isn't connected.")
+        try:
+            return {**landed.sync_from_shopify(payload.since + "T00:00:00Z"), "summary": landed.summary()}
+        except shopify.ShopifyError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except Exception as exc:
+            raise _fail("LANDED buyers could not be read from Shopify.", exc) from exc
+
+    @router.post("/platform/landed/send")
+    def landed_send(payload: LandedSendInput, authorization: str | None = Header(default=None)):
+        admin = _admin(authorization)
+        try:
+            result = landed.send_notices(payload.kind, app_url=settings.APP_PUBLIC_URL, dry_run=payload.dry_run,
+                                         limit=payload.limit)
+        except landed.LandedError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        except Exception as exc:
+            raise _fail("LANDED emails could not be queued.", exc) from exc
+        if not payload.dry_run:
+            logger.info("LANDED %s emails queued by %s: %s", payload.kind, admin.get("user_id"), result.get("queued"))
+        return result
 
     # ---- supplier directory ------------------------------------------------------------------
     @router.get("/members/directory")

@@ -1,13 +1,17 @@
 """Supplier directory for members: everyone sees the public half of a record; the private half (address,
 stall, contact person, phone/WeChat …) is shown once the member has unlocked it. Hotels and restaurants
-are free. Unlocks go through unlock_member_contact() so a credit can't be spent twice."""
+are free. Unlocks go through unlock_member_contact() so a credit can't be spent twice.
+
+Every record is listed with its verification status, confirmed or not (owner decision, 2026-10-25: the same
+entries as the LANDED directory, unconfirmed ones flagged). LANDED owners see the address of records in the
+LANDED snapshot free (app/membership/landed.py)."""
 from __future__ import annotations
 
 import re
 from typing import Any
 
 from app.commerce.db import db, one, rows
-from app.membership import plans
+from app.membership import landed, plans
 
 RecordType = str  # "market" | "service_provider" | "hotel" | "restaurant"
 
@@ -23,20 +27,20 @@ SPEC: dict[str, dict[str, Any]] = {
         "private": ("address_en", "address_cn", "buyer_notes"),
     },
     "service_provider": {
-        "table": "directory_service_providers", "verified_only": True,
+        "table": "directory_service_providers", "verified_only": False,
         "search": ("service", "city", "ships_to"),
         "public": ("service", "city", "ships_to"),
         "private": ("company", "company_cn", "contact_name", "phone_wechat", "other_numbers", "email_qq",
                     "address_en", "address_cn", "booth", "hours"),
     },
     "hotel": {
-        "table": "directory_hotels", "verified_only": True,
+        "table": "directory_hotels", "verified_only": False,
         "search": ("area", "hotel_name", "name_cn", "address_or_nearest_metro"),
         "public": ("area", "hotel_name", "name_cn", "address_or_nearest_metro", "takes_foreigners", "tier"),
         "private": ("rough_price_per_night", "phone"),
     },
     "restaurant": {
-        "table": "directory_restaurants", "verified_only": True,
+        "table": "directory_restaurants", "verified_only": False,
         "search": ("area", "restaurant", "name_cn", "where_it_is", "food_type"),
         "public": ("area", "restaurant", "name_cn", "where_it_is", "food_type", "halal", "opening_hours"),
         "private": ("phone",),
@@ -98,13 +102,15 @@ def present(record_type: str, records: list[dict], member_id: str) -> list[dict]
     ids = [str(r["id"]) for r in records]
     free = record_type in plans.FREE_RECORD_TYPES
     unlocked = set(ids) if free else _unlocked_ids(member_id, record_type, ids)
+    landed_free = set() if free else landed.free_addresses(member_id, record_type, records)
     categories, contacts = (_market_extras(ids, with_contacts=unlocked) if record_type == "market" else ({}, {}))
     output = []
     for row in records:
         rid = str(row["id"])
         item: dict[str, Any] = {"id": rid, "record_type": record_type, "title": _title(record_type, row),
-                                "verified": row.get("verification_status") == "verified", "free": free,
-                                "unlocked": rid in unlocked,
+                                "verified": row.get("verification_status") == "verified",
+                                "verification": row.get("verification_status") or "unknown", "free": free,
+                                "unlocked": rid in unlocked, "landed": rid in landed_free,
                                 "public": {f: row.get(f) for f in spec["public"] if row.get(f) not in (None, "")}}
         if record_type == "market":
             item["public"]["categories"] = categories.get(rid, [])[:8]
@@ -112,13 +118,18 @@ def present(record_type: str, records: list[dict], member_id: str) -> list[dict]
             item["private"] = {f: row.get(f) for f in spec["private"] if row.get(f) not in (None, "")}
             if record_type == "market":
                 item["private"]["contacts"] = contacts.get(rid, [])
+        elif rid in landed_free:
+            address = {f: row.get(f) for f in landed.ADDRESS_FIELDS[record_type] if row.get(f) not in (None, "")}
+            if address:
+                item["private"] = address
         output.append(item)
     return output
 
 
 def _select_fields(record_type: str) -> str:
     spec = SPEC[record_type]
-    return ",".join(dict.fromkeys(("id", "verification_status", *spec["public"], *spec["private"])))
+    extra = ("source_key",) if record_type in landed.ADDRESS_FIELDS else ()
+    return ",".join(dict.fromkeys(("id", "verification_status", *extra, *spec["public"], *spec["private"])))
 
 
 def search(member_id: str, record_type: str, query: str, limit: int = 20) -> list[dict]:
@@ -142,7 +153,7 @@ def search(member_id: str, record_type: str, query: str, limit: int = 20) -> lis
                 clauses.append(f"id.in.({','.join(market_ids[:150])})")
         builder = builder.or_(",".join(clauses))
     found = rows(builder.limit(limit * 2).execute())
-    found.sort(key=lambda r: r.get("verification_status") != "verified")  # verified records first
+    found.sort(key=lambda r: {"verified": 0, "unknown": 1, "unverified": 2}.get(str(r.get("verification_status")), 3))
     return present(record_type, found[:limit], member_id)
 
 

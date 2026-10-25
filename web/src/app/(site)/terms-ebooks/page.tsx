@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SUPPORT_EMAIL } from '@/config/contact'
-import { PRICE_USD, PRICE_WAS_USD, formatPrice } from '../../ebook/landed/config'
+import { BASEROW_CLOSES, PRICE_USD, PRICE_WAS_USD, SNAPSHOT_DATE, formatPrice } from '../../ebook/landed/config'
 import { PageHero, revealDelay } from '../components'
 
 // The one offer: listed at the standard price, with the current launch price when a discount is running.
@@ -19,7 +19,7 @@ const email = <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
 export default function EbookTermsPage() {
   return (
     <>
-      <PageHero kicker="Legal" title="Ebook and Directory Terms" lede="Last updated: 15 August 2026" />
+      <PageHero kicker="Legal" title="Ebook and Directory Terms" lede="Last updated: 25 October 2026 (sections 4 and 5: the live directory moved to FayFort)" />
       <div className="shell prose-page legal">
         <article className="prose" data-reveal="fade" style={revealDelay(3)}>
           <p>These terms apply to our books and directory access — <strong>LANDED</strong>, and access to the <strong>FaySource</strong> directory. They apply alongside our <Link href="/terms">general Terms and Conditions</Link>. Where the two differ on anything to do with our books or directory, these terms apply.</p>
@@ -59,18 +59,20 @@ export default function EbookTermsPage() {
           <p>Payment is processed through Shopify’s checkout. We do not store your card details.</p>
 
           <h2 id="access">4. How live access is delivered</h2>
-          <p>Live access is delivered as <strong>password-protected online views of the directory</strong>.</p>
+          <p>Live access is delivered through your <strong>free FayFort account</strong> at app.fayfort.com.</p>
           <ul>
-            <li>The links and passwords are sent to the email address used at purchase</li>
-            <li>If a password changes, the new one is sent to that same address</li>
-            <li>You do not need an account with any third-party service to use it</li>
+            <li>Sign up with the email address used at purchase and your LANDED access is attached automatically</li>
+            <li>If you bought with a different email, claim your access in the Supplier directory with your order number and purchase email</li>
+            <li>Your access shows the address of every market and service provider in the directory as of {SNAPSHOT_DATE}, including entries marked as not yet confirmed</li>
+            <li>Supplier contact details, and entries added after {SNAPSHOT_DATE}, are available with contact credits</li>
           </ul>
-          <p><strong>Keep your purchase email address current.</strong> If we can’t reach you, we can’t send you a new password. Tell us at {email} if it changes.</p>
+          <p>Purchases made before the move were delivered as password-protected Baserow views. <strong>Those views close on {BASEROW_CLOSES}</strong>; the same entries are in your FayFort account.</p>
+          <p><strong>Keep your purchase email address current.</strong> It is how we link your purchase to your account. Tell us at {email} if it changes.</p>
 
           <h2 id="updates">5. Updates</h2>
           <p>The directory is <strong>continuously updated</strong>. Entries are corrected, added and dated as markets change.</p>
           <p>We don’t promise a particular number of entries, a rate of additions, or that any specific category will be filled by a given date. Some categories are named in the book as not yet covered; those are listed honestly and are being worked on.</p>
-          <p><strong>Your access includes the updates we publish to the directory.</strong> The downloadable book is a snapshot of the date it was issued.</p>
+          <p><strong>Your access includes the corrections we publish to the entries covered in section 4.</strong> The downloadable book is a snapshot of the date it was issued.</p>
 
           <h2 id="refunds">6. Refunds</h2>
           <p><strong>Downloaded files are not refundable.</strong> Once a file has been downloaded, it cannot be returned, and no refund is given. This is normal for digital goods and it is the only workable position for a product that can be copied.</p>

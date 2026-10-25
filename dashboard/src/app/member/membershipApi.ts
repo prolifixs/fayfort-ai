@@ -43,14 +43,26 @@ export type DirectoryRecord = {
   record_type: DirectoryType;
   title: string;
   verified: boolean;
+  /** verified | unknown | unverified | conflicting */
+  verification?: string;
   free: boolean;
   unlocked: boolean;
+  /** LANDED owner: the address is free (part of the LANDED snapshot). */
+  landed?: boolean;
   public: Record<string, unknown> & { categories?: string[] };
   private?: Record<string, unknown> & {
     contacts?: { contact_name?: string; phone_wechat?: string; floor_or_stall?: string; best_time?: string; verified?: boolean }[];
   };
   method?: string;
   contacts?: ContactStatus;
+};
+
+export type LandedStatus = {
+  owner: boolean;
+  order_name: string | null;
+  snapshot_date: string;
+  baserow_closes: string;
+  includes: string;
 };
 
 export function formatMoney(value: number, currency = "USD") {

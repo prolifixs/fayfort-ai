@@ -40,6 +40,11 @@ def process(topic: str, payload: dict, webhook_id: str) -> str:
             catalog.sync_one(product_id)
         elif topic in ("orders/create", "orders/updated", "orders/paid", "orders/cancelled", "orders/fulfilled"):
             service.record_order(payload)
+            try:
+                from app.membership import landed
+                landed.record_from_order(payload)
+            except Exception:
+                logger.exception("LANDED owner could not be recorded from an order")
         else:
             _mark(webhook_id, "ignored", f"topic {topic} is not handled")
             return "ignored"

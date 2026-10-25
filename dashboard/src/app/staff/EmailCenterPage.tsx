@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { relativeTime } from "./WorkforcePage";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { LandedBuyersPanel } from "./LandedBuyersPanel";
 
 type Category = "conversations" | "fulfillment" | "notifications" | "newsletter" | "account_security";
 
@@ -56,7 +57,7 @@ const CATEGORY_SHORT: Record<Category, string> = {
   account_security: "Security",
 };
 
-type Tab = "settings" | "log" | "newsletter";
+type Tab = "settings" | "log" | "newsletter" | "landed";
 
 /** Control Center → Emails: category switches, delivery log and a simple newsletter. */
 export function EmailCenterPage({ accessToken }: { accessToken: string }) {
@@ -69,6 +70,7 @@ export function EmailCenterPage({ accessToken }: { accessToken: string }) {
             ["settings", "Email types"],
             ["log", "Sent emails"],
             ["newsletter", "Newsletter"],
+            ["landed", "LANDED buyers"],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
@@ -86,6 +88,7 @@ export function EmailCenterPage({ accessToken }: { accessToken: string }) {
       {tab === "settings" && <EmailTypesPanel accessToken={accessToken} />}
       {tab === "log" && <EmailLogPanel accessToken={accessToken} />}
       {tab === "newsletter" && <NewsletterPanel accessToken={accessToken} />}
+      {tab === "landed" && <LandedBuyersPanel accessToken={accessToken} />}
     </div>
   );
 }

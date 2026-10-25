@@ -443,3 +443,10 @@ mark{border:1px solid #eee1bc;border-radius:20px;padding:6px 9px;background:var(
 .member-review-chat-context p:last-child{border-bottom:0}
 .member-review-chat-context strong{font-size:var(--text-2xs);color:var(--color-muted)}
 .member-review-chat-context span{font-size:var(--text-xs);line-height:1.5;color:var(--color-text);white-space:pre-wrap}
+
+/* Control Center → Emails → LANDED buyers */
+.landed-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:0}
+.landed-stats div{padding:12px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-surface)}
+.landed-stats dt{color:var(--color-muted);font-size:var(--text-xs)}
+.landed-stats dd{margin:2px 0 0;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.landed-signup-note{border-left:3px solid var(--color-accent);padding-left:10px}

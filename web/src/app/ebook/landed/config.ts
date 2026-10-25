@@ -10,3 +10,8 @@ export const CHECKOUT_URL = 'https://8kjjz9-ei.myshopify.com/products/landed'
 
 export const formatPrice = (amount: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount)
+
+// The live directory moved from the Baserow tables to FayFort (owner request, 2026-10-25).
+// LANDED buyers sign up with their purchase email and the directory addresses unlock for them.
+export const BASEROW_CLOSES = '30 November 2026'
+export const SNAPSHOT_DATE = '25 October 2026'
