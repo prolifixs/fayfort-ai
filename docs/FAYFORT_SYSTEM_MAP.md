@@ -80,8 +80,13 @@ flowchart LR
 **Job:** run the team. **Fed by:** admin invitations, presence heartbeats (every 45 s), Supabase audit log.
 **Feeds:** assignment of requests and work items; worker directory with online status.
 
+Roles (docs/BOOKINGS_AND_EXECUTIVE_PLAN.md): staff, assistant (runs the CEO's calendar and bookings) and CEO (only one).
+Admins add staff from an existing account (search, then an emailed link accepted while signed in at `/staff/join`) or by
+email (Supabase invitation); departments chosen at invitation apply when the person becomes active.
+
 ```mermaid
 flowchart LR
+  SRCH[Admin searches existing accounts] --> LINK[Emailed link, accept at /staff/join] --> ACT
   INV[Invite] --> ACC[Worker accepts] --> ACT[Active worker]
   ACT -->|heartbeat 45s| PRES[Online status]
   ACT --> DEP[Departments] --> WI[Work items in Operations Center]
@@ -308,6 +313,22 @@ flowchart LR
   SUB -->|paid month| PAY[(member_subscription_payments)] --> RANKS[+50 / +100 rank points]
   M2[Manage subscription] --> PORTAL[Stripe customer portal]
   M3[Pause 1–3 months] --> SUB
+```
+
+## 12b. Bookings and availability (docs/BOOKINGS_AND_EXECUTIVE_PLAN.md)
+
+**Job:** let members book time with the CEO (consultations), later staff sessions and guides, without double booking.
+**Fed by:** weekly hours and blocked time (the assistant keeps the CEO's), member time picks, Shopify payments.
+**Feeds:** Operations → Bookings, the Schedule, member support work items, booking emails and reminders.
+
+```mermaid
+flowchart LR
+  H[Weekly hours - blocked time - live bookings] --> S[Free slots]
+  S --> P[Member picks a time] --> HD[Held 24 h + invoice]
+  HD -->|paid webhook| CF[Confirmed: chat + work item]
+  HD -->|not paid| X[Released, draft order deleted]
+  CF --> R[Reminders 24 h / 1 h] --> D[Done / no-show] --> F[How did it go?]
+  CF -->|member, more than 24 h before| C[Cancelled, refund due]
 ```
 
 ## 12. Social channels (P9)

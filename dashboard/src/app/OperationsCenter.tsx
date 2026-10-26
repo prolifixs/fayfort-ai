@@ -41,11 +41,11 @@ import { ShiftGate } from "./ShiftGate";
 import { StaffThemeToggle, useStaffTheme } from "./staff/staffTheme";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ProductsWorkspace } from "./operations/StoreTeam";
-import { ToursPanel } from "./operations/ToursPanel";
+import { BookingsPanel } from "./operations/BookingsPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
 
-type View = "queue" | "products" | "tours" | "schedule" | "archive" | "guide" | "team" | "reports";
-const VIEWS: View[] = ["queue", "products", "tours", "schedule", "archive", "guide", "team", "reports"];
+type View = "queue" | "products" | "bookings" | "schedule" | "archive" | "guide" | "team" | "reports";
+const VIEWS: View[] = ["queue", "products", "bookings", "schedule", "archive", "guide", "team", "reports"];
 
 const SOURCE_LABEL: Record<string, string> = {
   shopify_order: "From a shop order",
@@ -69,7 +69,8 @@ export function OperationsCenterPage() {
   const ops = useOperationsCenter();
   const [staffTheme, setStaffTheme] = useStaffTheme();
   const [view, setView] = useState<View>(() => {
-    const wanted = new URLSearchParams(window.location.search).get("view") as View | null;
+    const asked = new URLSearchParams(window.location.search).get("view");
+    const wanted = (asked === "tours" ? "bookings" : asked) as View | null; // Tour bookings moved into Bookings
     return wanted && VIEWS.includes(wanted) ? wanted : "queue";
   });
   const [help, setHelp] = useState<string | null>(null);
@@ -168,7 +169,7 @@ export function OperationsCenterPage() {
   const tabs: [View, string][] = [
     ["queue", "Queue"],
     ...(storeTeam ? ([["products", "Products"]] as [View, string][]) : []),
-    ...(tourTeam ? ([["tours", "Tour bookings"]] as [View, string][]) : []),
+    ["bookings", "Bookings"],
     ["schedule", "Schedule"],
     ["archive", "Archive"],
     ["guide", "Guide"],
@@ -279,7 +280,15 @@ export function OperationsCenterPage() {
               onOpenWorkItem={openWorkItem}
             />
           )}
-          {view === "tours" && tourTeam && token && <ToursPanel token={token} onOpenWorkItem={openWorkItem} />}
+          {view === "bookings" && token && (
+            <BookingsPanel
+              token={token}
+              tourTeam={tourTeam}
+              initialTab={params.get("view") === "tours" || params.get("tab") === "tours" ? "tours" : undefined}
+              initialBooking={params.get("booking")}
+              onOpenWorkItem={openWorkItem}
+            />
+          )}
           {view === "schedule" && (
             <SchedulePanel
               token={token}

@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../../lib/api";
-import { WorkerProvisioningPage } from "./WorkerPages";
+import { AddStaffPanel, ROLE_LABEL, RoleEditor, type StaffRole } from "./AddStaff";
 import { FayfortLoader } from "../brand/FayfortLogo";
 import { Avatar, FreshStartSetting, RatingBadge, RatingsSection, TimesheetsPanel, type RatingSummary } from "./WorkerTeam";
 
@@ -19,7 +19,16 @@ export interface WorkerSummary {
   mfa_enrolled: boolean;
   email_confirmed: boolean;
   open_work_count: number;
-  invitation: { sent_at: string | null; expires_at: string | null; expired: boolean; count: number } | null;
+  invitation: {
+    sent_at: string | null;
+    expires_at: string | null;
+    expired: boolean;
+    count: number;
+    kind?: "new_account" | "existing_account";
+    departments?: string[];
+  } | null;
+  staff_role?: StaffRole;
+  job_title?: string | null;
   photo_url?: string | null;
   rating?: RatingSummary | null;
   on_shift?: boolean;
@@ -86,6 +95,8 @@ const ACTION_LABEL: Record<string, string> = {
   reactivated: "Reactivated",
   password_reset_sent: "Password reset sent",
   mfa_reset: "Two-step verification reset",
+  role_changed: "Role changed",
+  invitation_accepted: "Invitation accepted",
   assignments_released: "Assignments released",
 };
 
@@ -186,7 +197,7 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
   return (
     <div className="workforce-page">
       {tabs}
-      <WorkerProvisioningPage accessToken={accessToken} />
+      <AddStaffPanel accessToken={accessToken} onInvited={() => void load()} />
       <section className="control-panel" aria-label="FayFort worker directory">
         <div className="panel-heading">
           <div>
@@ -283,6 +294,9 @@ export function WorkforcePage({ accessToken }: { accessToken: string }) {
                       <span>
                         <strong>{worker.display_name || worker.email || "Unnamed worker"}</strong>
                         {worker.display_name && <small>{worker.email}</small>}
+                        {worker.staff_role && worker.staff_role !== "staff" && (
+                          <small className={`role-chip role-${worker.staff_role}`}>{ROLE_LABEL[worker.staff_role]}</small>
+                        )}
                       </span>
                     </button>
                   </td>
@@ -407,7 +421,10 @@ export function WorkerProfilePage({
     deactivate: "Deactivate this worker? They are signed out everywhere and their open work returns to the queue.",
     reactivate: "Reactivate this worker so they can sign in again?",
     resend: "Send a new invitation email? Earlier links stop working.",
-    revoke: "Revoke this invitation? The unused account is deleted.",
+    revoke:
+      worker?.invitation?.kind === "existing_account"
+        ? "Revoke this invitation? The link stops working; their own account stays as it is."
+        : "Revoke this invitation? The unused account is deleted.",
     password: "Email this worker a password reset link?",
     mfa: "Reset two-step verification? They'll have to set up their authenticator app again.",
   };
@@ -441,6 +458,19 @@ export function WorkerProfilePage({
 
           <dl className="worker-facts">
             <div>
+              <dt>Role</dt>
+              <dd>
+                {ROLE_LABEL[worker.staff_role || "staff"]}
+                {worker.job_title ? ` · ${worker.job_title}` : ""}
+              </dd>
+            </div>
+            {worker.invitation?.kind === "existing_account" && (
+              <div>
+                <dt>Invitation</dt>
+                <dd>Existing account: they accept the emailed link while signed in</dd>
+              </div>
+            )}
+            <div>
               <dt>Invited</dt>
               <dd title={exact(worker.invited_at)}>{worker.invited_at ? new Date(worker.invited_at).toLocaleDateString() : "—"}</dd>
             </div>
@@ -466,7 +496,13 @@ export function WorkerProfilePage({
             </div>
             <div>
               <dt>Departments</dt>
-              <dd>{worker.departments.length ? worker.departments.map(departmentLabel).join(", ") : "None"}</dd>
+              <dd>
+                {worker.departments.length
+                  ? worker.departments.map(departmentLabel).join(", ")
+                  : worker.invitation?.departments?.length
+                    ? `${worker.invitation.departments.map(departmentLabel).join(", ")} (from when they accept)`
+                    : "None"}
+              </dd>
             </div>
             {worker.deactivated_at && (
               <div>
@@ -477,6 +513,18 @@ export function WorkerProfilePage({
           </dl>
 
           <div className="worker-actions" aria-label="Account actions">
+            {worker.status !== "inactive" && (
+              <RoleEditor
+                accessToken={accessToken}
+                workerId={worker.user_id}
+                role={worker.staff_role || "staff"}
+                jobTitle={worker.job_title || null}
+                onSaved={(role, title) => {
+                  setWorker({ ...worker, staff_role: role, job_title: title });
+                  setNotice(`Role saved: ${ROLE_LABEL[role]}.`);
+                }}
+              />
+            )}
             {worker.status === "invited" && (
               <>
                 <button type="button" className="secondary-button" onClick={() => setPending("resend")}>

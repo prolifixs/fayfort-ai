@@ -9,6 +9,7 @@ import { RequestLinkForm } from "./RequestLinkForm";
 import { SetPasswordForm } from "./SetPasswordForm";
 import { AuthPage } from "./AuthPage";
 import { landingFor, type Landing } from "./landing";
+import { takeReturn } from "../../lib/returnTo";
 import { FayfortLoader } from "../brand/FayfortLogo";
 
 function AuthCard({ audience, title, children }: { audience: AuthAudience; title: string; children: ReactNode }) {
@@ -127,7 +128,7 @@ export function AuthCallbackPage() {
 
   useEffect(() => {
     // Verification, email change and OAuth returns need no further input: continue to the right home.
-    if (settled && session && home && finishesSignIn && type !== "email_change") window.location.replace(home);
+    if (settled && session && home && finishesSignIn && type !== "email_change") window.location.replace(takeReturn() || home);
   }, [settled, session, home, finishesSignIn, type]);
 
   if (!dashboardAuthConfigured) return <SetupScreen />;

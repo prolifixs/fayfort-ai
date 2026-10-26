@@ -204,7 +204,7 @@ class MemberAndWorkerAccountTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"worker": {"status": "active", "created_at": "2026-10-10T00:00:00Z"}})
         table.assert_called_once_with("fayfort_workers")
-        table.return_value.select.assert_called_once_with("status,created_at")
+        table.return_value.select.assert_called_once_with("status,created_at,staff_role,job_title")
         table.return_value.select.return_value.eq.assert_called_once_with("user_id", USER)
 
     @patch("app.accounts.router.supabase.table")

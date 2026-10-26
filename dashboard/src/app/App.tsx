@@ -11,6 +11,7 @@ import { useCaptcha } from "./auth/Turnstile";
 import { StaffMfaGate } from "./auth/StaffMfaGate";
 import type { ReactNode } from "react";
 import { MemberPhotoReviewApp } from "./staff/MemberPhotoReview";
+import { StaffJoinPage } from "./staff/StaffJoinPage";
 import { MemberAccountPage, MemberRoutePage } from "./member/MemberAccountPages";
 import { AuthPage } from "./auth/AuthPage";
 import { isPlatformAdmin, landingFor, type Landing } from "./auth/landing";
@@ -47,6 +48,7 @@ function AppRoutes() {
   if (window.location.pathname === "/auth/callback" || window.location.pathname === "/worker/accept")
     return <AuthCallbackPage />;
   if (window.location.pathname === "/auth/forgot") return <ForgotPasswordPage />;
+  if (window.location.pathname === "/staff/join") return <StaffJoinPage />;
   if (window.location.pathname === "/email/unsubscribe") return <EmailUnsubscribePage />;
   if (window.location.pathname === "/worker/member-reviews") return <MovedToOperations />;
   if (window.location.pathname === "/platform/member-reviews")

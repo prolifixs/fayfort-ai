@@ -65,7 +65,7 @@ export const descriptions: Record<string, string> = {
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
-  "FayFort Workers": "Invite workers, see who is online, and manage each worker's account.",
+  "FayFort Workers": "Add staff (from an existing account or by email), roles, who is online, and each worker's account.",
   "My account": "Your password, sign-in email, sessions and two-step verification.",
   Emails: "What FayFort emails customers, what was sent, and the newsletter.",
 };
@@ -436,6 +436,10 @@ export function DashboardWorkspace({
             <i className={eventStatus === "Live" ? "event-dot live" : "event-dot"} /> Events {eventStatus}
           </span>
           {navButton("My account")}
+          <a className="nav-item" href="/member/chat" title="Your own member account: orders, chats and points">
+            <NavIcon name="My account" />
+            <span className="nav-label">My member account</span>
+          </a>
           <button type="button" className="nav-item" onClick={() => void onSignOut?.()}>
             <NavIcon name="Sign out" />
             <span className="nav-label">Sign out</span>

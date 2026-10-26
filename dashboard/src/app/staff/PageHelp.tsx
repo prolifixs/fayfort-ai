@@ -147,7 +147,9 @@ export const PAGE_GUIDES: Record<string, PageGuide> = {
   "FayFort Workers": {
     what: "Everyone on the FayFort team: who is online, their ratings, hours and accounts.",
     steps: [
-      { title: "Invite a worker", how: "Enter their email and press Invite worker. They get an email to set their password; then set their departments on their profile." },
+      { title: "Add someone who already has an account", how: "Add staff → Existing account: search their email, name or username, pick them, choose the role and departments, and press Send invitation. They open the emailed link, sign in with their usual account and press Accept. Their member account stays as it is." },
+      { title: "Invite a new person", how: "Add staff → New person: enter their email, role and departments. They set a password from the email and are on the team. If the email already has an account, it is sent as an existing-account invitation instead." },
+      { title: "Roles", how: "Staff work in their departments. The personal assistant manages the CEO's calendar and bookings. The CEO (only one) sees a clean Today page. Change a role from the worker's profile → Change role." },
       { title: "Check timesheets", how: "Timesheets shows clock-ins and breaks. Approve or reject correction requests there." },
       { title: "Look after accounts", how: "Open a worker to reset their sign-in, change departments, or deactivate them." },
     ],

@@ -137,7 +137,7 @@ export type Category = { source_ref: string; category: string; group_name?: stri
 
 export type ScheduleEntry = {
   id: string;
-  type: "giveaway" | "sale" | "section" | "launch" | "deadline" | "recurring";
+  type: "giveaway" | "sale" | "section" | "launch" | "deadline" | "recurring" | "booking";
   title: string;
   at: string;
   status: "planned" | "scheduled" | "done" | "overdue" | "waiting" | "live";

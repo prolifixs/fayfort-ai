@@ -17,6 +17,7 @@ import { MemberPlanComparison } from "./MemberAccountDialogs";
 import { PlanBilling } from "./PlanBilling";
 import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
 import { rememberSiteChatCode } from "./siteChatCarryOver";
+import { takeReturn } from "../../lib/returnTo";
 
 export function MemberRoutePage() {
   if (window.location.pathname === "/member/notifications") return <MemberNotificationsPage />;
@@ -76,6 +77,11 @@ export function MemberAccountPage() {
     if (isEmailCallback)
       supabaseClient.auth.getSession().then(async ({ data }) => {
         if (mounted && data.session) {
+          const back = takeReturn();
+          if (back) {
+            window.location.assign(back);
+            return;
+          }
           if ((await landingFor(data.session)) === "/") {
             window.location.assign("/");
             return;
@@ -95,11 +101,17 @@ export function MemberAccountPage() {
         setProfile(null);
         setMemberEmail("");
         setAccessToken(null);
-      } else if (isEmailCallback && next)
+      } else if (isEmailCallback && next) {
+        const back = takeReturn();
+        if (back) {
+          window.location.assign(back);
+          return;
+        }
         void landingFor(next).then((landing) => {
           if (landing === "/") window.location.assign("/");
           else void loadMemberProfile(next.access_token, next.user.email);
         });
+      }
     });
     return () => {
       mounted = false;
@@ -145,8 +157,11 @@ export function MemberAccountPage() {
         });
         if (authError) throw authError;
         if (data.session) {
+          // A link that needed an account first (a staff invitation) continues where it was.
+          const back = takeReturn();
+          if (back) window.location.assign(back);
           // Staff and business owners continue to the Control Center (two-step verification runs there).
-          if ((await landingFor(data.session)) === "/") window.location.assign("/");
+          else if ((await landingFor(data.session)) === "/") window.location.assign("/");
           else if (await loadMemberProfile(data.session.access_token, data.user.email)) window.location.assign("/member/chat");
         }
       }

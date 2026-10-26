@@ -3,7 +3,8 @@
 It is a view, never a second place to edit: every entry links to the task or setup page that owns it.
 
 Entry types: giveaway (starts, ends, draw), sale (starts, ends), section (goes live, ends, refresh due), launch
-(planned go-live of a listing), deadline (open work items) and recurring (next run of a member's recurring order).
+(planned go-live of a listing), deadline (open work items), recurring (next run of a member's recurring order) and
+booking (consultations and sessions: everyone for admins and the CEO's assistant, otherwise the ones you host).
 Workers see the shop calendar plus their own deadlines and the open work in their departments; recurring orders only
 for Sourcing. Administrators see everything and can filter by person and department.
 """
@@ -15,7 +16,7 @@ from typing import Any
 from app.commerce.db import db, rows
 
 MAX_DAYS = 62
-TYPES = ("giveaway", "sale", "section", "launch", "deadline", "recurring")
+TYPES = ("giveaway", "sale", "section", "launch", "deadline", "recurring", "booking")
 ACTIVE = ("open", "claimed", "waiting", "blocked")
 
 
@@ -129,5 +130,24 @@ def build_schedule(*, start: datetime, end: datetime, admin: bool, user_id: str,
                               status="scheduled", href="/operations?view=queue",
                               detail=f"{str(schedule.get('cadence') or '').replace('_', ' ')} · a new sourcing request opens by itself",
                               department="sourcing"))
+    if "booking" in wanted and department in (None, "", "member_support"):
+        sees_all = admin
+        if not admin:
+            role = rows(db().table("fayfort_workers").select("staff_role").eq("user_id", user_id).limit(1).execute())
+            sees_all = bool(role) and role[0].get("staff_role") == "assistant"
+        query = (db().table("bookings").select("id,kind,status,starts_at,host_id,topic,member_id")
+                 .in_("status", ["held", "confirmed", "completed", "no_show"]).gte("starts_at", start_iso).lt("starts_at", end_iso))
+        if not sees_all:
+            query = query.eq("host_id", user_id)
+        elif admin and worker_id:
+            query = query.eq("host_id", worker_id)
+        labels = {"consultation": "Consultation", "session": "Session", "tour": "Tour"}
+        for booking in rows(query.limit(1000).execute()):
+            held = booking["status"] == "held"
+            out.append(_entry("booking", booking["id"], f"{labels.get(booking['kind'], 'Booking')}"
+                              + (f": {booking['topic']}" if booking.get("topic") else ""), booking["starts_at"],
+                              status="planned" if held else ("done" if booking["status"] in ("completed", "no_show") else "scheduled"),
+                              href=f"/operations?view=bookings&booking={booking['id']}",
+                              detail="Waiting for payment" if held else "", worker_id=booking.get("host_id")))
     out.sort(key=lambda e: (str(e.get("at") or ""), e["type"]))
     return out

@@ -349,6 +349,8 @@ def create_accounts_router() -> APIRouter:
     router.include_router(create_member_identity_router(require_verified_member))
     from app.membership.tours import create_tours_router
     router.include_router(create_tours_router(require_verified_member, trusted_fayfort_staff))
+    from app.bookings.router import create_bookings_router
+    router.include_router(create_bookings_router(require_verified_member, trusted_fayfort_staff, trusted_platform_admin))
     router.include_router(create_member_theme_admin_router(trusted_platform_admin))
     router.include_router(create_operations_router(trusted_fayfort_staff))
     router.include_router(create_store_team_router(trusted_fayfort_staff))
@@ -1567,7 +1569,7 @@ def create_accounts_router() -> APIRouter:
                 raise HTTPException(status_code=403, detail="Verify your email before using your FayFort worker account.")
             response = (
                 supabase.table("fayfort_workers")
-                .select("status,created_at")
+                .select("status,created_at,staff_role,job_title")
                 .eq("user_id", user_id)
                 .maybe_single()
                 .execute()

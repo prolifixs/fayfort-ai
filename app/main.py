@@ -100,6 +100,7 @@ _keepalive_task: asyncio.Task | None = None
 _rank_task: asyncio.Task | None = None
 _billing_task: asyncio.Task | None = None
 _operations_sweep_task: asyncio.Task | None = None
+_bookings_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
@@ -118,6 +119,11 @@ async def start_automation_scheduler() -> None:
     if settings.MEMBER_RANKS_ENABLED and (_rank_task is None or _rank_task.done()):
         from app.membership.ranks import rank_loop
         _rank_task = asyncio.create_task(rank_loop(), name="fayfort-member-ranks")
+    global _bookings_task
+    if _bookings_task is None or _bookings_task.done():
+        # Expired payment holds, reminders 24 h and 1 h before, and "how did it go?" (app/bookings/engine.py).
+        from app.bookings.engine import bookings_loop
+        _bookings_task = asyncio.create_task(bookings_loop(), name="fayfort-bookings")
     if _billing_task is None or _billing_task.done():
         from app.billing.service import billing_loop  # idle until STRIPE_SECRET_KEY is set
         _billing_task = asyncio.create_task(billing_loop(), name="fayfort-billing")
@@ -177,7 +183,7 @@ async def start_automation_scheduler() -> None:
 @app.on_event("shutdown")
 async def stop_automation_scheduler() -> None:
     global _automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task
-    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task) if task is not None]
+    tasks = [task for task in (_automation_scheduler_task, _inbound_reconciliation_task, _request_media_retention_task, _member_chat_retention_task, _member_review_retention_task, _infrastructure_monitor_task, _email_sender_task, _commerce_task, _handoff_window_task, _keepalive_task, _rank_task, _billing_task, _bookings_task) if task is not None]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -816,6 +822,8 @@ from app.infrastructure.router import create_infrastructure_router
 app.include_router(create_infrastructure_router())
 from app.workforce.router import create_workforce_router
 app.include_router(create_workforce_router())
+from app.workforce.onboarding import create_onboarding_router  # noqa: E402
+app.include_router(create_onboarding_router())
 from app.mailer.router import create_email_router
 app.include_router(create_email_router())
 from app.mailer.subscribers import create_public_newsletter_router

@@ -76,6 +76,7 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path === `${b}/handoffs`) return { handoffs, total: 2, has_more: false };
   if (path === `${b}/handoffs/agents`) return { agents: [{ user_id: "staff-1", status: "active", role: "agent", handoff_availability: "available", handoff_max_active: 3 }, { user_id: "staff-2", status: "active", role: "agent", handoff_availability: "away" }] };
   if (path === "/operations/pending-count") return { pending: 14, overdue: 3 };
+  if (path.startsWith("/operations/bookings") || path.startsWith("/operations/availability/") || path === "/platform/staff/candidates") return bookingFixture(path, search);
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };
@@ -242,3 +243,55 @@ const connections = {
   stripe: { connected: false, ready: false, mode: "not_configured", source: "none", key_hint: null, problem: null, saved_at: null, manage: "Control Center → Shop → Billing" },
   email: { connected: true, sending: true, from: "FayFort <updates@fayfort.com>", manage: "Control Center → Email" },
 };
+
+// ---- Bookings and staff roles (docs/BOOKINGS_AND_EXECUTIVE_PLAN.md) ---------------------------
+const CEO_ID = "staff-ceo";
+const chinaAt = (daysAhead: number, hour: number, minute = 0) => {
+  const now = new Date();
+  const china = new Date(now.getTime() + 8 * 3600_000);
+  return new Date(Date.UTC(china.getUTCFullYear(), china.getUTCMonth(), china.getUTCDate() + daysAhead, hour - 8, minute)).toISOString();
+};
+const bookingRow = (id: string, member: string, daysAhead: number, hour: number, extra: Record<string, unknown> = {}) => {
+  const starts = chinaAt(daysAhead, hour);
+  const when = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(starts));
+  return {
+    id, kind: "consultation", status: "confirmed", starts_at: starts, ends_at: new Date(Date.parse(starts) + 3600_000).toISOString(), hold_expires_at: null,
+    topic: "Importing hair from Guangzhou: suppliers, MOQ and shipping to Lagos", brief: null, host_note: null, call_link: null, member_time_zone: "Africa/Lagos",
+    reschedule_count: 0, cancel_reason: null, cancelled_by: null, refund: null, work_item_id: "w1", host_id: CEO_ID, member_id: "m1",
+    host: { user_id: CEO_ID, name: "Favour Fay", photo_url: null, staff_role: "ceo" }, member_name: member, conversation_id: "mc1",
+    payment: { status: "paid", amount: 85, currency: "USD" }, when_china: `${when} China time`, needs: ["call_link", "brief"], ...extra,
+  };
+};
+const bookingRows = () => [
+  bookingRow("bk1", "Amaka Obi", 1, 15),
+  bookingRow("bk2", "Grace Mensah", 2, 14, { status: "held", hold_expires_at: chinaAt(0, 23), needs: ["hold_expiring"], payment: { status: "sent", amount: 100, currency: "USD" }, topic: "First container from Yiwu" }),
+  bookingRow("bk3", "Jordan Mensah", 3, 16, { call_link: "https://meet.google.com/abc-defg-hij", brief: "Second order, wants a Canton Fair plan.", needs: [] }),
+];
+
+function bookingFixture(path: string, search: URLSearchParams): unknown {
+  if (path === "/operations/bookings/me")
+    return {
+      user_id: "staff-1", staff_role: "assistant", sees_all: true, admin: false, ceo_id: CEO_ID, settings: {},
+      hosts: [
+        { user_id: CEO_ID, name: "Favour Fay", photo_url: null, staff_role: "ceo", job_title: "Founder & CEO", is_self: false },
+        { user_id: "staff-1", name: "Ada Okafor", photo_url: null, staff_role: "assistant", job_title: "Personal assistant", is_self: true },
+      ],
+    };
+  if (path === "/operations/bookings") return { bookings: search.get("view") === "needs_action" ? bookingRows().slice(0, 2) : bookingRows() };
+  if (path.startsWith("/operations/bookings/slots")) return { slots: [14, 15, 16].map((h) => ({ starts_at: chinaAt(1, h), ends_at: chinaAt(1, h + 1) })) };
+  if (path.startsWith("/operations/bookings/")) return { booking: bookingRows()[0] };
+  if (path.startsWith("/operations/availability/"))
+    return {
+      host: { user_id: CEO_ID, name: "Favour Fay" }, can_edit: true, time_zone: "Asia/Shanghai",
+      weekly: [0, 2, 4].map((weekday) => ({ id: `a${weekday}`, weekday, start_time: "14:00", end_time: "18:00", time_zone: "Asia/Shanghai", kinds: ["consultation"] })),
+      time_off: [{ id: "off1", starts_at: chinaAt(9, 0), ends_at: chinaAt(12, 0), reason: "Canton Fair" }],
+    };
+  if (path === "/platform/staff/candidates")
+    return {
+      accounts: [
+        { user_id: "u-amaka", email: "amaka.obi@example.com", display_name: "Amaka Obi", username: "amaka", created_at: iso(60 * 24 * 30), last_sign_in_at: iso(60), eligible: true, reason: null },
+        { user_id: "staff-2", email: "amaka@fayfort.com", display_name: "Amaka (FayFort)", username: null, created_at: iso(60 * 24 * 90), last_sign_in_at: iso(5), eligible: false, reason: "Already on the team" },
+      ],
+    };
+  return lists;
+}

@@ -33,7 +33,7 @@ ACTION_LIMIT_PER_MINUTE = 30
 WORKER_COLUMNS = (
     "user_id,status,provisioned_by,created_at,updated_at,invitation_sent_at,invitation_count,"
     "activated_at,deactivated_at,deactivated_by,handoff_availability,handoff_available_until,"
-    "handoff_availability_updated_at"
+    "handoff_availability_updated_at,staff_role,job_title,invite_kind,invite_expires_at,pending_departments"
 )
 
 
@@ -106,9 +106,14 @@ def _invitation_state(worker: dict, now: datetime) -> dict[str, Any] | None:
     if worker.get("status") != "invited":
         return None
     sent = _parse_time(worker.get("invitation_sent_at") or worker.get("created_at"))
-    expires = datetime.fromtimestamp(sent.timestamp() + settings.AUTH_EMAIL_LINK_TTL_SECONDS, timezone.utc) if sent else None
+    if worker.get("invite_kind") == "existing_account":
+        expires = _parse_time(worker.get("invite_expires_at"))
+    else:
+        expires = datetime.fromtimestamp(sent.timestamp() + settings.AUTH_EMAIL_LINK_TTL_SECONDS, timezone.utc) if sent else None
     return {"sent_at": _iso(sent), "expires_at": _iso(expires), "expired": bool(expires and expires <= now),
-            "count": int(worker.get("invitation_count") or 1)}
+            "count": int(worker.get("invitation_count") or 1),
+            "kind": worker.get("invite_kind") or "new_account",
+            "departments": list(worker.get("pending_departments") or [])}
 
 
 def _worker_row(worker_id: str) -> dict:
@@ -138,6 +143,8 @@ def _present(worker: dict, auth: dict, last_seen: str | None, open_work: int, no
         "email_confirmed": auth["email_confirmed_at"] is not None,
         "open_work_count": open_work,
         "invitation": _invitation_state(worker, now),
+        "staff_role": worker.get("staff_role") or "staff",
+        "job_title": worker.get("job_title"),
     }
 
 
@@ -293,8 +300,19 @@ def create_workforce_router() -> APIRouter:
         target = str(worker_id)
         worker = _worker_row(target)
         auth = _auth_summary(target)
-        if worker.get("status") != "invited" or auth["email_confirmed_at"] or not auth["email"]:
+        existing_account = worker.get("invite_kind") == "existing_account"
+        if worker.get("status") != "invited" or not auth["email"] or (auth["email_confirmed_at"] and not existing_account):
             raise HTTPException(status_code=409, detail="Only a pending invitation can be resent.")
+        if existing_account:
+            from app.workforce import onboarding
+            try:
+                sent = onboarding.resend_existing(admin["user_id"], worker, auth["email"])
+            except Exception as exc:
+                logger.exception("Could not resend a staff invitation")
+                raise HTTPException(status_code=503, detail="The invitation could not be resent.") from exc
+            record_workforce_audit(admin["user_id"], target, "invitation_resent", auth["email"],
+                                   {"count": sent["count"], "kind": "existing_account"})
+            return {"invitation": sent}
         try:
             supabase.auth.admin.invite_user_by_email(auth["email"], options={"redirect_to": worker_invite_redirect_url()})
             count = min(int(worker.get("invitation_count") or 1) + 1, 50)
@@ -313,6 +331,17 @@ def create_workforce_router() -> APIRouter:
         target = str(worker_id)
         worker = _worker_row(target)
         auth = _auth_summary(target)
+        if worker.get("invite_kind") == "existing_account":
+            # Their own account stays: only the staff invitation is removed.
+            if worker.get("status") != "invited":
+                raise HTTPException(status_code=409, detail="Only an invitation that hasn't been accepted can be revoked.")
+            record_workforce_audit(admin["user_id"], target, "invitation_revoked", auth["email"], {"kind": "existing_account"})
+            try:
+                supabase.table("fayfort_workers").delete().eq("user_id", target).eq("status", "invited").execute()
+            except Exception as exc:
+                logger.exception("Could not revoke a staff invitation")
+                raise HTTPException(status_code=503, detail="The invitation could not be revoked.") from exc
+            return {"revoked": True, "account_kept": True}
         if worker.get("status") != "invited" or auth["email_confirmed_at"]:
             raise HTTPException(status_code=409, detail="Only an invitation that hasn't been accepted can be revoked.")
         # Record first: the identity (and its audit foreign key) is deleted next.
@@ -364,6 +393,12 @@ def create_workforce_router() -> APIRouter:
             raise HTTPException(status_code=409, detail="Only an inactive worker can be reactivated.")
         auth = _auth_summary(target)
         next_status = "active" if auth["email_confirmed_at"] else "invited"
+        if worker.get("invite_kind") == "existing_account" and not worker.get("activated_at"):
+            next_status = "invited"  # never accepted: they still need to accept a new link
+        if worker.get("staff_role") == "ceo":
+            from app.workforce.onboarding import current_ceo
+            if current_ceo(exclude=target):
+                raise HTTPException(status_code=409, detail="There is already a CEO. Change their role, or this worker's role, first.")
         now = datetime.now(timezone.utc).isoformat()
         try:
             supabase.auth.admin.update_user_by_id(target, {"ban_duration": "none"})

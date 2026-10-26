@@ -105,3 +105,17 @@ def staff_password_reset_email(*, action_link: str) -> RenderedEmail:
     text = ("Reset your FayFort password\n\nA FayFort administrator sent you a link to choose a new password. "
             f"It works once and expires in 24 hours.\n\n{action_link}\n\n{footer}")
     return RenderedEmail(subject="Reset your FayFort password", html=html_body, text=text)
+
+
+def staff_invitation_email(*, action_link: str, role_label: str, invited_by: str | None, days: int) -> RenderedEmail:
+    """Joining the FayFort team with an account the person already has (app/workforce/onboarding.py)."""
+    who = f"{invited_by} invited you" if invited_by else "FayFort invited you"
+    footer = "If you didn't expect this, ignore it; nothing changes on your account unless you accept."
+    intro = (_paragraph(f"{who} to join the FayFort team as {role_label}, using the account you already have.")
+             + _paragraph("Open the link, sign in with your usual email and password, and press Accept. You'll then set "
+                          f"up two-step verification for the Control Center. The link expires in {days} days."))
+    html_body = shell(heading="Join the FayFort team", intro_html=intro, button_label="Accept staff invitation",
+                      button_url=action_link, footer_note=footer, unsubscribe_url=None)
+    text = (f"Join the FayFort team\n\n{who} to join the FayFort team as {role_label}, using the account you already have. "
+            f"Open the link, sign in and press Accept. It expires in {days} days.\n\n{action_link}\n\n{footer}")
+    return RenderedEmail(subject="You're invited to join the FayFort team", html=html_body, text=text)

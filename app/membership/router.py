@@ -1,6 +1,8 @@
 """Member plan API: plan summary, consultations, the supplier directory and contact credits."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import logging
 from typing import Literal
 from uuid import UUID
@@ -22,6 +24,8 @@ RecordType = Literal["market", "service_provider", "hotel", "restaurant"]
 class ConsultationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topic: str = Field(min_length=3, max_length=1000)
+    starts_at: datetime | None = None          # a time from GET /members/bookings/slots (the CEO's calendar)
+    time_zone: str | None = Field(default=None, max_length=60)
 
     @field_validator("topic")
     @classmethod
@@ -72,7 +76,7 @@ def _fail(message: str, exc: Exception) -> HTTPException:
 
 
 def _invoice_failure(exc: Exception, message: str) -> HTTPException:
-    if isinstance(exc, ValueError):  # e.g. no confirmed email
+    if isinstance(exc, (ValueError, service.MembershipError)):  # e.g. no confirmed email, or the time was taken
         return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, shopify.ShopifyError):
         logger.warning("Shopify invoice failed: %s", exc)
@@ -134,7 +138,7 @@ def create_membership_router() -> APIRouter:
         if plans.consultation_quote(member_id)["price"] > 0:
             _require_payments()
         try:
-            return {"consultation": service.book_consultation(member_id, payload.topic)}
+            return {"consultation": service.book_consultation(member_id, payload.topic, payload.starts_at, payload.time_zone)}
         except Exception as exc:
             raise _invoice_failure(exc, "Your consultation could not be booked.") from exc
 

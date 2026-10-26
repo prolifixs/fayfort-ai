@@ -405,8 +405,16 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
     def my_departments(authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
         if staff.get("role") == "platform_admin":
-            return {"user_id": staff["user_id"], "departments": ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], "can_manage": True}
-        return {"user_id": staff["user_id"], "departments": departments_for(staff["user_id"]), "can_manage": False}
+            return {"user_id": staff["user_id"], "departments": ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], "can_manage": True, "staff_role": "admin"}
+        role = "staff"
+        try:
+            found = (supabase.table("fayfort_workers").select("staff_role").eq("user_id", staff["user_id"])
+                     .maybe_single().execute())
+            role = ((found.data if found is not None else None) or {}).get("staff_role") or "staff"
+        except Exception:
+            logger.info("Staff role could not be read", exc_info=True)
+        return {"user_id": staff["user_id"], "departments": departments_for(staff["user_id"]), "can_manage": False,
+                "staff_role": role}
 
     @router.get("/operations/pending-count")
     def operations_pending_count(authorization: str | None = Header(default=None)):
