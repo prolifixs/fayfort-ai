@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { FayfortLoader } from "../brand/FayfortLogo";
 import { NextHint } from "../staff/PageHelp";
+import { MemberChatsPanel } from "./MemberChatsPanel";
 
 export function WorkspaceDataPage({
   module,
@@ -46,6 +47,8 @@ export function WorkspaceDataPage({
   const [conversationSearch, setConversationSearch] = useState("");
   const [conversationOffset, setConversationOffset] = useState(0);
   const [conversationHasMore, setConversationHasMore] = useState(false);
+  // Waiting for a person (default), every chat, or the member app's chats (docs/OPERATIONS_FIXES_PLAN.md §2.12).
+  const [chatView, setChatView] = useState<"waiting" | "all" | "members">("waiting");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [requestStatus, setRequestStatus] = useState("");
@@ -73,8 +76,8 @@ export function WorkspaceDataPage({
     setError("");
     try {
       if (module === "Conversations") {
-        // Only chats that need a person; every chat's full history is on its customer's page.
-        const params = new URLSearchParams({ limit: "50", offset: String(conversationOffset), needs_person: "true" });
+        // "Waiting for a person" lists only chats that need one; "All chats" lists every chat on this account.
+        const params = new URLSearchParams({ limit: "50", offset: String(conversationOffset), needs_person: chatView === "waiting" ? "true" : "false" });
         if (conversationStatus) params.set("status", conversationStatus);
         if (conversationChannel.trim()) params.set("channel", conversationChannel.trim());
         const data = await apiRequest<{ conversations: ConversationRow[]; has_more: boolean }>(
@@ -101,7 +104,7 @@ export function WorkspaceDataPage({
       setLoading(false);
       setLoadedModule(module);
     }
-  }, [accessToken, businessId, module, conversationOffset, conversationStatus, conversationChannel, requestStatus]);
+  }, [accessToken, businessId, module, conversationOffset, conversationStatus, conversationChannel, requestStatus, chatView]);
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -284,7 +287,11 @@ export function WorkspaceDataPage({
           <h2 className="sr-only">{module}</h2>
           <p>
             {module === "Conversations"
-              ? "Only chats that need a person are listed here."
+              ? chatView === "waiting"
+                ? "Chats waiting for a person, or with a person now. Switch to All chats to see every chat."
+                : chatView === "all"
+                  ? "Every chat on this account, newest first, including the ones the AI handled alone."
+                  : "Chats from the FayFort member app. Take one over to reply yourself; the AI stays quiet while you do."
               : module === "Customers"
                 ? "Customer profiles and channels seen by this business."
                 : "Structured customer requests, missing information, and current status."}
@@ -300,6 +307,32 @@ export function WorkspaceDataPage({
         </p>
       )}
       {module === "Conversations" && (
+        <div className="team-tabs conversation-views" role="tablist" aria-label="Which chats">
+          {(
+            [
+              ["waiting", "Waiting for a person"],
+              ["all", "All chats"],
+              ["members", "Member app"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={chatView === key}
+              className={chatView === key ? "is-active" : ""}
+              onClick={() => {
+                setConversationOffset(0);
+                setSelected(null);
+                setChatView(key);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {module === "Conversations" && chatView !== "members" && (
         <div className="record-actions conversation-filters">
           <label>
             Status
@@ -360,14 +393,18 @@ export function WorkspaceDataPage({
           </label>
         </div>
       )}
-      {loading ? (
+      {module === "Conversations" && chatView === "members" ? (
+        <MemberChatsPanel accessToken={accessToken} />
+      ) : loading ? (
         <FayfortLoader label={`Loading ${module.toLowerCase()}…`} />
       ) : module === "Conversations" ? (
         conversations.length === 0 && !selected ? (
           <p className="empty-copy">
             {conversationOffset > 0 || conversationStatus || conversationChannel.trim()
-              ? "No chats needing a person match these filters."
-              : "No chats need a person right now. The AI is handling them; open Customers to read any chat's history."}
+              ? "No chats match these filters."
+              : chatView === "waiting"
+                ? "No chats need a person right now. The AI is handling them; see All chats to read any of them."
+                : "No chats yet."}
           </p>
         ) : (
           <div className={selected ? "workspace-split inbox has-selection" : "workspace-split inbox"}>

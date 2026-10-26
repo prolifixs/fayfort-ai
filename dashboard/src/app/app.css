@@ -453,3 +453,16 @@ mark{border:1px solid #eee1bc;border-radius:20px;padding:6px 9px;background:var(
 .ops-takeover{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface);font-size:var(--text-xs);line-height:1.5}
 .ops-takeover span{flex:1 1 260px;min-width:0}
 .ops-takeover.is-human{border-color:var(--operations-accent,#197c69);background:color-mix(in srgb,var(--operations-accent,#197c69) 8%,var(--color-bg))}
+.ops-after-this{margin:4px 0 0;color:var(--color-muted);font-size:var(--text-xs)}
+.ops-after-this span{display:inline-block;margin-right:6px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:10px}
+.ops-share-next{padding:8px 10px;border-radius:8px;background:var(--color-surface);font-size:var(--text-xs)}
+.ops-share-batch{display:flex!important;gap:8px;align-items:flex-start;font-size:var(--text-xs)}
+.ops-batch-help{display:block;flex-basis:100%;color:var(--color-muted);font-size:var(--text-xs);font-weight:400}
+.ops-batch-panel ul{list-style:none;margin:6px 0;padding:0;display:grid;gap:4px}
+.ops-batch-panel li{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid var(--color-border);border-radius:8px;font-size:var(--text-xs)}
+.ops-batch-panel li.is-current{border-color:var(--operations-accent,#197c69)}
+.ops-batch-panel li small{color:var(--color-muted);white-space:nowrap}
+.ops-batch-actions{display:flex;flex-wrap:wrap;gap:8px}
+.ops-invoice-with-action{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ops-withdraw{flex-wrap:wrap;margin-top:8px;padding:10px;border:1px solid var(--color-border);border-radius:8px}
+.ops-withdraw small{flex-basis:100%;color:var(--color-muted)}

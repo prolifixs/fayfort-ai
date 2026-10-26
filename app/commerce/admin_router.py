@@ -455,6 +455,19 @@ def create_admin_commerce_router() -> APIRouter:
         audit(admin_id, "invoice_sent", {"request_id": str(payload.request_id), "invoice_id": str(invoice["id"])})
         return {"invoice": invoice}
 
+    @router.post("/platform/commerce/invoices/{invoice_id}/withdraw")
+    def withdraw_invoice(invoice_id: UUID, payload: dict | None = None, authorization: str | None = Header(default=None)):
+        admin_id = require_admin(authorization)
+        from app.commerce import withdraw
+        reason = str((payload or {}).get("reason") or "")[:300]
+        try:
+            withdraw.withdraw(str(invoice_id), actor_id=admin_id, reason=reason)
+            return {"invoice_id": str(invoice_id), "status": "cancelled"}
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @router.post("/platform/commerce/publish-sourced", status_code=201)
     def publish_sourced(payload: PublishInput, authorization: str | None = Header(default=None)):
         admin_id = require_admin(authorization)

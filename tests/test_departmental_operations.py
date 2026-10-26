@@ -204,7 +204,7 @@ class DepartmentalOperationsTests(unittest.TestCase):
         item_query = MagicMock()
         item_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
             "id": WORK_ITEM, "department": "sourcing", "member_request_id": REQUEST,
-            "assigned_worker_id": None,
+            "assigned_worker_id": ADMIN, "status": "claimed",  # administrators claim first too
         }
         candidate_query = MagicMock()
         candidate_query.update.return_value.eq.return_value.eq.return_value.eq.return_value.select.return_value.execute.return_value.data = [{
@@ -266,7 +266,7 @@ class DepartmentalOperationsTests(unittest.TestCase):
         query = MagicMock()
         query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
             "id": WORK_ITEM, "department": "sourcing", "member_request_id": REQUEST,
-            "assigned_worker_id": None,
+            "assigned_worker_id": ADMIN, "status": "claimed",  # administrators claim first too
         }
         table.return_value = query
         rpc.return_value.execute.return_value.data = [{"id": "option-1", "product_name": "Blue coat"}]

@@ -607,13 +607,28 @@ export function ShareOptionsForm({
     setMemberOptionNote,
     busy,
     shareSourcingOptions,
+    shareEta,
+    setShareEta,
+    shareWithBatch,
+    setShareWithBatch,
+    sourcingBatches,
   } = ops;
+  const stage = requestContext.events.at(-1)?.stage || "submitted";
+  const early = stage === "submitted" || stage === "under_review";
+  const needsEta = early && !requestContext.eta_at;
+  const batch = sourcingBatches.find((row) => row.items.some((entry) => entry.work_item_id === selected.id));
+  const others = batch ? batch.items.length - 1 : 0;
   return (
     <form className="operations-detail-section operations-share-options" onSubmit={shareSourcingOptions}>
       <h3>Share options with member</h3>
       <p>
         Only selected product details and your member note are shown. Supplier names and research evidence stay
         staff-only.
+      </p>
+      <p className="ops-share-next">
+        {early
+          ? "Sharing moves the request into Sourcing and then Options sent by itself; you don't need to change the stage first."
+          : "Sharing moves the request to Options sent. The member then picks one, and you send the invoice."}
       </p>
       <fieldset>
         <legend>Choose up to 10 candidates</legend>
@@ -647,9 +662,65 @@ export function ShareOptionsForm({
           placeholder="What should the member know when comparing these options?"
         />
       </label>
-      <button className="primary-button" disabled={busy || shareCandidateIds.length === 0}>
-        Share selected options
+      {needsEta && (
+        <label>
+          Estimated delivery date (needed to move the request into Sourcing; the member sees it)
+          <input type="datetime-local" required value={shareEta} onChange={(event) => setShareEta(event.target.value)} aria-label="Estimated delivery date for sharing" />
+        </label>
+      )}
+      {batch && others > 0 && (
+        <label className="ops-share-batch">
+          <input type="checkbox" checked={shareWithBatch} onChange={(event) => setShareWithBatch(event.target.checked)} />
+          Also share with the other {others} request{others === 1 ? "" : "s"} in the batch "{batch.title}" (the research is copied
+          to them; only requests you've claimed are included)
+        </label>
+      )}
+      <button className="primary-button" disabled={busy || shareCandidateIds.length === 0 || (needsEta && !shareEta)}>
+        {batch && others > 0 && shareWithBatch ? `Share with all ${others + 1} requests` : "Share selected options"}
       </button>
     </form>
+  );
+}
+
+/** A request in a batch: who else is in it, and the two batch actions (docs/OPERATIONS_FIXES_PLAN.md §2.11). */
+export function BatchPanel({ ops, selected }: { ops: OperationsState; selected: NonNullable<OperationsState["selected"]> }) {
+  const batch = ops.sourcingBatches.find((row) => row.items.some((entry) => entry.work_item_id === selected.id));
+  if (!batch) return null;
+  const mine = selected.assigned_worker_id === ops.userId && selected.status === "claimed";
+  const members = batch.items.map((entry) => ops.items.find((item) => item.id === entry.work_item_id) || null);
+  return (
+    <section className="operations-detail-section ops-batch-panel" aria-label="Batch">
+      <h3>Batch: {batch.title}</h3>
+      <p>
+        {batch.items.length} members want the same item. Research once on any of them, then copy it or share the same
+        options with everyone. Each request keeps its own member, chat, delivery date and invoice.
+      </p>
+      <ul>
+        {batch.items.map((entry, index) => {
+          const item = members[index];
+          const yours = item?.assigned_worker_id === ops.userId;
+          return (
+            <li key={entry.work_item_id} className={entry.work_item_id === selected.id ? "is-current" : undefined}>
+              <span>{item?.summary || "Sourcing request"}</span>
+              <small>{entry.work_item_id === selected.id ? "This one" : !item ? "Not in your list" : yours ? "You have it" : item.assigned_worker_id ? "Someone else has it" : "Nobody has it yet"}</small>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="ops-batch-actions">
+        <button type="button" className="secondary-button" disabled={ops.busy} onClick={() => void ops.claimBatch(batch.id)}>
+          Claim the whole batch
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={ops.busy || !mine || ops.sourcingCandidates.length === 0}
+          onClick={() => void ops.copyResearchToBatch(batch.id)}
+          title={!mine ? "Claim this request first" : ops.sourcingCandidates.length === 0 ? "Add research to this request first" : undefined}
+        >
+          Copy this research to the batch
+        </button>
+      </div>
+    </section>
   );
 }

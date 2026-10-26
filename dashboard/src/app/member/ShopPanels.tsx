@@ -475,6 +475,8 @@ export function OrdersPanel({
   const [paying, setPaying] = useState<MemberInvoice | null>(null);
   const [cancelling, setCancelling] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [declining, setDeclining] = useState("");
+  const [declineReason, setDeclineReason] = useState("");
   const [notice, setNotice] = useState("");
   const [addressVersion, setAddressVersion] = useState(0);
   const book = useAddresses(accessToken, addressVersion);
@@ -504,6 +506,24 @@ export function OrdersPanel({
       load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Your consultation could not be cancelled.");
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+  async function declineInvoice(invoice: MemberInvoice) {
+    setCancelBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/members/invoices/${invoice.id}/decline`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({ reason: declineReason.trim() }),
+      });
+      setDeclining("");
+      setDeclineReason("");
+      setNotice("Declined. The payment link no longer works, and our team will be in touch in your chat.");
+      load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "This invoice could not be declined.");
     } finally {
       setCancelBusy(false);
     }
@@ -576,6 +596,24 @@ export function OrdersPanel({
                   {money(invoice.amount, invoice.currency)}
                 </small>
                 {invoice.kind === "order" && invoice.ship_to && <small>Deliver to: {addressLine(invoice.ship_to)}</small>}
+                {declining === invoice.id && (
+                  <div className="member-request-cancel" role="group" aria-label={`Decline ${invoice.title}`}>
+                    <strong>{invoice.kind === "deposit" ? "Decline this deposit?" : invoice.kind === "tour" ? "Decline this tour quote?" : "Decline this invoice?"}</strong>
+                    <p>Its payment link stops working and our team hears why, so they can suggest something else.</p>
+                    <label className="member-decline-reason">
+                      Why? (optional)
+                      <input maxLength={300} value={declineReason} onChange={(event) => setDeclineReason(event.target.value)} placeholder="For example: the price is too high" />
+                    </label>
+                    <div className="member-request-cancel-actions">
+                      <button type="button" className="danger-button" disabled={cancelBusy} onClick={() => void declineInvoice(invoice)}>
+                        {cancelBusy ? "Declining…" : "Yes, decline"}
+                      </button>
+                      <button type="button" className="secondary-button" disabled={cancelBusy} onClick={() => setDeclining("")}>
+                        Keep it
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {cancelling === invoice.id && (
                   <div className="member-request-cancel" role="group" aria-label={`Cancel ${invoice.title}`}>
                     <strong>Cancel this consultation?</strong>
@@ -602,6 +640,11 @@ export function OrdersPanel({
                   </button>
                 ) : (
                   <small>We emailed your invoice.</small>
+                )}
+                {["deposit", "order", "tour"].includes(invoice.kind || "") && declining !== invoice.id && (
+                  <button type="button" className="link-danger" onClick={() => setDeclining(invoice.id)}>
+                    Decline
+                  </button>
                 )}
                 {invoice.kind === "consultation" && cancelling !== invoice.id && (
                   <button type="button" className="link-danger" onClick={() => setCancelling(invoice.id)}>

@@ -106,6 +106,9 @@ export function useOperationsCenter() {
   const [candidateEvidence, setCandidateEvidence] = useState("");
   const [shareCandidateIds, setShareCandidateIds] = useState<string[]>([]);
   const [memberOptionNote, setMemberOptionNote] = useState("");
+  // Sharing moves an early request into Sourcing, which needs a delivery estimate; and can cover the whole batch.
+  const [shareEta, setShareEta] = useState("");
+  const [shareWithBatch, setShareWithBatch] = useState(true);
   const [note, setNote] = useState("");
   const [checkTitle, setCheckTitle] = useState("");
   const [memberReply, setMemberReply] = useState("");
@@ -709,15 +712,69 @@ export function useOperationsCenter() {
   async function shareSourcingOptions(event: FormEvent) {
     event.preventDefault();
     if (!token || !selected || shareCandidateIds.length === 0) return;
+    const batch = sourcingBatches.find((row) => row.items.some((entry) => entry.work_item_id === selected.id));
+    const eta = shareEta ? new Date(shareEta).toISOString() : null;
+    let summary = "Options shared with the member. The request is now at Options sent.";
     await run(async () => {
-      await apiRequest(`/operations/work-items/${selected.id}/sourcing-options`, token, {
-        method: "POST",
-        body: JSON.stringify({ candidate_ids: shareCandidateIds, member_note: memberOptionNote.trim() || null }),
-      });
+      if (batch && shareWithBatch && batch.items.length > 1) {
+        const result = await apiRequest<{ results: { shared: boolean; summary: string; reason?: string }[] }>(
+          `/operations/sourcing/batches/${batch.id}/share`,
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify({ from_work_item_id: selected.id, candidate_ids: shareCandidateIds, member_note: memberOptionNote.trim() || null, eta_at: eta }),
+          },
+        );
+        const done = result.results.filter((row) => row.shared).length;
+        const missed = result.results.filter((row) => !row.shared);
+        summary = `Shared with ${done} of ${result.results.length} requests in the batch.` +
+          (missed.length ? ` Not shared: ${missed.map((row) => `${row.summary} (${row.reason})`).join("; ")}.` : "");
+      } else {
+        await apiRequest(`/operations/work-items/${selected.id}/sourcing-options`, token, {
+          method: "POST",
+          body: JSON.stringify({ candidate_ids: shareCandidateIds, member_note: memberOptionNote.trim() || null, eta_at: eta }),
+        });
+      }
       setShareCandidateIds([]);
       setMemberOptionNote("");
+      setShareEta("");
       await loadDetails(token, selected);
-    }, "Selected product options shared with the member; request timeline updated.");
+    }, "Options shared.");
+    setNotice(summary);
+  }
+  async function claimBatch(batchId: string) {
+    if (!token) return;
+    let message = "";
+    await run(async () => {
+      const result = await apiRequest<{ claimed: string[]; skipped: { summary: string; reason: string }[] }>(
+        `/operations/sourcing/batches/${batchId}/claim`, token, { method: "POST" });
+      message = `You have ${result.claimed.length} request${result.claimed.length === 1 ? "" : "s"} in this batch.` +
+        (result.skipped.length ? ` Not claimed: ${result.skipped.map((row) => row.summary).join(", ")} (${result.skipped[0].reason})` : "");
+      window.dispatchEvent(new CustomEvent("fayfort:work-claimed"));
+    }, "Batch claimed.");
+    if (message) setNotice(message);
+  }
+  async function copyResearchToBatch(batchId: string) {
+    if (!token || !selected) return;
+    let message = "";
+    await run(async () => {
+      const result = await apiRequest<{ copied_to: string[]; skipped: { summary: string }[]; candidates: number }>(
+        `/operations/sourcing/batches/${batchId}/copy-research`, token,
+        { method: "POST", body: JSON.stringify({ from_work_item_id: selected.id, candidate_ids: [] }) });
+      message = `Copied ${result.candidates} supplier${result.candidates === 1 ? "" : "s"} to ${result.copied_to.length} other request${result.copied_to.length === 1 ? "" : "s"}.` +
+        (result.skipped.length ? ` Claim the rest first: ${result.skipped.map((row) => row.summary).join(", ")}.` : "");
+    }, "Research copied.");
+    if (message) setNotice(message);
+  }
+  async function withdrawInvoice(invoiceId: string, reason: string) {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/invoices/${invoiceId}/withdraw`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      await loadDetails(token, selected);
+    }, "Invoice withdrawn. Its payment link no longer works and the member was told. You can send a new one.");
   }
   async function createSourcingBatch(event: FormEvent) {
     event.preventDefault();
@@ -1007,6 +1064,13 @@ export function useOperationsCenter() {
     shareCandidateIds,
     setShareCandidateIds,
     memberOptionNote,
+    shareEta,
+    setShareEta,
+    shareWithBatch,
+    setShareWithBatch,
+    claimBatch,
+    copyResearchToBatch,
+    withdrawInvoice,
     setMemberOptionNote,
     note,
     setNote,

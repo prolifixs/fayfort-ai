@@ -278,9 +278,9 @@ class LifecycleTests(BookingTestCase):
         self.db.rows["commerce_invoices"].append({"id": "inv1", "status": "sent", "shopify_draft_order_id": "gid://shopify/DraftOrder/1"})
         held = engine.attach(self.hold(), {"invoice_id": "inv1"})
         other = engine.confirm(self.hold("2026-11-05T06:00:00", member=OTHER_MEMBER))
-        with patch("app.commerce.shopify.delete_draft_order") as delete:
+        with patch("app.accounts.operations_flow.withdraw_draft_orders") as delete:
             counts = engine.sweep(self.at("2026-11-04T06:30:00"))
-        delete.assert_called_once_with("gid://shopify/DraftOrder/1")
+        delete.assert_called_once_with("", ["gid://shopify/DraftOrder/1"])
         self.assertEqual(counts["expired"], 1)
         self.assertEqual(engine.get(held["id"])["status"], "cancelled")
         self.assertEqual(self.db.rows["commerce_invoices"][0]["status"], "cancelled")

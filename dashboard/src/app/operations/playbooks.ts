@@ -51,12 +51,13 @@ function reached(request: RequestContext | null, stages: string[]) {
   return Boolean(request?.events.some((event) => stages.includes(event.stage)));
 }
 function claimStep(input: PlaybookInput, how = "Press Claim so the queue knows you have it. Your claim lasts 15 minutes and renews while you work."): Step {
-  const { item, userId, canManage } = input;
+  const { item, userId } = input;
   return {
     id: "claim",
     title: "Claim it",
-    how: canManage ? "As an administrator you can act without claiming. Workers claim first." : how,
-    done: canManage || FINISHED.includes(item.status) || (item.assigned_worker_id === userId && item.status !== "open"),
+    // One rule for everyone, administrators included (owner decision 2026-10-26).
+    how,
+    done: FINISHED.includes(item.status) || (item.assigned_worker_id === userId && item.status !== "open"),
     target: "ops-step-actions",
   };
 }
@@ -551,7 +552,7 @@ export function queueStepLabel(item: WorkItem, userId: string, canManage = false
   if (item.status === "cancelled") return "Cancelled";
   if (item.status === "waiting") return `Waiting on ${item.waiting_on || "someone"}`;
   if (item.status === "blocked") return "Blocked — needs help";
-  if (item.status === "open") return canManage ? "Ready · nobody has it yet" : "Step 1 · Claim it";
+  if (item.status === "open") return "Step 1 · Claim it";
   if (item.assigned_worker_id === userId) return "You have it";
   return "Someone has it";
 }

@@ -1,7 +1,7 @@
 # Operations, chats, giveaways and notifications: review and fix plan
 
 Status: analysis done 2026-10-26 from the owner's walkthrough (screenshots of Operations, Orders & requests, Tour guide,
-Conversations, Browse). Phase A built 2026-10-26 (section 4). Decisions taken (section 3).
+Conversations, Browse). Phase A built 2026-10-26 (section 4), Phase B built 2026-10-26 (section 5). Decisions taken (section 3).
 
 ## 1. What I found, issue by issue
 
@@ -72,3 +72,24 @@ Every phase gets tests, screenshots at phone, iPad and desktop, guide text, and 
   winners get the existing email and everyone else a short results email. The Draw winners task remains the fallback.
 - Test: the stale "operator signs in" browser test was rewritten for the current sign-in.
 - Open: the 7 [ACCEPTANCE TEST] items in Sourcing are listed for the owner to approve closing.
+
+## 5. What was built: Phase B (2026-10-26)
+
+- **One claiming rule**: everything that changes an item needs it claimed by you, administrators included. Unclaimed,
+  each panel shows **Claim and continue** instead of failing. The first time an administrator claims, they get a worker
+  profile ("Administrator", every department) so the claim works; administrators don't clock in. Administrators keep
+  status changes and dispute opening without claiming.
+- **Automatic stages**: sharing options moves an early request into Sourcing by itself. If the request has no delivery
+  date, the share form asks for it. Each step card has an **After this** line saying what comes next.
+- **Withdraw and decline**: staff withdraw an unpaid invoice from Payments, with a reason (`POST /operations/work-items/{id}/invoices/{invoice}/withdraw`;
+  administrators also have `POST /platform/commerce/invoices/{id}/withdraw`). The Shopify link stops working, the member is
+  emailed, and consultations, booking holds and tour quotes follow. Members **Decline** a deposit, order or tour invoice
+  with a reason (`POST /members/invoices/{id}/decline`). The work goes back to Open and whoever had it is notified
+  (new notification type `quote_declined`, migration `20261028100000_operations_fixes_b.sql`).
+- **Batches**: the queue explains them ("Same item as others? Tick to batch", "Make a batch"). A **batch panel** works
+  the whole batch at once: claim every request, copy the research from one request to the others (no duplicates), and
+  share the same options to every member in one go.
+- **Conversations back**: the page has **Waiting for a person** (default), **All chats** and **Member app**. Member app
+  lists every member-app chat with who is handling it (AI, waiting, a person), opens it to read, and **Take over and reply**
+  opens it in the Operations Center with the AI paused (`GET /operations/member-chats`, `POST /operations/member-chats/{id}/take-over`).
+- Tests: `tests/test_operations_phase_b.py`, `dashboard/tests/e2e/phase-b.spec.ts` (screenshots in test-results/phase-b).

@@ -27,7 +27,7 @@ export const PAGE_GUIDES: Record<string, PageGuide> = {
     terms: [{ name: "Client account", meaning: "The business you're working on, picked at the top of the menu. Every Workspace and Operations page shows only that account." }],
   },
   Conversations: {
-    what: "Chats on Instagram, Messenger and the website that need a person: a customer asked for someone, or the AI handed over.",
+    what: "Every customer chat: Instagram, Messenger and the website, plus the member app. Start with the ones waiting for a person.",
     steps: [
       { title: "Pick the oldest waiting chat", how: "'Waiting for a person' chats come first. Open one to read it from the top." },
       { title: "Take it over", how: "Replies are only possible after a takeover: request one here, then take it over in Human Agents (or from the Operations Center)." },
@@ -35,7 +35,7 @@ export const PAGE_GUIDES: Record<string, PageGuide> = {
       { title: "Hand it back", how: "When the customer has what they need, return the chat to the AI in Human Agents." },
     ],
     terms: [
-      { name: "Not listed?", meaning: "Chats the AI is handling alone aren't listed here. Read any chat in full under Customers → the customer → Read chat." },
+      { name: "Three views", meaning: "Waiting for a person (the default), All chats (every Instagram, Messenger and website chat, including ones the AI handled alone) and Member app (chats from the FayFort member app: Take over and reply opens it in the Operations Center with the AI paused)." },
       { name: "Messenger 24 hours", meaning: "Messenger only accepts replies within 24 hours of the customer's last message." },
     ],
     after: "Customer requests found in a chat are under Requests.",

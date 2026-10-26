@@ -525,14 +525,19 @@ export function QueueFilters({ ops }: { ops: OperationsState }) {
   );
 }
 
-/** Appears once requests are ticked with "Add to batch": name the batch and create it. */
+/** Appears once requests are ticked: name the batch and create it. A batch is several members asking for the same
+ * item: research once, share the same options with all of them; each request keeps its own member, chat and invoice. */
 export function SourcingBatchForm({ ops }: { ops: OperationsState }) {
   const { batchTitle, setBatchTitle, batchWorkIds, setBatchWorkIds, busy, createSourcingBatch } = ops;
   return (
     <form className="ops-batch-bar" onSubmit={createSourcingBatch} aria-label="Group sourcing requests">
       <strong>
-        {batchWorkIds.length} request{batchWorkIds.length === 1 ? "" : "s"} selected
+        {batchWorkIds.length} request{batchWorkIds.length === 1 ? "" : "s"} for the same item
       </strong>
+      <small className="ops-batch-help">
+        A batch lets you research once and share the same options with every member in it. Each request keeps its own
+        member, chat and invoice.
+      </small>
       <label className="ops-select">
         <span>Batch name</span>
         <input
@@ -544,7 +549,7 @@ export function SourcingBatchForm({ ops }: { ops: OperationsState }) {
         />
       </label>
       <button className="primary-button" disabled={busy || batchWorkIds.length === 0}>
-        Create batch
+        Make a batch
       </button>
       <button type="button" className="ops-link-button" onClick={() => setBatchWorkIds([])}>
         Clear selection
@@ -635,7 +640,7 @@ export function WorkList({ ops }: { ops: OperationsState }) {
                     <label className="operations-batch-select">
                       <input
                         type="checkbox"
-                        aria-label={`Add ${item.summary} to sourcing batch`}
+                        aria-label={`Source ${item.summary} together with others`}
                         checked={batchWorkIds.includes(item.id)}
                         onChange={(event) =>
                           setBatchWorkIds((current) =>
@@ -644,7 +649,7 @@ export function WorkList({ ops }: { ops: OperationsState }) {
                         }
                         disabled={inBatch}
                       />
-                      <span>{inBatch ? "In a batch" : "Add to batch"}</span>
+                      <span>{inBatch ? "In a batch" : "Same item as others? Tick to batch"}</span>
                     </label>
                   )}
                   <button type="button" className="operations-work-select" onClick={() => setSelected(item)}>
@@ -678,9 +683,8 @@ export function WorkList({ ops }: { ops: OperationsState }) {
                     )}
                   </button>
                   {!archive &&
-                    !canManage &&
-                    scope === "available" &&
-                    (item.status === "open" || item.status === "claimed") && (
+                    (scope === "available" || canManage) &&
+                    (item.status === "open" || (item.status === "claimed" && item.assigned_worker_id !== userId)) && (
                       <button
                         type="button"
                         className="primary-button operations-claim"

@@ -19,6 +19,7 @@ import {
   FulfillmentPanel,
   SourcingCandidatesPanel,
   ShareOptionsForm,
+  BatchPanel,
 } from "./operations/RequestPanels";
 import { MemberConversationPanel, HandoffPanel, BusinessConversationPanel } from "./operations/ConversationPanels";
 import { WorkActionForm, TransferForm, WorkHistory, ChecklistPanel, NotesPanel } from "./operations/WorkPanels";
@@ -181,7 +182,8 @@ export function OperationsCenterPage() {
       : []),
   ];
   const finished = selected ? ["completed", "cancelled"].includes(selected.status) : false;
-  const owner = Boolean(selected && (canManage || selected.assigned_worker_id === userId));
+  // Doing the work needs it claimed by you, administrators included; they can still change status and route work.
+  const owner = Boolean(selected && selected.assigned_worker_id === userId && ["claimed", "waiting"].includes(selected.status));
   const source = selected?.metadata?.source_kind as string | undefined;
   const guideKey = selected ? guideKeyFor(selected) : "";
   const openHelp = () => setHelp(guideKey || "glossary");
@@ -391,6 +393,7 @@ export function OperationsCenterPage() {
                           )}
                         </div>
                       )}
+                      {requestContext && selected.department === "sourcing" && <BatchPanel ops={ops} selected={selected} />}
                       {requestContext && selected.department === "sourcing" && (
                         <div id="ops-candidates">
                           <SourcingCandidatesPanel ops={ops} selected={selected} requestContext={requestContext} />
@@ -466,7 +469,7 @@ export function OperationsCenterPage() {
                       {/* 3. Status, transfer, dispute */}
                       {!finished && !selected.handoff_id && (
                         <OpsSection id="ops-status" title="Update status" collapsible defaultOpen={false} onHelp={() => setHelp("glossary")}>
-                          {owner ? (
+                          {owner || canManage ? (
                             <WorkActionForm ops={ops} selected={selected} />
                           ) : (
                             <p className="operations-muted">Claim this work item before changing its status or next action.</p>

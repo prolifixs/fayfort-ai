@@ -490,11 +490,8 @@ def _withdraw_invoice(booking: dict) -> None:
         db().table("commerce_invoices").update({"status": "cancelled", "error": "The booking hold ended."}) \
             .eq("id", invoice["id"]).eq("status", "sent").execute()
         if invoice.get("shopify_draft_order_id"):
-            from app.commerce import shopify
-            try:
-                shopify.delete_draft_order(str(invoice["shopify_draft_order_id"]))
-            except Exception:
-                logger.warning("Could not delete the Shopify draft order for an ended hold", exc_info=True)
+            from app.accounts import operations_flow
+            operations_flow.withdraw_draft_orders("", [str(invoice["shopify_draft_order_id"])])
     except Exception:
         logger.exception("Could not withdraw a booking invoice")
 

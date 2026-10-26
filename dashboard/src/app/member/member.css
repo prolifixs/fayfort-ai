@@ -1574,3 +1574,5 @@ button.giveaway-open{width:100%;border:0;font:inherit;cursor:pointer}
 .giveaway-sheet-won{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,#147964 14%,var(--color-bg))}
 .giveaway-sheet-winners{font-weight:var(--weight-strong)}
 .giveaway-sheet>.primary-button,.giveaway-sheet>.secondary-button{justify-self:stretch;min-height:44px}
+.member-decline-reason{display:grid;gap:4px;margin:6px 0;font-size:var(--text-sm)}
+.member-decline-reason input{min-height:38px;padding:6px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font:inherit;background:var(--color-bg);color:var(--color-text)}

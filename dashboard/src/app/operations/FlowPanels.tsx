@@ -34,8 +34,9 @@ export function useFirstWeek(canManage: boolean): [boolean, (value: boolean) => 
   ];
 }
 
+/** Doing the work needs it claimed by you; administrators too (owner decision 2026-10-26). */
 export function canActOn(ops: OperationsState, item: WorkItem) {
-  return ops.canManage || (item.assigned_worker_id === ops.userId && item.status === "claimed");
+  return item.assigned_worker_id === ops.userId && (item.status === "claimed" || item.status === "waiting");
 }
 
 function goTo(target?: string) {
@@ -133,7 +134,8 @@ export function PlaybookPanel({
   const finished = ["completed", "cancelled"].includes(selected.status);
   const [showHow, setShowHow] = useState(firstWeek);
   useEffect(() => setShowHow(firstWeek), [firstWeek, selected.id, step?.id]);
-  const needsClaim = step?.id === "claim" && !ops.canManage && !finished;
+  const needsClaim = step?.id === "claim" && !finished;
+  const after = steps.slice(index + 1).find((item) => !item.done);
   return (
     <section className="ops-playbook" aria-label="Steps for this work">
       <ol className="ops-steps">
@@ -173,6 +175,12 @@ export function PlaybookPanel({
                 How do I do this?
               </button>
             )}
+            {after && (
+              <p className="ops-after-this">
+                <span>After this</span> {after.title}
+                {after.waitingOn ? ` (waiting on ${after.waitingOn})` : ""}
+              </p>
+            )}
             {selected.next_action && selected.next_action !== step.how && (
               <p className="ops-next-action">
                 <span>Next action</span> {selected.next_action}
@@ -181,7 +189,7 @@ export function PlaybookPanel({
             <div className="ops-do-now-actions">
               {needsClaim ? (
                 <button type="button" className="primary-button" disabled={ops.busy} onClick={() => void ops.claim(selected)}>
-                  {selected.assigned_worker_id && selected.assigned_worker_id !== ops.userId ? "Take over" : "Claim it"}
+                  {selected.assigned_worker_id && selected.assigned_worker_id !== ops.userId ? "Take over" : "Claim and continue"}
                 </button>
               ) : (
                 step.target && (
@@ -331,10 +339,14 @@ export function RequestStagePanel({ ops, selected }: { ops: OperationsState; sel
   const next = requestNextStages[stage] || [];
   if (!next.length) return null;
   const owner = selected.assigned_worker_id === userId && selected.status === "claimed";
+  void canManage;
   if (!owner)
     return (
       <p className="operations-muted">
-        {canManage ? "Workers move the request stage after claiming it." : "Claim this work to move the request on."}
+        Claim this work to move the request on.{" "}
+        <button type="button" className="ops-link-button" disabled={busy} onClick={() => void ops.claim(selected)}>
+          Claim and continue
+        </button>
       </p>
     );
   const label = (value: string) =>
@@ -385,7 +397,9 @@ export function RequestStagePanel({ ops, selected }: { ops: OperationsState; sel
 }
 
 export function PaymentsPanel({ ops, selected }: { ops: OperationsState; selected: Selected }) {
-  const { payments, busy, sendDeposit, sendInvoice } = ops;
+  const { payments, busy, sendDeposit, sendInvoice, withdrawInvoice } = ops;
+  const [withdrawing, setWithdrawing] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
   const [total, setTotal] = useState("");
   const [currency, setCurrency] = useState("USD");
   useEffect(() => {
@@ -412,7 +426,14 @@ export function PaymentsPanel({ ops, selected }: { ops: OperationsState; selecte
           </small>
         </div>
         {deposit ? (
-          <InvoiceChip invoice={deposit} />
+          <span className="ops-invoice-with-action">
+            <InvoiceChip invoice={deposit} />
+            {act && deposit.status === "sent" && (
+              <button type="button" className="ops-link-button" onClick={() => setWithdrawing(deposit.id)}>
+                Withdraw
+              </button>
+            )}
+          </span>
         ) : rate > 0 && act ? (
           <form
             className="ops-inline-form"
@@ -452,7 +473,14 @@ export function PaymentsPanel({ ops, selected }: { ops: OperationsState; selecte
           </small>
         </div>
         {order ? (
-          <InvoiceChip invoice={order} />
+          <span className="ops-invoice-with-action">
+            <InvoiceChip invoice={order} />
+            {act && order.status === "sent" && (
+              <button type="button" className="ops-link-button" onClick={() => setWithdrawing(order.id)}>
+                Withdraw
+              </button>
+            )}
+          </span>
         ) : act && option ? (
           <button type="button" className="primary-button" disabled={busy || !option.price_amount} onClick={() => void sendInvoice()}>
             {failedOrder ? "Send the invoice again" : "Send the invoice"}
@@ -462,6 +490,30 @@ export function PaymentsPanel({ ops, selected }: { ops: OperationsState; selecte
         )}
       </div>
       {failedOrder && !order && <p className="form-error">Last attempt failed: {failedOrder.error || "unknown error"}</p>}
+      {withdrawing && (
+        <form
+          className="ops-inline-form ops-withdraw"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void withdrawInvoice(withdrawing, withdrawReason.trim()).then(() => {
+              setWithdrawing("");
+              setWithdrawReason("");
+            });
+          }}
+        >
+          <label>
+            Why are you withdrawing it? (the member sees this)
+            <input required maxLength={300} value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} placeholder="For example: the price changed" />
+          </label>
+          <button className="secondary-button danger" disabled={busy || !withdrawReason.trim()}>
+            Withdraw invoice
+          </button>
+          <button type="button" className="ops-link-button" onClick={() => setWithdrawing("")}>
+            Keep it
+          </button>
+          <small>The payment link stops working straight away. You can then send a new one.</small>
+        </form>
+      )}
     </div>
   );
 }

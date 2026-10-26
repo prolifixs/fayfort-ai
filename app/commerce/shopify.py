@@ -538,15 +538,6 @@ def create_invoice(*, invoice_id: str, email: str, title: str, unit_price: float
     return draft_id, str(url or "")
 
 
-def delete_draft_order(draft_order_gid: str, *, client: httpx.Client | None = None) -> None:
-    """Remove an unpaid draft order so its invoice link can't be paid any more (an expired booking hold)."""
-    data = admin_graphql("mutation D($input: DraftOrderDeleteInput!) { draftOrderDelete(input: $input) { "
-                         "deletedId userErrors { message } } }", {"input": {"id": draft_order_gid}}, client=client)
-    problem = user_errors(data.get("draftOrderDelete"))
-    if problem:
-        raise ShopifyError(problem)
-
-
 def set_draft_shipping_address(draft_order_gid: str, address: dict, *, client: httpx.Client | None = None) -> None:
     """Put the member's chosen delivery address on an unpaid draft order before they pay."""
     name = str(address.get("recipient_name") or "").strip()

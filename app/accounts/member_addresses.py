@@ -221,6 +221,11 @@ def cancel_consultation_invoice(member_id: str, invoice_id: str) -> None:
         operations_flow.withdraw_draft_orders(str(invoice.get("request_id") or ""), [str(invoice["shopify_draft_order_id"])])
 
 
+class DeclineInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(default="", max_length=300)
+
+
 # ---------------------------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------------------------
@@ -315,6 +320,17 @@ def create_member_account_router() -> APIRouter:
             return {"invoice_id": str(invoice_id), "status": "cancelled"}
         except Exception as exc:
             raise _http(exc, "Your consultation could not be cancelled.") from exc
+
+    @router.post("/members/invoices/{invoice_id}/decline")
+    def decline(invoice_id: UUID, payload: DeclineInput, authorization: str | None = Header(default=None)):
+        """Decline an unpaid deposit, order or tour invoice; the team is told and the link stops working."""
+        member_id = verified_member(authorization)
+        try:
+            from app.commerce import withdraw
+            withdraw.decline(member_id, str(invoice_id), payload.reason)
+            return {"invoice_id": str(invoice_id), "status": "cancelled"}
+        except Exception as exc:
+            raise _http(exc, "The invoice could not be declined.") from exc
 
     return router
 

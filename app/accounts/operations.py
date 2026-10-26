@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 Department = Literal["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"]
 WorkStatus = Literal["open", "claimed", "waiting", "blocked", "completed", "cancelled"]
 Priority = Literal["low", "normal", "high", "urgent"]
+DEPARTMENTS = ("conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team")
 SOURCES = {"member_request", "member_conversation", "business_handoff", "business_conversation"}
 PRIORITY_RANK = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
 STATUS_RANK = {"blocked": 0, "open": 1, "claimed": 2, "waiting": 3}
@@ -159,10 +160,31 @@ class SourcingCandidateUpdate(SourcingCandidateCreate):
     """Validated full replacement for staff research on a sourcing candidate."""
 
 
+class BatchResearchCopy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_work_item_id: UUID
+    candidate_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class BatchShare(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_work_item_id: UUID
+    candidate_ids: list[UUID] = Field(min_length=1, max_length=10)
+    member_note: str | None = Field(default=None, max_length=1000)
+    eta_at: datetime | None = None
+
+
+class InvoiceWithdraw(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(default="", max_length=300)
+
+
 class SourcingOptionsShare(BaseModel):
     model_config = ConfigDict(extra="forbid")
     candidate_ids: list[UUID] = Field(min_length=1, max_length=10)
     member_note: str | None = Field(default=None, max_length=1000)
+    # Needed only when the request hasn't reached Sourcing yet and has no delivery estimate: sharing moves it on.
+    eta_at: datetime | None = None
 
     @field_validator("member_note")
     @classmethod
@@ -783,12 +805,56 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             logger.exception("Could not create operations work item")
             raise HTTPException(status_code=409, detail="The work item could not be created with those source and ownership details.") from exc
 
+    def ensure_admin_worker(admin_id: str) -> None:
+        """An administrator who claims work gets a worker profile with every department (once), so the same
+        claim-first rule and the same worker tools apply. They don't have to clock in."""
+        found = (supabase.table("fayfort_workers").select("user_id,status").eq("user_id", admin_id).maybe_single().execute())
+        row = found.data if found is not None else None
+        now = datetime.now(timezone.utc).isoformat()
+        if row and row.get("status") == "inactive":
+            raise HTTPException(status_code=409, detail="Your worker profile is deactivated. Reactivate it in FayFort Workers to claim work.")
+        if not row:
+            supabase.table("fayfort_workers").insert({
+                "user_id": admin_id, "status": "active", "provisioned_by": admin_id, "invite_kind": "existing_account",
+                "activated_at": now, "invitation_sent_at": now, "job_title": "Administrator"}).execute()
+        elif row.get("status") != "active":
+            supabase.table("fayfort_workers").update({"status": "active", "activated_at": now, "updated_at": now,
+                                                      "invite_token_hash": None, "invite_expires_at": None}) \
+                .eq("user_id", admin_id).execute()
+        have = {r["department"] for r in (supabase.table("operations_worker_departments").select("department")
+                                          .eq("worker_id", admin_id).execute().data or [])}
+        if set(DEPARTMENTS) - have:
+            supabase.rpc("set_operations_worker_departments", {"p_actor_id": admin_id, "p_worker_id": admin_id,
+                                                               "p_departments": list(DEPARTMENTS)}).execute()
+
+    def advance_to_sourcing(item: dict, staff: dict, eta_at: datetime | None) -> None:
+        """Sharing options needs the request in Sourcing. Instead of an error, move it there (Under review →
+        Sourcing), setting the delivery estimate first if it's missing (owner request 2026-10-26)."""
+        request_id = str(item["member_request_id"])
+        events = (supabase.table("member_request_events").select("stage,sequence_no").eq("request_id", request_id)
+                  .order("sequence_no", desc=True).limit(1).execute().data or [])
+        stage = events[0]["stage"] if events else "submitted"
+        if stage not in ("submitted", "under_review"):
+            return
+        request = (supabase.table("member_purchase_requests").select("eta_at").eq("id", request_id).limit(1).execute().data or [{}])[0]
+        if not request.get("eta_at"):
+            if not eta_at:
+                raise HTTPException(status_code=409, detail="Add the estimated delivery date: sharing options moves the request into Sourcing, which needs it.")
+            due = eta_at if eta_at.tzinfo else eta_at.replace(tzinfo=timezone.utc)
+            supabase.rpc("set_operations_work_due", {
+                "p_work_item_id": str(item["id"]), "p_actor_id": staff["user_id"], "p_actor_type": "worker",
+                "p_due_at": due.isoformat(), "p_reason": None}).execute()
+        for next_stage in (["under_review", "sourcing"] if stage == "submitted" else ["sourcing"]):
+            supabase.rpc("append_member_request_milestone", {
+                "p_request_id": request_id, "p_worker_id": staff["user_id"], "p_stage": next_stage,
+                "p_member_note": None, "p_details": {}}).execute()
+
     @router.post("/operations/work-items/{work_item_id}/claim")
     def claim_work_item(work_item_id: UUID, authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
-        if staff.get("role") != "worker":
-            raise HTTPException(status_code=403, detail="Only an active FayFort worker can claim queue work.")
-        if not worker_on_shift(staff["user_id"]):
+        if staff.get("role") == "platform_admin":
+            ensure_admin_worker(staff["user_id"])  # administrators claim like workers, without clocking in
+        elif not worker_on_shift(staff["user_id"]):
             raise HTTPException(status_code=409, detail="Clock in first: work can only be claimed while you're on shift.")
         try:
             result = supabase.rpc("claim_operations_work_item", {
@@ -883,6 +949,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         if not item.get("member_request_id") or item.get("dispute_case_id"):
             raise HTTPException(status_code=409, detail="Open a dispute from a member request work item.")
         if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+            # Administrators can open a dispute on finished work, which can't be claimed any more.
             raise HTTPException(status_code=403, detail="Only the worker assigned to this request can open its dispute case.")
         if staff.get("role") != "platform_admin" and "disputes" not in departments_for(staff["user_id"]):
             raise HTTPException(status_code=403, detail="You need Disputes department access before opening a dispute case.")
@@ -1168,6 +1235,218 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             logger.exception("Could not create sourcing batch")
             raise HTTPException(status_code=409, detail="Batch creation failed. Confirm every selected item is an eligible sourcing request and not already batched.") from exc
 
+    # ---- Member app chats in the Control Center (Conversations → Member app) ------------------------------------
+    CHAT_DEPARTMENTS = ("member_support", "conversation_intake")
+
+    def member_chat_staff(authorization: str | None) -> dict:
+        staff = staff_identity(authorization)
+        if staff.get("role") != "platform_admin" and not set(CHAT_DEPARTMENTS) & set(departments_for(staff["user_id"])):
+            raise HTTPException(status_code=403, detail="Member support or conversation intake access is needed for member chats.")
+        return staff
+
+    @router.get("/operations/member-chats")
+    def list_member_chats(q: str | None = Query(default=None, max_length=100), offset: int = Query(default=0, ge=0, le=5000),
+                          authorization: str | None = Header(default=None)):
+        member_chat_staff(authorization)
+        try:
+            query = (supabase.table("member_conversations")
+                     .select("id,member_id,title,last_activity_at,created_at,linked_request_id,staff_takeover_at,archived_at"))
+            if q and q.strip():
+                query = query.ilike("title", f"%{q.strip().replace('%', '').replace('_', ' ')}%")
+            chats = (query.order("last_activity_at", desc=True).range(offset, offset + 49).execute().data or [])
+            ids = [str(c["id"]) for c in chats]
+            member_ids = list({str(c["member_id"]) for c in chats})
+            profiles = {str(p["user_id"]): p for p in (supabase.table("member_profiles").select("user_id,display_name,username")
+                        .in_("user_id", member_ids).execute().data or [])} if member_ids else {}
+            work = {}
+            for row in (supabase.table("operations_work_items").select("id,member_conversation_id,status,assigned_worker_id")
+                        .in_("member_conversation_id", ids).in_("status", ["open", "claimed", "waiting", "blocked"])
+                        .execute().data or []) if ids else []:
+                work[str(row["member_conversation_id"])] = row
+            last: dict[str, dict] = {}
+            for row in (supabase.table("member_messages").select("conversation_id,sender_type,content,created_at")
+                        .in_("conversation_id", ids).order("created_at", desc=True).limit(len(ids) * 6 + 10).execute().data or []) if ids else []:
+                last.setdefault(str(row["conversation_id"]), row)
+            out = []
+            for chat in chats:
+                cid = str(chat["id"])
+                if cid not in last:
+                    continue  # empty chats
+                profile = profiles.get(str(chat["member_id"])) or {}
+                item = work.get(cid)
+                out.append({
+                    "id": cid, "title": chat.get("title") or "Chat", "last_activity_at": chat.get("last_activity_at"),
+                    "member_name": profile.get("display_name") or (f"@{profile['username']}" if profile.get("username") else "Member"),
+                    "last_message": {k: last[cid].get(k) for k in ("sender_type", "content", "created_at")},
+                    "handled_by": "staff" if chat.get("staff_takeover_at") else ("waiting" if item else "ai"),
+                    "work_item_id": str(item["id"]) if item else None, "linked_request_id": chat.get("linked_request_id"),
+                })
+            return {"chats": out, "has_more": len(chats) == 50}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not list member chats")
+            raise HTTPException(status_code=503, detail="Member chats could not be loaded.") from exc
+
+    @router.get("/operations/member-chats/{conversation_id}")
+    def read_member_chat(conversation_id: UUID, authorization: str | None = Header(default=None)):
+        member_chat_staff(authorization)
+        chat = (supabase.table("member_conversations").select("id,title,member_id,staff_takeover_at,linked_request_id")
+                .eq("id", str(conversation_id)).limit(1).execute().data or [])
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found.")
+        messages = (supabase.table("member_messages").select("id,sender_type,content,created_at")
+                    .eq("conversation_id", str(conversation_id)).order("created_at").limit(300).execute().data or [])
+        return {"chat": chat[0], "messages": messages}
+
+    @router.post("/operations/member-chats/{conversation_id}/take-over")
+    def take_over_from_member_chats(conversation_id: UUID, authorization: str | None = Header(default=None)):
+        """Start (or join) staff support on a member chat, claim it and take it over from the AI. Returns the work item
+        to open in the Operations Center, where the reply box is."""
+        staff = member_chat_staff(authorization)
+        chat = (supabase.table("member_conversations").select("id,member_id,linked_request_id")
+                .eq("id", str(conversation_id)).limit(1).execute().data or [])
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found.")
+        if chat[0].get("linked_request_id"):
+            raise HTTPException(status_code=409, detail="This chat belongs to a sourcing request. Work it from that request.")
+        if staff.get("role") == "platform_admin":
+            ensure_admin_worker(staff["user_id"])
+        elif not worker_on_shift(staff["user_id"]):
+            raise HTTPException(status_code=409, detail="Clock in first: work can only be claimed while you're on shift.")
+        try:
+            work = supabase.rpc("request_member_conversation_support", {"p_member_id": str(chat[0]["member_id"]),
+                                                                        "p_conversation_id": str(conversation_id)}).execute()
+            item = work.data[0] if isinstance(work.data, list) and work.data else work.data
+            if not isinstance(item, dict) or not item.get("id"):
+                raise RuntimeError("No work item for the chat")
+            if not (item.get("assigned_worker_id") == staff["user_id"] and item.get("status") == "claimed"):
+                supabase.rpc("claim_operations_work_item", {"p_work_item_id": str(item["id"]), "p_worker_id": staff["user_id"]}).execute()
+            from app.handoffs import window as handoff_window
+            handoff_window.take_over_member_chat(str(conversation_id), staff["user_id"])
+            return {"work_item_id": str(item["id"])}
+        except Exception as exc:
+            logger.exception("Could not take over a member chat from Conversations")
+            raise HTTPException(status_code=409, detail="This chat couldn't be taken over. Someone else may have it.") from exc
+
+    # ---- Batches: several members sourcing the same item, worked once ----------------------------------------
+    CANDIDATE_COPY_FIELDS = ("product_name", "supplier_name", "product_url", "price_amount", "currency", "availability",
+                             "evidence_note")
+
+    def batch_items(batch_id: str) -> list[dict]:
+        members = (supabase.table("operations_sourcing_batch_items").select("work_item_id,member_request_id")
+                   .eq("batch_id", batch_id).execute().data or [])
+        ids = [str(m["work_item_id"]) for m in members]
+        if not ids:
+            raise HTTPException(status_code=404, detail="Batch not found.")
+        return (supabase.table("operations_work_items").select("*").in_("id", ids).execute().data or [])
+
+    def copy_candidates(source: list[dict], target: dict, actor_id: str) -> dict[str, str]:
+        """Copy research rows onto another request in the batch (skipping links it already has).
+        Returns {source candidate id: target candidate id}."""
+        existing = {row["product_url"]: str(row["id"]) for row in (supabase.table("operations_sourcing_candidates")
+                    .select("id,product_url").eq("work_item_id", str(target["id"])).execute().data or [])}
+        mapping: dict[str, str] = {}
+        for candidate in source:
+            if candidate["product_url"] in existing:
+                mapping[str(candidate["id"])] = existing[candidate["product_url"]]
+                continue
+            made = (supabase.table("operations_sourcing_candidates").insert({
+                **{key: candidate.get(key) for key in CANDIDATE_COPY_FIELDS},
+                "work_item_id": str(target["id"]), "member_request_id": str(target["member_request_id"]),
+                "created_by": actor_id}).execute().data or [])
+            if made:
+                mapping[str(candidate["id"])] = str(made[0]["id"])
+                existing[candidate["product_url"]] = str(made[0]["id"])
+        return mapping
+
+    def source_candidates(item_id: str, candidate_ids: list[UUID]) -> list[dict]:
+        query = (supabase.table("operations_sourcing_candidates").select("id," + ",".join(CANDIDATE_COPY_FIELDS))
+                 .eq("work_item_id", item_id))
+        if candidate_ids:
+            query = query.in_("id", [str(value) for value in candidate_ids])
+        return query.execute().data or []
+
+    @router.post("/operations/sourcing/batches/{batch_id}/claim")
+    def claim_batch(batch_id: UUID, authorization: str | None = Header(default=None)):
+        """Claim every request in the batch that nobody else is working on, so one person can work the batch."""
+        staff = staff_identity(authorization)
+        if staff.get("role") == "platform_admin":
+            ensure_admin_worker(staff["user_id"])
+        elif not worker_on_shift(staff["user_id"]):
+            raise HTTPException(status_code=409, detail="Clock in first: work can only be claimed while you're on shift.")
+        claimed, skipped = [], []
+        for item in batch_items(str(batch_id)):
+            if item.get("assigned_worker_id") == staff["user_id"] and item.get("status") == "claimed":
+                claimed.append(str(item["id"]))
+                continue
+            try:
+                supabase.rpc("claim_operations_work_item", {"p_work_item_id": str(item["id"]), "p_worker_id": staff["user_id"]}).execute()
+                claimed.append(str(item["id"]))
+            except Exception:
+                skipped.append({"work_item_id": str(item["id"]), "summary": item.get("summary"),
+                                "reason": "Someone else has it, or it's waiting or finished."})
+        return {"claimed": claimed, "skipped": skipped}
+
+    @router.post("/operations/sourcing/batches/{batch_id}/copy-research")
+    def copy_batch_research(batch_id: UUID, payload: BatchResearchCopy, authorization: str | None = Header(default=None)):
+        """Research once: copy the suppliers found on one request to every other request in the batch you've claimed."""
+        staff = staff_identity(authorization)
+        items = batch_items(str(batch_id))
+        source_item = next((i for i in items if str(i["id"]) == str(payload.from_work_item_id)), None)
+        if not source_item:
+            raise HTTPException(status_code=404, detail="That request isn't in this batch.")
+        if source_item.get("assigned_worker_id") != staff["user_id"]:
+            raise HTTPException(status_code=403, detail="Claim this request before copying its research.")
+        source = source_candidates(str(source_item["id"]), payload.candidate_ids)
+        if not source:
+            raise HTTPException(status_code=409, detail="Add research to this request first.")
+        copied, skipped = [], []
+        for item in items:
+            if str(item["id"]) == str(source_item["id"]):
+                continue
+            if item.get("assigned_worker_id") != staff["user_id"] or item.get("status") in ("completed", "cancelled"):
+                skipped.append({"work_item_id": str(item["id"]), "summary": item.get("summary"), "reason": "Not claimed by you"})
+                continue
+            copy_candidates(source, item, staff["user_id"])
+            copied.append(str(item["id"]))
+        return {"copied_to": copied, "skipped": skipped, "candidates": len(source)}
+
+    @router.post("/operations/sourcing/batches/{batch_id}/share")
+    def share_with_batch(batch_id: UUID, payload: BatchShare, authorization: str | None = Header(default=None)):
+        """Share the same options with every request in the batch you've claimed (research is copied as needed)."""
+        staff = staff_identity(authorization)
+        items = batch_items(str(batch_id))
+        source_item = next((i for i in items if str(i["id"]) == str(payload.from_work_item_id)), None)
+        if not source_item or source_item.get("assigned_worker_id") != staff["user_id"]:
+            raise HTTPException(status_code=403, detail="Claim this request before sharing for the batch.")
+        source = source_candidates(str(source_item["id"]), payload.candidate_ids)
+        if len(source) != len(payload.candidate_ids):
+            raise HTTPException(status_code=409, detail="One or more options aren't on this request.")
+        results = []
+        for item in items:
+            if item.get("status") in ("completed", "cancelled"):
+                continue
+            entry = {"work_item_id": str(item["id"]), "summary": item.get("summary")}
+            if item.get("assigned_worker_id") != staff["user_id"]:
+                results.append({**entry, "shared": False, "reason": "Not claimed by you"})
+                continue
+            try:
+                mapping = ({str(c["id"]): str(c["id"]) for c in source} if str(item["id"]) == str(source_item["id"])
+                           else copy_candidates(source, item, staff["user_id"]))
+                advance_to_sourcing(item, staff, payload.eta_at)
+                supabase.rpc("share_operations_sourcing_options", {
+                    "p_request_id": item["member_request_id"], "p_work_item_id": str(item["id"]),
+                    "p_candidate_ids": [mapping[str(c["id"])] for c in source],
+                    "p_actor_id": staff["user_id"], "p_member_note": payload.member_note}).execute()
+                results.append({**entry, "shared": True})
+            except HTTPException as exc:
+                results.append({**entry, "shared": False, "reason": exc.detail})
+            except Exception:
+                logger.exception("Could not share batch options with a request")
+                results.append({**entry, "shared": False, "reason": "Couldn't be shared. Open it and try there."})
+        return {"results": results}
+
     @router.get("/operations/work-items/{work_item_id}/sourcing-candidates")
     def list_sourcing_candidates(work_item_id: UUID, authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
@@ -1190,7 +1469,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if item.get("department") != "sourcing" or not item.get("member_request_id"):
             raise HTTPException(status_code=404, detail="Sourcing request not found.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this sourcing request before adding research.")
         try:
             result = (supabase.table("operations_sourcing_candidates").insert({
@@ -1212,7 +1491,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if item.get("department") != "sourcing" or not item.get("member_request_id"):
             raise HTTPException(status_code=404, detail="Sourcing request not found.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this sourcing request before editing research.")
         try:
             result = (supabase.table("operations_sourcing_candidates")
@@ -1239,8 +1518,15 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if item.get("department") != "sourcing" or not item.get("member_request_id"):
             raise HTTPException(status_code=404, detail="Sourcing request not found.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this sourcing request before sharing options.")
+        try:
+            advance_to_sourcing(item, staff, payload.eta_at)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not move the request into Sourcing before sharing")
+            raise HTTPException(status_code=409, detail="The request couldn't be moved into Sourcing. Refresh and try again.") from exc
         try:
             result = supabase.rpc("share_operations_sourcing_options", {
                 "p_request_id": item["member_request_id"], "p_work_item_id": str(work_item_id),
@@ -1264,7 +1550,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if not item.get("member_conversation_id") or item.get("member_request_id"):
             raise HTTPException(status_code=409, detail="This work item is not an unlinked member conversation.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this conversation before replying to the member.")
         try:
             result = supabase.rpc("send_operations_member_conversation_reply", {
@@ -1303,7 +1589,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if not item.get("member_conversation_id"):
             raise HTTPException(status_code=409, detail="This work item has no member chat.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this conversation before taking it over.")
         from app.handoffs import window as handoff_window
         try:
@@ -1321,7 +1607,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         item = load_accessible_item(work_item_id, staff)
         if not item.get("member_conversation_id"):
             raise HTTPException(status_code=409, detail="This work item has no member chat.")
-        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+        if item.get("assigned_worker_id") != staff["user_id"]:
             raise HTTPException(status_code=403, detail="Claim this conversation before handing it back.")
         from app.handoffs import window as handoff_window
         handoff_window.release_member_takeover(str(item["member_conversation_id"]))
@@ -1495,9 +1781,8 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
 
     # ---- Operations flow: archive, payments, group buys, giveaways (docs/OPERATIONS_CENTER_PLAN.md) ----
     def require_owner(item: dict, staff: dict) -> None:
-        if staff.get("role") == "platform_admin":
-            return
-        if item.get("assigned_worker_id") != staff["user_id"] or item.get("status") != "claimed":
+        # One rule for everyone (owner decision 2026-10-26): administrators claim before doing the work too.
+        if item.get("assigned_worker_id") != staff["user_id"] or item.get("status") not in ("claimed", "waiting"):
             raise HTTPException(status_code=403, detail="Claim this work item first.")
 
     def by(staff: dict) -> dict:
@@ -1576,6 +1861,26 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 raise HTTPException(status_code=409, detail="This work is finished. Reopen it first.") from exc
             logger.exception("Could not set the work deadline")
             raise HTTPException(status_code=503, detail="The date could not be saved. Try again.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/invoices/{invoice_id}/withdraw")
+    def withdraw_work_invoice(work_item_id: UUID, invoice_id: UUID, payload: InvoiceWithdraw,
+                              authorization: str | None = Header(default=None)):
+        """Withdraw an unpaid deposit or invoice on this request: its Shopify link stops working and the member is told."""
+        from app.commerce import withdraw
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        require_owner(item, staff)
+        invoice = (supabase.table("commerce_invoices").select("id,request_id").eq("id", str(invoice_id)).limit(1).execute().data or [None])[0]
+        if not invoice or not item.get("member_request_id") or str(invoice.get("request_id")) != str(item["member_request_id"]):
+            raise HTTPException(status_code=404, detail="Invoice not found on this request.")
+        try:
+            done = withdraw.withdraw(str(invoice_id), actor_id=staff["user_id"], reason=payload.reason)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Could not withdraw an invoice")
+            raise HTTPException(status_code=503, detail="The invoice could not be withdrawn. Try again.") from exc
+        return {"invoice": {"id": done["id"], "status": "cancelled"}}
 
     @router.post("/operations/work-items/{work_item_id}/deposit-invoice", status_code=201)
     def send_work_deposit(work_item_id: UUID, payload: WorkDepositInvoice, authorization: str | None = Header(default=None)):
