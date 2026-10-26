@@ -1072,12 +1072,37 @@ interface BillingStatus {
   problem: string | null;
   checked_at: string | null;
   subscribers: Record<"standard" | "pro", number>;
+  open_disputes?: number;
+  automatic_tax?: boolean;
+  past_due_grace_days?: number;
 }
 
 /** Member plan billing through Stripe: everything is created automatically once STRIPE_SECRET_KEY is set. */
 function BillingPanel({ accessToken }: { accessToken: string }) {
   const { data, error, load, setError } = useLoad<BillingStatus>("/platform/billing/status", accessToken);
   const [busy, setBusy] = useState(false);
+  const [moveNote, setMoveNote] = useState("");
+  async function movePrices(dryRun: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<{ on_old_prices: number; moved: number }>("/platform/billing/move-to-current-prices", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ dry_run: dryRun }),
+      });
+      setMoveNote(
+        dryRun
+          ? result.on_old_prices
+            ? `${result.on_old_prices} subscriber${result.on_old_prices === 1 ? " is" : "s are"} on an old price.`
+            : "Everyone is on the current prices."
+          : `${result.moved} moved. The new price applies from their next renewal.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function setup() {
     setBusy(true);
     setError("");
@@ -1095,8 +1120,10 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
       <div className="panel-heading">
         <h2>Member plans (Stripe)</h2>
         <p>
-          Standard and Pro are monthly Stripe subscriptions. Once the Stripe key is connected (Infrastructure → Connections), FayFort creates
-          the products, prices, customer portal and webhook by itself and keeps every member's plan in sync.
+          Standard ($5.99) and Pro ($14.99) are monthly Stripe subscriptions with no trial. Once the Stripe key is connected
+          (Infrastructure → Connections), FayFort creates the products, prices, customer portal and webhook by itself and keeps every
+          member's plan in sync. Upgrades are charged at once; downgrades and pauses wait for the end of the paid month. A failed
+          payment keeps the plan for a week; a card dispute ends it and opens a task in Operations → Disputes.
         </p>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -1124,6 +1151,8 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
             <div><dt>Pro</dt><dd>{money(data.prices.pro.monthly, data.prices.pro.currency.toUpperCase())}/month · {data.subscribers.pro} active</dd></div>
             <div><dt>Webhook</dt><dd>{data.webhook.ready ? "Connected" : "Not connected"}{data.webhook.url ? ` · ${data.webhook.url}` : ""}</dd></div>
             {data.checked_at && <div><dt>Last checked</dt><dd>{relativeTime(data.checked_at)}</dd></div>}
+            <div><dt>Disputes</dt><dd>{data.open_disputes ? `${data.open_disputes} open (Operations → Disputes)` : "None open"}</dd></div>
+            <div><dt>Tax</dt><dd>{data.automatic_tax ? "Stripe Tax on at checkout" : "Off (prices charged as listed)"}</dd></div>
           </dl>
           {data.problem && <p className="form-error" role="alert">{data.problem}</p>}
           {!data.ready && !data.problem && <NextHint>Press Run setup and sync now to finish the Stripe setup.</NextHint>}
@@ -1131,7 +1160,16 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
             <button type="button" disabled={busy} onClick={() => void setup()}>
               {busy ? "Checking Stripe…" : "Run setup and sync now"}
             </button>
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => void movePrices(true)}>
+              Check for old prices
+            </button>
+            {moveNote.includes("on an old price") && (
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => void movePrices(false)}>
+                Move them to current prices
+              </button>
+            )}
           </div>
+          {moveNote && <p className="muted" role="status">{moveNote}</p>}
         </>
       )}
     </section>

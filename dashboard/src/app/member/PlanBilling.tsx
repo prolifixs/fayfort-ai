@@ -50,6 +50,7 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
   const price = (plan: "standard" | "pro") =>
     `${formatMoney(subscription.prices[plan].monthly, subscription.prices[plan].currency.toUpperCase())}/month`;
   const active = subscription.plan && !subscription.paused;
+  const pauseStarts = subscription.paused && subscription.paused_from && new Date(subscription.paused_from) > new Date();
   return (
     <section className="member-perk member-billing" aria-label="Your subscription">
       {active ? (
@@ -59,7 +60,7 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
               <h3>{NAMES[subscription.plan!]} plan</h3>
               <p>
                 {subscription.status === "past_due"
-                  ? "Your last payment didn't go through. Update your card to keep your plan."
+                  ? `Your last payment didn't go through. Update your card${subscription.grace_ends ? ` by ${date(subscription.grace_ends)}` : ""} to keep your plan.`
                   : subscription.cancel_at_period_end
                     ? `Ends on ${date(subscription.current_period_end)}. You can turn renewal back on in Manage.`
                     : `Renews on ${date(subscription.current_period_end)} · ${subscription.months} month${subscription.months === 1 ? "" : "s"} in a row`}
@@ -90,16 +91,29 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
               {busy === "/members/subscription/portal" ? "Opening…" : "Manage subscription"}
             </button>
           </div>
+          {subscription.first_month && (
+            <p className="member-billing-note" role="status">
+              First paid month: you're on {subscription.plan === "pro" ? "Standard" : "Free"}-plan prices. Your full{" "}
+              {NAMES[subscription.plan!]} perks start with your second paid month.
+            </p>
+          )}
           <small className="member-deposit-note">
-            Pausing stops payments and plan perks but keeps your months in a row and your history.
+            A pause starts when your paid month ends, then stops payments and plan perks. Your months in a row and
+            history are kept. Switching to a lower plan also waits for the end of your paid month.
           </small>
         </>
       ) : subscription.paused ? (
         <>
           <div className="member-perk-head">
             <div>
-              <h3>{subscription.plan ? NAMES[subscription.plan] : "Your"} plan is paused</h3>
-              <p>No payments while paused. Your months in a row and history are kept.</p>
+              <h3>
+                {subscription.plan ? NAMES[subscription.plan] : "Your"} plan {pauseStarts ? "pauses soon" : "is paused"}
+              </h3>
+              <p>
+                {pauseStarts
+                  ? `Your pause starts on ${date(subscription.paused_from ?? null)}; you keep your plan until then.`
+                  : "No payments while paused. Your months in a row and history are kept."}
+              </p>
             </div>
           </div>
           <div className="member-perk-actions">
@@ -108,12 +122,19 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
             </button>
           </div>
         </>
+      ) : subscription.disputed ? (
+        <div className="member-perk-head">
+          <div>
+            <h3>Your plan is on hold</h3>
+            <p>There's an open card dispute on a payment. Write to support@fayfort.com and we'll sort it out with you.</p>
+          </div>
+        </div>
       ) : (
         <>
           <div className="member-perk-head">
             <div>
               <h3>Upgrade your plan</h3>
-              <p>Cancel any time. Secure payment by Stripe.</p>
+              <p>Cancel any time. No trials: your first paid month runs on the plan below. Secure payment by Stripe.</p>
             </div>
           </div>
           <div className="member-perk-actions member-upgrade">

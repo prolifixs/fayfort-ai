@@ -116,7 +116,7 @@ def report(start: date, end: date) -> dict:
     series = {key: {stream: 0.0 for stream in STREAMS} for key in keys}
     mix = {stream: {"gross": 0.0, "refunds": 0.0, "net": 0.0, "count": 0} for stream in STREAMS}
     other_currencies: dict[str, float] = {}
-    gross = refunds = 0.0
+    gross = refunds = fees = 0.0
     customers: set[str] = set()
     orders = 0
     products: dict[str, dict] = {}
@@ -134,6 +134,7 @@ def report(start: date, end: date) -> dict:
             if key in series:
                 series[key][stream] = round(series[key][stream] + g - r, 2)
         gross, refunds = gross + g, refunds + r
+        fees += _money(entry.get("fees"))
         mix[stream]["gross"] += g
         mix[stream]["refunds"] += r
         mix[stream]["net"] += g - r
@@ -164,6 +165,8 @@ def report(start: date, end: date) -> dict:
         "currency": CURRENCY,
         "tiles": {
             "gross": round(gross, 2), "refunds": round(refunds, 2), "net": round(net, 2), "sales": orders,
+            # Stripe's fees on membership payments (Shopify fees aren't read yet), and net revenue after them.
+            "fees": round(fees, 2), "net_after_fees": round(net - fees, 2),
             "average_sale": round(net / orders, 2) if orders else None, "paying_customers": len(customers),
             "previous_net": round(previous_net, 2),
             "change": round((net - previous_net) / previous_net, 4) if previous_net else None,

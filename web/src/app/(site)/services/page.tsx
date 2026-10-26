@@ -131,7 +131,7 @@ export default function ServicesPage() {
           <h2>How pricing works</h2>
           <p><strong>Every quote is broken out.</strong> Goods here, freight there, inspection separately. Anyone who’ll only give you one bundled number is telling you where their margin is.</p>
           <p><strong>Our commission is agreed with you</strong> and built into the product invoice. There is no entry or “commitment” fee.</p>
-          <p><strong>Sourcing deposits depend on your plan.</strong> On the Free and Standard plans a deposit is invoiced after we review your request; it comes off your final invoice. Pro members in good standing pay none. Plan details are in your dashboard.</p>
+          <p><strong>Sourcing deposits depend on your plan.</strong> On the Free and Standard plans a deposit is invoiced after we review your request; it comes off your final invoice. Pro members who have bought with us in the last 90 days pay none. Plan details are in your dashboard.</p>
 
           <h2>What we don’t do</h2>
           <p>Being straight about this saves everyone time.</p>

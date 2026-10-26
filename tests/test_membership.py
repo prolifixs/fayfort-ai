@@ -72,9 +72,11 @@ class MDb(Db):
             existing = next((u for u in unlocks if (u["member_id"], u["record_type"], u["record_id"]) == key), None)
             if existing:
                 return SimpleNamespace(execute=lambda: SimpleNamespace(data={"status": "already_unlocked", "method": existing["method"]}))
-            used = sum(1 for u in unlocks if u["member_id"] == params["p_member_id"] and u["method"] == "pro_allowance")
+            since = params.get("p_period_start")
+            used = sum(1 for u in unlocks if u["member_id"] == params["p_member_id"] and u["method"] == "pro_allowance"
+                       and (since is None or str(u["created_at"]) >= str(since)))
             balance = sum(c["delta"] for c in self.rows.get("member_contact_credits", []) if c["member_id"] == params["p_member_id"])
-            if params["p_is_pro"] and used < params["p_pro_monthly_limit"]:
+            if (params.get("p_allowance") or 0) > 0 and since is not None and used < params["p_allowance"]:
                 method = "pro_allowance"
             elif balance >= 1:
                 method = "credit"
@@ -163,30 +165,37 @@ class Case(unittest.TestCase):
 
 class PlanRuleTests(Case):
     def test_deposit_rates_by_plan(self):
+        bought = [{"id": "o1", "member_id": MEMBER, "financial_status": "paid", "placed_at": ago(days=5)}]
         for tier, rate in (("free", 0.5), ("standard", 0.25), ("pro", 0.0)):
-            self.use(membership_db(tier))
+            self.use(membership_db(tier, commerce_orders=list(bought)))
             quote = plans.deposit_quote(MEMBER, 200.0)
             self.assertEqual((quote["rate"], quote["amount"]), (rate, 200.0 * rate), tier)
 
+    def test_pro_without_a_recent_purchase_pays_the_standard_deposit(self):
+        self.use(membership_db("pro"))
+        terms = plans.deposit_terms(MEMBER)
+        self.assertEqual((terms["rate"], terms["reason"]), (0.25, "pro_not_yet_proven"))
+        self.db.rows["commerce_orders"] = [{"id": "o1", "member_id": MEMBER, "financial_status": "paid", "placed_at": ago(days=120)}]
+        self.assertEqual(plans.deposit_terms(MEMBER)["rate"], 0.25)  # older than 90 days doesn't count
+
     def test_pro_loses_free_sourcing_when_requests_dont_turn_into_purchases(self):
         requests = [{"id": f"r{i}", "member_id": MEMBER, "created_at": ago(days=i + 1)} for i in range(3)]
-        self.use(membership_db("pro", member_purchase_requests=requests))
-        terms = plans.deposit_terms(MEMBER)
+        requests += [{"id": f"r{i}", "member_id": MEMBER, "created_at": ago(days=i + 1)} for i in range(3, 6)]
+        orders = [{"id": "o1", "member_id": MEMBER, "financial_status": "paid", "placed_at": ago(days=2)}]
+        self.use(membership_db("pro", member_purchase_requests=requests, commerce_orders=orders))
+        terms = plans.deposit_terms(MEMBER)  # 6 requests, 1 purchase: below one purchase per three requests
         self.assertEqual((terms["rate"], terms["reason"]), (0.25, "pro_below_good_standing"))
-        self.db.rows["commerce_orders"] = [{"id": "o1", "member_id": MEMBER, "financial_status": "paid",
-                                           "placed_at": ago(days=2)}]
+        self.db.rows["commerce_orders"].append({"id": "o2", "member_id": MEMBER, "financial_status": "paid",
+                                                "placed_at": ago(days=3)})
         self.assertEqual(plans.deposit_terms(MEMBER)["rate"], 0.0)
 
     def test_consultation_prices(self):
         self.use(membership_db("free"))
         self.assertEqual(plans.consultation_quote(MEMBER)["price"], 100.0)
         self.use(membership_db("standard"))
-        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 50.0)
+        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 85.0)
         self.use(membership_db("pro"))
-        self.assertEqual((plans.consultation_quote(MEMBER)["price"], plans.consultation_quote(MEMBER)["included"]), (0.0, True))
-        self.db.rows["member_consultations"] = [{"member_id": MEMBER, "included": True, "status": "requested",
-                                                 "created_at": NOW.isoformat()}]
-        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 50.0)
+        self.assertEqual((plans.consultation_quote(MEMBER)["price"], plans.consultation_quote(MEMBER)["included"]), (50.0, False))
 
 
 class ConsultationTests(Case):
@@ -212,14 +221,13 @@ class ConsultationTests(Case):
         self.assertEqual((work["work_type"], work["priority"]), ("consultation", "high"))
         self.assertEqual(self.db.rows["email_outbox"][0]["template"], "commerce_consultation_booked")
 
-    def test_pro_included_consultation_starts_without_an_invoice(self):
+    def test_pro_pays_the_pro_price_no_consultation_is_included(self):
         client = self.client(membership_db("pro"))
-        with patch("app.commerce.service.shopify.create_invoice") as create:
+        with patch("app.commerce.service.shopify.create_invoice", return_value=INVOICE) as create:
             booked = client.post("/members/consultations", json={"topic": "Plan my Canton Fair trip"}, headers=AUTH)
         self.assertEqual(booked.status_code, 201, booked.text)
-        create.assert_not_called()
-        self.assertEqual(booked.json()["consultation"]["status"], "requested")
-        self.assertTrue(self.db.rows["member_consultations"][0]["included"])
+        self.assertEqual(create.call_args.kwargs["unit_price"], 50.0)
+        self.assertFalse(self.db.rows["member_consultations"][0].get("included"))
 
 
 class DirectoryTests(Case):
@@ -235,7 +243,7 @@ class DirectoryTests(Case):
         self.assertEqual(blocked.status_code, 402)
 
     def test_credits_unlock_and_stay_unlocked(self):
-        client = self.client(membership_db("standard"))
+        client = self.client(membership_db("free"))
         with patch("app.commerce.service.shopify.create_invoice", return_value=INVOICE) as create:
             bought = client.post("/members/contact-credits", json={"pack": "pack5"}, headers=AUTH)
         self.assertEqual(bought.status_code, 201, bought.text)
@@ -253,6 +261,45 @@ class DirectoryTests(Case):
         self.assertEqual(plans.contact_status(MEMBER)["credits"], 4)  # unlocking again is free
         mine = client.get("/members/directory/unlocked", headers=AUTH).json()["results"]
         self.assertEqual([r["id"] for r in mine], [MARKET])
+
+    def test_allowance_follows_the_paid_month_and_grows_with_loyalty(self):
+        period_start = ago(days=10)
+        subscription = {"member_id": MEMBER, "status": "active", "continuous_since": ago(days=40),
+                        "current_period_start": period_start}
+        db = membership_db("pro", member_subscriptions=[subscription],
+                           member_subscription_payments=[{"stripe_invoice_id": "in_1", "member_id": MEMBER, "plan": "pro",
+                                                          "amount": 14.99, "paid_at": ago(days=40)}])
+        self.use(db)
+        # First paid month only: Standard's allowance (1) and Standard prices.
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance"], 1)
+        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 85.0)
+        self.assertEqual(plans.deposit_terms(MEMBER)["reason"], "pro_first_month")
+        db.rows["member_subscription_payments"].append({"stripe_invoice_id": "in_2", "member_id": MEMBER, "plan": "pro",
+                                                         "amount": 14.99, "paid_at": period_start})
+        status = plans.contact_status(MEMBER)
+        self.assertEqual((status["pro_allowance"], status["pro_allowance_left"]), (3, 3))
+        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 50.0)
+        # Unlocks from before this paid month don't count against it.
+        db.rows["member_contact_unlocks"] = [{"member_id": MEMBER, "method": "pro_allowance", "record_type": "market",
+                                              "record_id": f"x{i}", "created_at": ago(days=12)} for i in range(3)]
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance_left"], 3)
+        db.rows["member_contact_unlocks"].append({"member_id": MEMBER, "method": "pro_allowance", "record_type": "market",
+                                                  "record_id": "y", "created_at": ago(days=1)})
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance_left"], 2)
+        # A refunded month doesn't count as paid, and an overdue payment stops the allowance.
+        db.rows["member_subscription_payments"][1]["refunded_amount"] = 14.99
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance"], 1)
+        db.rows["member_subscription_payments"][1]["refunded_amount"] = 0
+        subscription["status"] = "past_due"
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance"], 0)
+
+    def test_standard_includes_one_contact_then_uses_credits(self):
+        client = self.client(membership_db("standard", member_contact_credits=[{"member_id": MEMBER, "delta": 2, "reason": "pack"}]))
+        first = client.post("/members/directory/unlock", json={"record_type": "market", "record_id": MARKET}, headers=AUTH).json()["record"]
+        second = client.post("/members/directory/unlock", json={"record_type": "service_provider", "record_id": PROVIDER},
+                             headers=AUTH).json()["record"]
+        self.assertEqual((first["method"], second["method"]), ("pro_allowance", "credit"))
+        self.assertEqual(plans.contact_status(MEMBER)["credits"], 1)
 
     def test_pro_allowance_and_free_hotels(self):
         client = self.client(membership_db("pro"))
@@ -296,7 +343,8 @@ class DepositTests(Case):
         self.assertEqual(self.db.rows["commerce_invoices"][1]["deposit_credit"], 150.0)
 
     def test_pro_in_good_standing_needs_no_deposit(self):
-        client = self.client(self.request_db("pro"))
+        client = self.client(self.request_db("pro", commerce_orders=[{"id": "o1", "member_id": MEMBER,
+                                                                     "financial_status": "paid", "placed_at": ago(days=4)}]))
         refused = client.post("/platform/commerce/invoices/deposit",
                               json={"request_id": self.rid, "expected_total": 300}, headers=ADMIN_AUTH)
         self.assertEqual(refused.status_code, 409)
@@ -351,11 +399,18 @@ class RankTests(Case):
                                 "status": "paid", "paid_at": ago(days=2)}]))
         self.assertEqual(ranks.recompute(MEMBER)["score"], 30)
 
+    def test_small_orders_earn_no_bonus_points(self):
+        self.use(membership_db("free", commerce_orders=[
+            {"id": f"s{i}", "shopify_order_id": f"gid://shopify/Order/{i}", "member_id": MEMBER, "financial_status": "paid",
+             "total": 4, "placed_at": ago(days=1)} for i in range(5)]))
+        self.assertEqual(ranks.recompute(MEMBER)["score"], 20)  # 5 orders of $4: 4 points each, no 50-point base
+
     def test_free_member_at_rank_four_gets_standard_rates(self):
         self.use(membership_db("free"))
         self.db.rows["member_profiles"][0]["rank_level"] = 4
         self.assertEqual(plans.deposit_terms(MEMBER)["rate"], 0.25)
-        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 50.0)
+        self.assertEqual(plans.consultation_quote(MEMBER)["price"], 85.0)
+        self.assertEqual(plans.contact_status(MEMBER)["pro_allowance"], 0)  # the allowance is a plan perk, not a rank one
 
     def test_rank_api_and_points_redemption(self):
         client = self.client(self.activity_db())

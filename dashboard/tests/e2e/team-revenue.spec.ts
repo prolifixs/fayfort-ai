@@ -22,7 +22,7 @@ for (const size of SIZES) {
     await signedInStaff(page);
     await page.goto("/?page=shop&tab=revenue");
     const panel = page.getByRole("region", { name: "Revenue" });
-    await expect(panel.getByText("$17,780")).toBeVisible();
+    await expect(panel.getByText("$17,780", { exact: true })).toBeVisible();
     await panel.getByRole("figure", { name: "Net revenue by stream" }).locator(".viz-col").nth(20).hover();
     await noSideScroll(page);
     await panel.screenshot({ path: `${OUT}/revenue-${size.name}.png` });

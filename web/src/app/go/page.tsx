@@ -85,7 +85,7 @@ export default async function GoPage() {
           title="Book a consultation"
           line="One-to-one video call with the FayFort team."
           stubLabel="From"
-          stub={money(Math.min(consultation.standard, consultation.free), consultation.currency)}
+          stub={money(Math.min(consultation.standard, consultation.free, consultation.pro ?? consultation.pro_after), consultation.currency)}
         />
         <Ticket
           href="/go/tour-guide"

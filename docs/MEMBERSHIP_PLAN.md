@@ -10,13 +10,13 @@ is set on the API server (deploy/README.md → Member plan billing). Until then 
 | | Free | Standard | Pro |
 |---|---|---|---|
 | Sourcing deposit | 50% of the expected product total | 25% (50% off the Free rate) | None while in good standing (else 25%) |
-| Consultation | $100 | $50 (50% off) | 1 included per month, then $50 |
-| Supplier & service-provider contacts | $15 each, or 5 for $50 | $15 each, or 5 for $50 | 10 included per month, then credits |
+| Consultation (1 hour) | $100 | $85 | $50 |
+| Supplier & service-provider contacts | $15 each, or 5 for $50 | 1 included per paid month, then credits | 3 included per paid month, then credits |
 | Hotels & restaurants | Free | Free | Free |
 | Premium themes | No | Yes | Yes |
 
 - Plan perks apply only while the subscription is active.
-- **Billing:** Standard **$19/month** and Pro **$49/month** (defaults; `MEMBER_STANDARD_MONTHLY_PRICE`,
+- **Billing:** Standard **$5.99/month** and Pro **$14.99/month** (owner decision 2026-10-25, was $19 / $49; defaults `MEMBER_STANDARD_MONTHLY_PRICE`,
   `MEMBER_PRO_MONTHLY_PRICE`). Members subscribe through Stripe Checkout and manage (switch plan, card, cancel at period
   end, invoices) in the Stripe customer portal, both from **Member tier** in the chat. The plan follows the
   subscription: active / trialing / past due = the plan; paused, cancelled or unpaid = Free.
@@ -48,7 +48,7 @@ is set on the API server (deploy/README.md → Member plan billing). Until then 
 - Everyone sees the public half (market, city, district, product categories / service, city, ships to).
 - **Unlock** shows the private half: address (EN/CN), buyer notes, floor/stall, contact person, phone/WeChat, best time
   (markets); company, contact, phone/WeChat, email/QQ, address, booth, hours (service providers).
-- Order of payment: Pro's 10 included unlocks this month → a purchased credit → otherwise "buy a contact".
+- Order of payment: the plan's included unlocks this paid month (Standard 1, Pro 3) → a purchased credit → otherwise "buy a contact".
   Credits: 1 for $15 or 5 for $50, added when the Shopify invoice is paid. Unlocking the same record again is free.
 - Hotels and restaurants show their phone and price for free.
 - Unlocked records stay in **My contacts** for good, including after a plan ends.
@@ -170,3 +170,46 @@ tables close on **30 November 2026**; the directory lives on FayFort (the Basero
 **Owner to do**
 - Change the Shopify order email for LANDED so new buyers are sent to FayFort sign-up instead of Baserow passwords.
 - Put a short note at the top of each shared Baserow view, and switch the views off on 30 November.
+
+
+## 12. Plans readjusted: $5.99 / $14.99 and closing the cracks (owner decisions, 2026-10-25)
+
+Prices dropped to **Standard $5.99** and **Pro $14.99** a month (Stripe subscription, no trial). At those prices the old
+perks were exploitable, so the system was readjusted before anyone pays.
+
+| | Free | Standard $5.99 | Pro $14.99 |
+|---|---|---|---|
+| Sourcing deposit | 50% | 25% | 0% for proven buyers (a paid order in the last 90 days) in good standing, else 25% |
+| Consultation (1 hour) | $100 | $85 | $50 (none included any more) |
+| Supplier contacts | $15 each, 5 for $50 | 1 included per paid month | 3 included per paid month |
+| First paid month | — | Free-plan prices | Standard-plan prices |
+| Points per paid month | — | +20 | +40 |
+
+**Cracks found and closed**
+1. Pay $5.99, book a consultation, cancel (saved $44): Standard pays $85, and only from the second paid month.
+2. Pay $14.99 for 10 contacts plus a free consultation, then cancel: Pro includes 3 contacts and no consultation;
+   month one runs on Standard prices (1 contact).
+3. Allowances reset on the calendar month (subscribe on the 30th = two allowances for one payment): they now count
+   from the member's paid month (`member_subscriptions.current_period_start`; `unlock_member_contact(p_allowance,
+   p_period_start)`).
+4. Downgrade mid-month for a refund of unused days: the Stripe portal schedules downgrades at period end; upgrades are
+   invoiced at once (`always_invoice`).
+5. A failed card kept the plan for Stripe's whole retry period: the plan stays 7 days (`BILLING_PAST_DUE_GRACE_DAYS`),
+   then Free until paid; no allowance while overdue. Members get emails: plan started, card declined, plan ended.
+6. Refunded or disputed payments kept points and the plan: a refunded month earns no points; a dispute ends the plan at
+   once (`member_subscriptions.disputed_at`) and opens an urgent Operations task (Disputes, `membership_dispute`) with the
+   Stripe link; won restores it; lost counts as a refund (`dispute_lost_amount`). Table `billing_disputes`.
+7. 0% deposit let Pro members get free sourcing work without buying: only proven buyers (paid order in 90 days) in good
+   standing.
+8. A pause cut off a month already paid for: pauses start at the end of the paid month (`paused_from`).
+9. Many tiny orders farmed rank points: orders under $10 earn 1 point per $1, without the 50-point base.
+10. Subscription points per dollar were ~7x orders: +20 / +40 per paid month.
+
+**Also built:** Stripe fees recorded per payment (`fee`) and shown on the Revenue tab with net after fees; tax switch
+`BILLING_AUTOMATIC_TAX` (off until registered in Stripe Tax); old Stripe prices archived on a price change, still mapped to
+their plan, and an admin action (Control Center → Shop → Member plans → Check for old prices / Move them) moves subscribers
+to the current price at their next renewal; `app/knowledge/plan_facts.py` writes the AI's plan documents from these rules
+(`refresh()` after any change).
+
+**Unchanged:** contact packs, the 14-day comeback window, pausing 1–3 months, Free at rank 4 getting Standard prices (not
+the allowance), LANDED owners' addresses, everything paid through Shopify.

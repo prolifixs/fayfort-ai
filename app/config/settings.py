@@ -60,8 +60,10 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""  # optional; only if you create the webhook endpoint yourself
     STRIPE_PRICE_STANDARD: str = ""  # optional; use an existing Stripe price id instead of creating one
     STRIPE_PRICE_PRO: str = ""
-    MEMBER_STANDARD_MONTHLY_PRICE: float = 19.0
-    MEMBER_PRO_MONTHLY_PRICE: float = 49.0
+    MEMBER_STANDARD_MONTHLY_PRICE: float = 5.99  # owner decision 2026-10-25 (was 19)
+    MEMBER_PRO_MONTHLY_PRICE: float = 14.99  # owner decision 2026-10-25 (was 49)
+    BILLING_PAST_DUE_GRACE_DAYS: int = 7  # a failed payment keeps the plan this long, then the member is Free until paid
+    BILLING_AUTOMATIC_TAX: bool = False  # Stripe Tax at checkout; turn on only after registering in Stripe Tax
     BILLING_CURRENCY: str = "usd"
     BILLING_SYNC_INTERVAL_SECONDS: int = 1800
     SUBSCRIPTION_RETURN_GRACE_DAYS: int = 14  # back within this many days keeps the continuous-months count

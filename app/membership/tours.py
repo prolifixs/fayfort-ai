@@ -211,7 +211,7 @@ def request_tour(member_id: str, payload: TourRequest) -> dict:
             "p_dedupe": f"tour:{booking['id']}"}).execute()
     except Exception:
         logger.exception("Could not notify administrators about a tour booking")
-    commerce.queue_email(member_id, category="notifications", template="tour_requested", title="We've got your tour guide request",
+    commerce.queue_email(member_id, category="notifications", template="commerce_tour_requested", title="We've got your tour guide request",
                          body=f"{summary(booking)}. We'll send you a quote in your tour chat.",
                          href=f"/member/chat?conversation={booking.get('conversation_id')}" if booking.get("conversation_id") else "/member/chat?panel=tools")
     return _with_invoices([booking])[0]
@@ -250,7 +250,7 @@ def invoice_paid(invoice: dict) -> None:
     _say(booking.get("conversation_id"), "Payment received, thank you. Your tour is confirmed. We'll tell you here who your guide is.")
     _work(booking, {"status": "open", "waiting_on": None, "waiting_reason": None, "priority": "high",
                     "next_action": "Paid. Name the guide in Tour bookings and agree the meeting point in the chat."})
-    commerce.queue_email(str(booking["member_id"]), category="notifications", template="tour_confirmed",
+    commerce.queue_email(str(booking["member_id"]), category="notifications", template="commerce_tour_confirmed",
                          title="Your tour is confirmed", body=f"{summary(booking)}. We'll tell you who your guide is in your tour chat.",
                          href=f"/member/chat?conversation={booking.get('conversation_id')}" if booking.get("conversation_id") else "/member/chat?panel=tools")
 

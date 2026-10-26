@@ -19,7 +19,7 @@ export type GoData = {
   picks: GoPick[]
   categories: GoCategory[]
   product_count: number
-  consultation: { currency: string; free: number; standard: number; pro_included: number; pro_after: number }
+  consultation: { currency: string; free: number; standard: number; pro_included: number; pro_after: number; pro?: number }
   tour: { cities: string[]; needs: string[] }
 }
 
@@ -29,7 +29,7 @@ const FALLBACK: GoData = {
   picks: [],
   categories: [],
   product_count: 0,
-  consultation: { currency: 'USD', free: 100, standard: 50, pro_included: 1, pro_after: 50 },
+  consultation: { currency: 'USD', free: 100, standard: 85, pro_included: 0, pro_after: 50, pro: 50 },
   tour: { cities: ['Guangzhou', 'Yiwu', 'Shenzhen', 'Shanghai'], needs: ['Canton Fair', 'Wholesale markets', 'Factory visits', 'Interpreting', 'Airport pickup'] },
 }
 

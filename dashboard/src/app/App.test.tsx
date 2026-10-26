@@ -57,9 +57,11 @@ describe("authenticated dashboard workspace",()=>{
   expect(await screen.findByText("Your current plan:")).toHaveTextContent("Free");
   for(const plan of ["Free","Standard","Pro"])expect(screen.getByRole("columnheader",{name:new RegExp(plan)})).toBeInTheDocument();
   expect(screen.getByRole("columnheader",{name:/Free\s*Your plan/})).toBeInTheDocument();
-  expect(screen.getByRole("row",{name:/Consultation\s*\$100\s*\$50 \(50% off\)\s*1 free each month, then \$50/})).toBeInTheDocument();
-  expect(screen.getByRole("row",{name:/Sourcing deposit\s*50% of the product price\s*25% of the product price\s*None while you keep buying/})).toBeInTheDocument();
-  expect(screen.getByRole("row",{name:/Supplier contacts\s*\$15 each or 5 for \$50\s*\$15 each or 5 for \$50\s*10 included each month/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Price\s*Free\s*\$5\.99 a month\s*\$14\.99 a month/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Consultation \(1 hour\)\s*\$100\s*\$85\s*\$50/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Sourcing deposit\s*50% of the product price\s*25% of the product price\s*None once you've bought with us/})).toBeInTheDocument();
+  expect(screen.getByRole("row",{name:/Supplier contacts\s*\$15 each or 5 for \$50\s*1 included each paid month\s*3 included each paid month/})).toBeInTheDocument();
+  expect(screen.getByText(/first paid month runs on the plan below/)).toBeInTheDocument();
   expect(screen.getByText(/counts toward your order/)).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:/subscribe|upgrade|checkout/i})).not.toBeInTheDocument();
  });

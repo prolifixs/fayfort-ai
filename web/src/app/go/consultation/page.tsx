@@ -33,8 +33,14 @@ export default async function ConsultationPage() {
           <div>
             <dt>Pro plan</dt>
             <dd>
-              {c.pro_included} included a month
-              <small>then {money(c.pro_after, c.currency)}</small>
+              {c.pro_included ? (
+                <>
+                  {c.pro_included} included a month
+                  <small>then {money(c.pro_after, c.currency)}</small>
+                </>
+              ) : (
+                money(c.pro ?? c.pro_after, c.currency)
+              )}
             </dd>
           </div>
         </dl>
@@ -48,7 +54,7 @@ export default async function ConsultationPage() {
           </li>
           <li>
             <strong>Pay the invoice</strong>
-            <span>You get a secure payment link. Pro members skip this for their included call.</span>
+            <span>You get a secure payment link for your plan’s price.</span>
           </li>
           <li>
             <strong>Agree a time in the chat</strong>

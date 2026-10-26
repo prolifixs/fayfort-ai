@@ -21,7 +21,7 @@ const STATUS_LABEL: Record<Consultation["status"], string> = {
   cancelled: "Cancelled",
 };
 
-/** Book a consultation: $100 Free, $50 Standard, Pro one included each month (then $50). */
+/** Book a consultation: $100 Free, $85 Standard, $50 Pro (first paid month at the plan below). Prices come from the API. */
 export function ConsultationCard({
   accessToken,
   plan,
@@ -165,7 +165,7 @@ export function ContactCreditsCard({
           <h3 id="member-perk-contacts">Supplier contacts</h3>
           <p>
             {status.pro_allowance
-              ? `${status.pro_allowance_left} of ${status.pro_allowance} included unlocks left this month`
+              ? `${status.pro_allowance_left} of ${status.pro_allowance} included unlocks left this paid month`
               : "Unlock a supplier's address, stall and contact person"}
             {status.credits ? ` · ${status.credits} credit${status.credits === 1 ? "" : "s"}` : ""}
           </p>

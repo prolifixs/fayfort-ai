@@ -78,7 +78,7 @@ small, real dashboard screenshot. "See how it works" goes to `/how-it-works`.
 buys** ("Join the pool" for trending items), **Supplier directory** (markets, factories and service providers, unlock
 contacts), **Consultations** (talk to the team).
 
-**5. Plans at a glance.** Free / Standard $19 / Pro $49 with the four lines that matter (deposit, consultation,
+**5. Plans at a glance.** Free / Standard $5.99 / Pro $14.99 (prices changed 2026-10-25) with the four lines that matter (deposit, consultation,
 contacts, ads). "Compare plans" goes to `/pricing`. The numbers come from the API, so they can't drift from the platform.
 
 **6. LANDED.** Book cover, one line, $99, and "Get LANDED" linking to `/ebook/landed`. The checkout stays on that page.

@@ -20,6 +20,8 @@ export type RevenueReport = {
     paying_customers: number;
     previous_net: number;
     change: number | null;
+    fees?: number;
+    net_after_fees?: number;
     mrr: { amount: number; members: { standard: number; pro: number } };
   };
   streams: { key: StreamKey; label: string }[];
@@ -181,6 +183,7 @@ export function RevenuePanel({ accessToken }: { accessToken: string }) {
             <StatTile label="Net revenue" value={usd(t.net)} delta={t.change} sub="vs the period before" />
             <StatTile label="Gross sales" value={usd(t.gross)} sub={`${t.sales} sale${t.sales === 1 ? "" : "s"}`} />
             <StatTile label="Refunds" value={usd(t.refunds)} sub={t.gross ? `${Math.round((t.refunds / t.gross) * 100)}% of gross` : "None"} tone={t.refunds ? "bad" : undefined} />
+            <StatTile label="Payment fees" value={usd(t.fees ?? 0, true)} sub={`Net after fees ${usd(t.net_after_fees ?? t.net)} · Stripe only`} />
             <StatTile label="Average sale" value={t.average_sale === null ? "—" : usd(t.average_sale, true)} sub={`${t.paying_customers} paying customer${t.paying_customers === 1 ? "" : "s"}`} />
             <StatTile label="Memberships (monthly)" value={usd(t.mrr.amount)} sub={`${t.mrr.members.standard} Standard · ${t.mrr.members.pro} Pro`} />
           </div>

@@ -154,6 +154,11 @@ export type SubscriptionView = {
   has_customer: boolean;
   prices: Record<"standard" | "pro", { monthly: number; currency: string }>;
   max_pause_months: number;
+  past_due?: boolean;
+  grace_ends?: string | null;
+  paused_from?: string | null;
+  disputed?: boolean;
+  first_month?: boolean;
 };
 
 export function useSubscription(accessToken: string | null | undefined) {

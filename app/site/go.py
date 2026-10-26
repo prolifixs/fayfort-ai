@@ -86,7 +86,7 @@ def go_payload() -> dict[str, Any]:
         logger.warning("Go page: products could not be loaded", exc_info=True)
     body["consultation"] = {"currency": plans.CURRENCY, "free": plans.CONSULTATION_PRICE["free"],
                             "standard": plans.CONSULTATION_PRICE["standard"], "pro_included": plans.PRO_INCLUDED_CONSULTATIONS,
-                            "pro_after": plans.CONSULTATION_PRICE["pro"]}
+                            "pro_after": plans.CONSULTATION_PRICE["pro"], "pro": plans.CONSULTATION_PRICE["pro"]}
     body["tour"] = {"cities": [label for key, label in tours.CITIES.items() if key != "other"], "needs": list(tours.NEEDS.values())}
     _cache["go"] = (time.monotonic(), body)
     return body

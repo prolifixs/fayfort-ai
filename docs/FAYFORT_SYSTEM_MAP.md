@@ -279,7 +279,7 @@ flowchart LR
   REQ[Sourcing request + expected budget] --> DUE[Staff: Deposits due<br/>Free 50% · Standard 25% · Pro 0 in good standing]
   DUE --> DEP[Deposit invoice] -->|paid| CR[Final invoice: option price − deposit]
   BK[Member: Book a consultation] -->|Free $100 · Standard $50| CI[Consultation invoice]
-  BK -->|Pro: 1 included/month| CHAT
+  BK -->|Pro: $50, no included one since 2026-10-25| CHAT
   CI -->|paid webhook| CHAT[Consultation chat + Operations item]
   DIR[Supplier directory: public half] -->|Unlock| UL{Pro allowance 10/mo?<br/>else credit}
   PK[Buy 1 for $15 / 5 for $50] -->|paid webhook| CRD[(Contact credits)] --> UL

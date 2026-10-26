@@ -170,11 +170,11 @@ def unlock(member_id: str, record_type: str, record_id: str) -> dict:
     if not found:
         raise DirectoryError("That directory record isn't available.", 404)
     if record_type not in plans.FREE_RECORD_TYPES:
-        tier = plans.member_tier(member_id)
+        window = plans.allowance_window(member_id)
         try:
             result = db().rpc("unlock_member_contact", {
                 "p_member_id": member_id, "p_record_type": record_type, "p_record_id": record_id,
-                "p_is_pro": tier == "pro", "p_pro_monthly_limit": plans.PRO_CONTACTS_PER_MONTH}).execute()
+                "p_allowance": window["allowance"], "p_period_start": window["since"]}).execute()
         except Exception as exc:
             if "no_contact_credits" in str(exc):
                 raise DirectoryError("You have no contact credits left. Buy a contact to unlock it.", 402) from exc

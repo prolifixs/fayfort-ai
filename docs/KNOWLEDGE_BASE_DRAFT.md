@@ -50,10 +50,10 @@ A request can be cancelled from the dashboard until it's paid. After paying, mes
 
 | | Free | Standard | Pro |
 |---|---|---|---|
-| Price | $0 | $19 a month | $49 a month |
+| Price | $0 | $5.99 a month | $14.99 a month |
 | Sourcing deposit | 50% of the expected total | 25% | None while you keep buying (otherwise 25%) |
-| Consultation | $100 | $50 | 1 included each month, then $50 |
-| Supplier contacts | $15 each or 5 for $50 | $15 each or 5 for $50 | 10 included each month, then credits |
+| Consultation | $100 | $85 | $50 |
+| Supplier contacts | $15 each or 5 for $50 | 1 included each paid month | 3 included each paid month, then credits |
 | Hotels and restaurants in the directory | Free | Free | Free |
 | Premium themes | No | Yes | Yes |
 

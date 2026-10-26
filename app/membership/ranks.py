@@ -32,17 +32,19 @@ TOP = 6000
 BORROW_STANDARD_RATES_FROM_RANK = 4
 
 EARN = {
-    "order": {"label": "Paid order", "points": "50 + 1 per $1 (max 250)"},
+    "order": {"label": "Paid order", "points": "50 + 1 per $1 (max 250); under $10: 1 per $1"},
     "sourcing_purchase": {"label": "Sourcing request that ends in a purchase", "points": "+100"},
     "deposit": {"label": "Paid sourcing deposit", "points": "+20"},
     "pool": {"label": "Group buy you joined gets paid", "points": "+50"},
     "share_buyer": {"label": "A link you shared brings a buyer", "points": "+30 each"},
     "consultation": {"label": "Consultation booked", "points": "+30"},
     "giveaway_entry": {"label": "Giveaway entered", "points": "+5"},
-    "subscription": {"label": "Each paid month on Standard / Pro", "points": "+50 / +100"},
+    "subscription": {"label": "Each paid month on Standard / Pro", "points": "+20 / +40"},
 }
 REWARDS = {"contact_credit": {"label": "1 supplier contact credit", "cost": 500, "credits": 1}}
 SHARE_BUYERS_PER_ITEM = 10
+SMALL_ORDER = 10  # orders under $10 earn 1 point per $1, without the 50-point base (no farming with tiny orders)
+SUBSCRIPTION_POINTS = {"standard": 20, "pro": 40}  # per paid month (re-set with the $5.99 / $14.99 prices)
 
 
 def _iso(value: Any) -> str:
@@ -88,7 +90,8 @@ def collect(member_id: str) -> list[dict]:
     for order in orders:
         worth = 0
         if _paid(order.get("financial_status")) and not order.get("cancelled_at"):
-            worth = 50 + min(int(float(order.get("total") or 0)), 200)
+            total = float(order.get("total") or 0)
+            worth = int(total) if total < SMALL_ORDER else 50 + min(int(total), 200)
         events.append({"kind": "order", "source_key": str(order.get("shopify_order_id") or order["id"]),
                        "points": worth, "occurred_at": _iso(order.get("placed_at"))})
     invoices = rows(db().table("commerce_invoices").select("id,kind,status,request_id,trend_item_id,paid_at,created_at")
@@ -111,10 +114,18 @@ def collect(member_id: str) -> list[dict]:
                       .eq("member_id", member_id).limit(1000).execute()):
         events.append({"kind": "giveaway_entry", "source_key": str(entry["giveaway_id"]), "points": 5,
                        "occurred_at": _iso(entry.get("entered_at"))})
-    for payment in rows(db().table("member_subscription_payments").select("stripe_invoice_id,plan,paid_at")
+    disputed = {str(d.get("stripe_invoice_id")) for d in rows(db().table("billing_disputes")
+                                                                 .select("stripe_invoice_id,status").eq("member_id", member_id)
+                                                                 .limit(200).execute()) if d.get("status") != "won"}
+    for payment in rows(db().table("member_subscription_payments")
+                        .select("stripe_invoice_id,plan,paid_at,amount,refunded_amount,dispute_lost_amount")
                         .eq("member_id", member_id).limit(200).execute()):
+        # A refunded or disputed month earns nothing.
+        lost = float(payment.get("refunded_amount") or 0) + float(payment.get("dispute_lost_amount") or 0)
+        kept = lost < float(payment.get("amount") or 0) and str(payment["stripe_invoice_id"]) not in disputed
         events.append({"kind": "subscription", "source_key": str(payment["stripe_invoice_id"]),
-                       "points": 100 if payment.get("plan") == "pro" else 50, "occurred_at": _iso(payment.get("paid_at"))})
+                       "points": SUBSCRIPTION_POINTS.get(str(payment.get("plan")), 0) if kept else 0,
+                       "occurred_at": _iso(payment.get("paid_at"))})
     events += _share_buyers(member_id)
     return [e for e in events if e["occurred_at"]]
 

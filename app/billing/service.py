@@ -8,8 +8,17 @@ Only STRIPE_SECRET_KEY is needed. `ensure_setup()` (run at start and from Contro
 
 Stripe is the source of truth. Webhooks keep member_subscriptions current, and a reconcile pass every
 BILLING_SYNC_INTERVAL_SECONDS repairs anything a missed webhook left behind. member_profiles.member_tier follows the
-subscription: active, trialing and past_due (Stripe still retrying the card) keep the plan; anything else (and a
-paused subscription) is Free.
+subscription (effective_plan):
+- active and trialing keep the plan;
+- past_due keeps it for BILLING_PAST_DUE_GRACE_DAYS (7) after the failed payment, then Free until paid;
+- a pause starts at the end of the paid month it was asked in (paused_from); Free from then until resumed;
+- an open or lost card dispute ends the plan at once;
+- anything else is Free.
+
+Readjusted 2026-10-25 (docs/MEMBERSHIP_PLAN.md section 12): Standard $5.99, Pro $14.99, no trials. Upgrades are
+charged at once (prorated); downgrades take effect at the end of the paid month. Old prices are archived when the
+price changes (existing subscribers keep theirs until moved with move_to_current_prices). Members are told when a plan
+starts, when a payment fails and when the plan ends. Stripe fees and disputes are recorded for the Revenue tab.
 """
 from __future__ import annotations
 
@@ -33,8 +42,10 @@ WEBHOOK_EVENTS = [
     "checkout.session.completed", "customer.subscription.created", "customer.subscription.updated",
     "customer.subscription.deleted", "customer.subscription.paused", "customer.subscription.resumed",
     "invoice.paid", "invoice.payment_failed", "charge.refunded",
+    "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed",
 ]
-SUBSCRIPTION_POINTS = {"standard": 50, "pro": 100}  # per paid month, toward rank (ranks.py)
+PORTAL_VERSION = "v2"  # bump to rebuild the customer portal configuration (v2: downgrades at period end)
+# Points per paid month live in app/membership/ranks.py (SUBSCRIPTION_POINTS).
 
 
 class BillingError(Exception):
@@ -92,11 +103,26 @@ def price_ids() -> dict[str, str]:
     return out
 
 
-def plan_for_price(price_id: str | None) -> str | None:
+_price_plans: dict[str, str | None] = {}
+
+
+def plan_for_price(price_id: str | None, price: dict | None = None) -> str | None:
+    """The plan a Stripe price belongs to: a current price, or an old one by its fayfort_plan metadata."""
+    if not price_id:
+        return None
     for plan, pid in price_ids().items():
         if pid == price_id:
             return plan
-    return None
+    meta = ((price or {}).get("metadata") or {}).get("fayfort_plan")
+    if meta in PLANS:
+        return meta
+    if price_id not in _price_plans:
+        try:
+            found = (stripe_api.request("GET", f"/prices/{price_id}").get("metadata") or {}).get("fayfort_plan")
+            _price_plans[price_id] = found if found in PLANS else None
+        except stripe_api.StripeError:
+            _price_plans[price_id] = None
+    return _price_plans[price_id]
 
 
 def webhook_url() -> str | None:
@@ -137,12 +163,26 @@ def _ensure_price(plan: str) -> str:
             "unit_amount": int(round(monthly_amount(plan) * 100)), "recurring": {"interval": "month"},
             "lookup_key": key, "transfer_lookup_key": True, "metadata": {"fayfort_plan": plan}})
         price_id = price["id"]
+    previous = get_setting(f"price_{plan}")
     set_setting(f"price_{plan}", price_id)
+    if previous and previous != price_id:
+        _archive_price(previous)
     return price_id
 
 
+def _archive_price(price_id: str) -> None:
+    """Stop offering an old price. Subscribers already on it keep paying it until moved."""
+    try:
+        stripe_api.request("POST", f"/prices/{price_id}", {"active": False, "lookup_key": ""})
+        known = [p for p in (get_setting("archived_prices") or "").split(",") if p]
+        if price_id not in known:
+            set_setting("archived_prices", ",".join([*known, price_id])[-1900:])
+    except stripe_api.StripeError:
+        logger.warning("Could not archive Stripe price %s", price_id)
+
+
 def _ensure_portal(prices: dict[str, str]) -> str:
-    signature = hashlib.sha256(",".join(f"{p}:{prices[p]}" for p in sorted(prices)).encode()).hexdigest()[:16]
+    signature = hashlib.sha256((PORTAL_VERSION + ",".join(f"{p}:{prices[p]}" for p in sorted(prices))).encode()).hexdigest()[:16]
     stored = get_setting("portal_configuration")
     if stored and get_setting("portal_signature") == signature:
         return stored
@@ -160,8 +200,12 @@ def _ensure_portal(prices: dict[str, str]) -> str:
             "subscription_cancel": {"enabled": True, "mode": "at_period_end",
                                     "cancellation_reason": {"enabled": True, "options": [
                                         "too_expensive", "unused", "missing_features", "other"]}},
+            # Upgrades are charged at once (prorated); downgrades wait for the end of the paid month, so nobody
+            # gets money back for a month whose allowance they already used.
             "subscription_update": {"enabled": True, "default_allowed_updates": ["price"],
-                                    "proration_behavior": "create_prorations", "products": products},
+                                    "proration_behavior": "always_invoice", "products": products,
+                                    "schedule_at_period_end": {"conditions": [{"type": "decreasing_item_amount"},
+                                                                              {"type": "shortening_interval"}]}},
         },
         "metadata": {"fayfort": "membership"},
     })
@@ -238,6 +282,10 @@ def status() -> dict[str, Any]:
         "problem": None if problem in (None, "-") else problem,
         "checked_at": get_setting("setup_checked_at") if configured else None,
         "subscribers": counts,
+        "open_disputes": len([d for d in rows(db().table("billing_disputes").select("status").limit(1000).execute())
+                              if d.get("status") not in ("won", "lost")]),
+        "automatic_tax": bool(settings.BILLING_AUTOMATIC_TAX),
+        "past_due_grace_days": settings.BILLING_PAST_DUE_GRACE_DAYS,
     }
 
 
@@ -250,7 +298,7 @@ def subscription_row(member_id: str) -> dict | None:
 
 def member_view(member_id: str) -> dict[str, Any]:
     row = subscription_row(member_id) or {}
-    plan = row.get("plan") if row.get("status") in KEEPS_PLAN else None
+    plan = effective_plan(row) if row else None
     since = _parse(row.get("continuous_since"))
     months = 0
     if since and plan:
@@ -265,7 +313,18 @@ def member_view(member_id: str) -> dict[str, Any]:
         "has_customer": bool(row.get("stripe_customer_id")),
         "prices": {p: {"monthly": monthly_amount(p), "currency": settings.BILLING_CURRENCY.lower()} for p in PLANS},
         "max_pause_months": settings.SUBSCRIPTION_MAX_PAUSE_MONTHS,
+        "past_due": row.get("status") == "past_due",
+        "grace_ends": ((_parse(row.get("past_due_since")) + timedelta(days=settings.BILLING_PAST_DUE_GRACE_DAYS)).isoformat()
+                       if row.get("past_due_since") else None),
+        "paused_from": row.get("paused_from"),
+        "disputed": bool(row.get("disputed_at")),
+        "first_month": bool(plan) and _paid_months(member_id) < 2,
     }
+
+
+def _paid_months(member_id: str) -> int:
+    from app.membership import plans
+    return int(plans.subscription_state(member_id).get("paid_months") or 0)
 
 
 def _member_email(member_id: str) -> str | None:
@@ -303,6 +362,8 @@ def start_checkout(member_id: str, plan: str) -> str:
         "allow_promotion_codes": True,
         "success_url": f"{app}/member/chat?billing=success",
         "cancel_url": f"{app}/member/chat?billing=cancelled",
+        **({"automatic_tax": {"enabled": True}, "customer_update": {"address": "auto"}}
+           if settings.BILLING_AUTOMATIC_TAX else {}),
     })
     return str(session["url"])
 
@@ -319,12 +380,15 @@ def portal_url(member_id: str) -> str:
 
 
 def pause(member_id: str, months: int) -> dict:
-    """Pause instead of cancelling: no charge, plan perks off, continuous-months count and history kept."""
+    """Pause instead of cancelling: it starts at the end of the paid month (perks stay until then), then no charge
+    and no perks; the continuous-months count and history are kept."""
     months = max(1, min(int(months), settings.SUBSCRIPTION_MAX_PAUSE_MONTHS))
     row = subscription_row(member_id) or {}
     if row.get("status") not in KEEPS_PLAN or not row.get("stripe_subscription_id"):
         raise BillingError("Only an active plan can be paused.")
-    resumes = int((now_utc() + timedelta(days=30 * months)).timestamp())
+    starts = _parse(row.get("current_period_end")) or now_utc()
+    resumes = int((starts + timedelta(days=30 * months)).timestamp())
+    db().table("member_subscriptions").update({"paused_from": starts.isoformat()}).eq("member_id", member_id).execute()
     sub = stripe_api.request("POST", f"/subscriptions/{row['stripe_subscription_id']}", {
         "pause_collection": {"behavior": "void", "resumes_at": resumes}})
     sync_subscription(sub)
@@ -336,6 +400,7 @@ def resume(member_id: str) -> dict:
     if not row.get("stripe_subscription_id"):
         raise BillingError("There's no plan to resume.")
     sub = stripe_api.request("POST", f"/subscriptions/{row['stripe_subscription_id']}", {"pause_collection": ""})
+    db().table("member_subscriptions").update({"paused_from": None}).eq("member_id", member_id).execute()
     sync_subscription(sub)
     return member_view(member_id)
 
@@ -365,6 +430,60 @@ def _set_tier(member_id: str, plan: str | None) -> None:
         .eq("user_id", member_id).execute()
 
 
+def effective_plan(row: dict, now: datetime | None = None) -> str | None:
+    """The plan the member gets right now from their subscription row (see the module docstring)."""
+    now = now or now_utc()
+    plan = row.get("plan") if row.get("plan") in PLANS else None
+    status_value = row.get("status")
+    if not plan or row.get("disputed_at"):
+        return None
+    if status_value in ("active", "trialing"):
+        return plan
+    if status_value == "past_due":
+        since = _parse(row.get("past_due_since")) or now
+        return plan if now - since <= timedelta(days=settings.BILLING_PAST_DUE_GRACE_DAYS) else None
+    if status_value == "paused":
+        starts = _parse(row.get("paused_from"))
+        return plan if starts and now < starts else None
+    return None
+
+
+def notify(member_id: str, row: dict, key: str, *, title: str, body: str, href: str = "/member/chat?panel=settings") -> None:
+    """Email the member once per key (kept in member_subscriptions.notified)."""
+    notified = dict(row.get("notified") or {})
+    if key in notified:
+        return
+    try:
+        from app.commerce import service as commerce
+        commerce.queue_email(member_id, category="notifications", template="commerce_billing", title=title, body=body,
+                             href=href)
+        notified[key] = now_utc().isoformat()
+        db().table("member_subscriptions").update({"notified": notified}).eq("member_id", member_id).execute()
+        row["notified"] = notified
+    except Exception:
+        logger.exception("Could not notify a member about billing")
+
+
+def _apply_plan(member_id: str, row: dict, before: str | None) -> str | None:
+    """Set member_tier from the row; tell the member when a plan starts or ends."""
+    plan = effective_plan(row)
+    _set_tier(member_id, plan)
+    sub_id = str(row.get("stripe_subscription_id") or "")
+    if plan and not before:
+        notify(member_id, row, f"started:{sub_id}:{plan}", title=f"Welcome to FayFort {plan.title()}",
+               body=(f"Your {plan.title()} plan is active. Your first paid month runs on "
+                     f"{'Standard' if plan == 'pro' else 'Free'}-plan prices; your full {plan.title()} perks start with "
+                     "your second paid month."))
+    elif before and not plan:
+        reason = ("your card dispute" if row.get("disputed_at") else "your payment didn't go through"
+                  if row.get("status") == "past_due" else "your pause started" if row.get("status") == "paused"
+                  else "your subscription ended")
+        notify(member_id, row, f"ended:{sub_id}:{row.get('current_period_end') or ''}:{row.get('status')}",
+               title="Your FayFort plan has ended",
+               body=f"You're on the Free plan now because {reason}. You can pick a plan again any time from Settings.")
+    return plan
+
+
 def sync_subscription(sub: dict) -> str | None:
     """Mirror one Stripe subscription onto the member. Returns the member id."""
     customer_id = sub.get("customer") if isinstance(sub.get("customer"), str) else (sub.get("customer") or {}).get("id")
@@ -373,8 +492,8 @@ def sync_subscription(sub: dict) -> str | None:
         logger.warning("Stripe subscription %s has no FayFort member", sub.get("id"))
         return None
     items = ((sub.get("items") or {}).get("data") or [])
-    price_id = ((items[0] if items else {}).get("price") or {}).get("id")
-    plan = plan_for_price(price_id) or (sub.get("metadata") or {}).get("fayfort_plan")
+    price = (items[0] if items else {}).get("price") or {}
+    plan = plan_for_price(price.get("id"), price) or (sub.get("metadata") or {}).get("fayfort_plan")
     plan = plan if plan in PLANS else None
     status_value = str(sub.get("status") or "none")
     if sub.get("pause_collection") and status_value == "active":
@@ -384,12 +503,23 @@ def sync_subscription(sub: dict) -> str | None:
     if (row.get("stripe_subscription_id") and row["stripe_subscription_id"] != sub.get("id")
             and row.get("status") in KEEPS_PLAN + ("paused",) and status_value not in KEEPS_PLAN + ("paused",)):
         return member_id
+    before = effective_plan(row) if row else None
     now = now_utc()
     values: dict[str, Any] = {
         "member_id": member_id, "stripe_customer_id": customer_id, "stripe_subscription_id": sub.get("id"),
         "plan": plan, "status": status_value, "current_period_end": _ts(sub.get("current_period_end")),
+        "current_period_start": _ts(sub.get("current_period_start")),
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")), "updated_at": now.isoformat(),
     }
+    if status_value == "past_due":
+        values["past_due_since"] = row.get("past_due_since") or now.isoformat()
+    else:
+        values["past_due_since"] = None
+    if status_value == "paused":
+        # Asked in the middle of a paid month: the pause starts when that month ends.
+        values["paused_from"] = row.get("paused_from") or _ts(sub.get("current_period_end")) or now.isoformat()
+    else:
+        values["paused_from"] = None
     if status_value in KEEPS_PLAN:
         since, ended = _parse(row.get("continuous_since")), _parse(row.get("ended_at"))
         back_in_time = ended is None or now - ended <= timedelta(days=settings.SUBSCRIPTION_RETURN_GRACE_DAYS)
@@ -402,28 +532,64 @@ def sync_subscription(sub: dict) -> str | None:
     else:
         values["ended_at"] = row.get("ended_at") or _ts(sub.get("ended_at")) or now.isoformat()
     db().table("member_subscriptions").upsert(values, on_conflict="member_id").execute()
-    _set_tier(member_id, plan if status_value in KEEPS_PLAN else None)
+    merged = {**row, **values}
+    _apply_plan(member_id, merged, before)
     _refresh_rank(member_id)
     return member_id
 
 
+def sweep(now: datetime | None = None) -> int:
+    """Without waiting for Stripe: end the plan of members past the 7-day grace or whose pause has started."""
+    changed = 0
+    for row in rows(db().table("member_subscriptions").select("*").in_("status", ["past_due", "paused"])
+                    .limit(2000).execute()):
+        plan = effective_plan(row, now)
+        current = rows(db().table("member_profiles").select("member_tier").eq("user_id", row["member_id"]).limit(1).execute())
+        tier = (current[0].get("member_tier") if current else None) or "free"
+        if (plan or "free") != tier:
+            _apply_plan(str(row["member_id"]), row, tier if tier in PLANS else None)
+            changed += 1
+    return changed
+
+
+def _charge_fee(charge_id: str | None) -> float:
+    """Stripe's fee on a payment, from its balance transaction (0 if it can't be read yet)."""
+    if not charge_id or not str(charge_id).startswith("ch_"):
+        return 0.0
+    try:
+        charge = stripe_api.request("GET", f"/charges/{charge_id}", params={"expand": ["balance_transaction"]})
+        txn = charge.get("balance_transaction") or {}
+        return round(float(txn.get("fee") or 0) / 100, 2) if isinstance(txn, dict) else 0.0
+    except stripe_api.StripeError:
+        return 0.0
+
+
 def record_invoice_paid(invoice: dict) -> str | None:
-    """A paid subscription invoice = one month subscribed (counts toward rank)."""
+    """A paid subscription invoice = one month subscribed (counts toward rank and the loyalty months)."""
     if not invoice.get("subscription") or not invoice.get("id") or float(invoice.get("amount_paid") or 0) <= 0:
         return None
     customer_id = invoice.get("customer")
     lines = ((invoice.get("lines") or {}).get("data") or [])
-    price_id = ((lines[0] if lines else {}).get("price") or {}).get("id")
+    price = (lines[-1] if lines else {}).get("price") or {}
     member_id = _member_for(customer_id, (invoice.get("subscription_details") or {}).get("metadata"))
-    plan = plan_for_price(price_id)
+    plan = plan_for_price(price.get("id"), price)
     if not member_id or plan not in PLANS:
         return None
     paid_at = _ts((invoice.get("status_transitions") or {}).get("paid_at") or invoice.get("created"))
+    charge_id = invoice.get("charge") if str(invoice.get("charge") or "").startswith(("ch_", "py_")) else None
+    existing = one(db().table("member_subscription_payments").select("stripe_invoice_id,fee")
+                   .eq("stripe_invoice_id", invoice["id"]).limit(1).execute())
+    if existing:
+        if not float(existing.get("fee") or 0) and charge_id:
+            fee = _charge_fee(charge_id)
+            if fee:
+                db().table("member_subscription_payments").update({"fee": fee}).eq("stripe_invoice_id", invoice["id"]).execute()
+        return member_id
     db().table("member_subscription_payments").upsert({
         "stripe_invoice_id": invoice["id"], "member_id": member_id, "plan": plan,
         "amount": round(float(invoice.get("amount_paid") or 0) / 100, 2),
         "currency": invoice.get("currency") or settings.BILLING_CURRENCY, "paid_at": paid_at,
-        "stripe_charge_id": invoice.get("charge") if str(invoice.get("charge") or "").startswith(("ch_", "py_")) else None},
+        "stripe_charge_id": charge_id, "fee": _charge_fee(charge_id)},
         on_conflict="stripe_invoice_id", ignore_duplicates=True).execute()
     _refresh_rank(member_id)
     return member_id
@@ -437,7 +603,93 @@ def record_refund(charge: dict) -> bool:
     refunded = round(float(charge.get("amount_refunded") or 0) / 100, 2)
     updated = rows(db().table("member_subscription_payments").update({"refunded_amount": refunded})
                    .eq("stripe_invoice_id", invoice_id).execute())
+    if updated and updated[0].get("member_id"):
+        _refresh_rank(str(updated[0]["member_id"]))  # a refunded month earns no points
     return bool(updated)
+
+
+def _dispute_link(dispute_id: str) -> str:
+    return f"https://dashboard.stripe.com/{'test/' if stripe_api.mode() == 'test' else ''}disputes/{dispute_id}"
+
+
+def record_dispute(dispute: dict) -> bool:
+    """A card dispute on a membership payment: the plan ends at once, admins get a Disputes task; a lost dispute
+    counts as a refund, a won one gives the plan back."""
+    dispute_id, charge_id = dispute.get("id"), dispute.get("charge")
+    if not dispute_id or not charge_id:
+        return False
+    try:
+        charge = stripe_api.request("GET", f"/charges/{charge_id}")
+    except stripe_api.StripeError:
+        charge = {}
+    invoice_id = charge.get("invoice")
+    payment = one(db().table("member_subscription_payments").select("member_id,amount,currency")
+                  .eq("stripe_invoice_id", invoice_id).limit(1).execute()) if invoice_id else None
+    member_id = (payment or {}).get("member_id") or _member_for(charge.get("customer"), charge.get("metadata"))
+    if not member_id:
+        return False
+    status_value = str(dispute.get("status") or "needs_response")
+    amount = round(float(dispute.get("amount") or 0) / 100, 2)
+    due = ((dispute.get("evidence_details") or {}).get("due_by"))
+    previous = one(db().table("billing_disputes").select("work_item_id").eq("stripe_dispute_id", dispute_id).limit(1).execute())
+    values = {"stripe_dispute_id": dispute_id, "stripe_charge_id": charge_id, "stripe_invoice_id": invoice_id,
+              "member_id": member_id, "amount": amount, "currency": dispute.get("currency") or settings.BILLING_CURRENCY,
+              "reason": str(dispute.get("reason") or "")[:80] or None, "status": status_value[:40],
+              "evidence_due_by": _ts(due), "updated_at": now_utc().isoformat()}
+    from app.accounts import operations_flow as flow
+    if not previous:
+        item = flow.ensure_item(
+            source_kind="stripe_dispute", source_id=dispute_id, department="disputes", work_type="membership_dispute",
+            summary=f"Card dispute on a membership payment ({amount:.2f} {values['currency'].upper()})",
+            next_action=f"Answer the dispute in Stripe before the deadline: {_dispute_link(dispute_id)}",
+            priority="urgent", metadata={"member_id": member_id, "stripe_dispute_id": dispute_id,
+                                         "reason": values["reason"], "stripe_link": _dispute_link(dispute_id)},
+            due_at=values["evidence_due_by"])
+        values["work_item_id"] = (item or {}).get("id")
+    db().table("billing_disputes").upsert(values, on_conflict="stripe_dispute_id").execute()
+    row = subscription_row(member_id) or {"member_id": member_id}
+    before = effective_plan(row) if row.get("plan") else None
+    if status_value == "won":
+        others = [d for d in rows(db().table("billing_disputes").select("stripe_dispute_id,status").eq("member_id", member_id)
+                                  .limit(50).execute()) if d["stripe_dispute_id"] != dispute_id and d.get("status") != "won"]
+        if not others:
+            db().table("member_subscriptions").update({"disputed_at": None}).eq("member_id", member_id).execute()
+            row["disputed_at"] = None
+        flow.close_item("stripe_dispute", dispute_id, reason="Dispute won in Stripe.")
+    else:
+        if not row.get("disputed_at"):
+            stamp = now_utc().isoformat()
+            db().table("member_subscriptions").update({"disputed_at": stamp}).eq("member_id", member_id).execute()
+            row["disputed_at"] = stamp
+        if status_value == "lost":
+            if invoice_id:
+                db().table("member_subscription_payments").update({"dispute_lost_amount": amount}) \
+                    .eq("stripe_invoice_id", invoice_id).execute()
+            flow.close_item("stripe_dispute", dispute_id, reason="Dispute lost in Stripe; counted as a refund.")
+    if row.get("plan"):
+        _apply_plan(member_id, row, before)
+    _refresh_rank(member_id)
+    return True
+
+
+def move_to_current_prices(*, dry_run: bool = True) -> dict[str, Any]:
+    """Move subscribers still on an old price to the current one from their next renewal (no proration)."""
+    prices = price_ids()
+    moved, waiting = 0, []
+    for row in rows(db().table("member_subscriptions").select("member_id,stripe_subscription_id,plan,status")
+                    .in_("status", list(KEEPS_PLAN) + ["paused"]).limit(2000).execute()):
+        if not row.get("stripe_subscription_id") or row.get("plan") not in prices:
+            continue
+        sub = stripe_api.request("GET", f"/subscriptions/{row['stripe_subscription_id']}")
+        items = ((sub.get("items") or {}).get("data") or [])
+        if not items or (items[0].get("price") or {}).get("id") == prices[row["plan"]]:
+            continue
+        waiting.append(row["member_id"])
+        if not dry_run:
+            stripe_api.request("POST", f"/subscriptions/{row['stripe_subscription_id']}", {
+                "items": [{"id": items[0]["id"], "price": prices[row["plan"]]}], "proration_behavior": "none"})
+            moved += 1
+    return {"dry_run": dry_run, "on_old_prices": len(waiting), "moved": moved}
 
 
 def _refresh_rank(member_id: str) -> None:
@@ -479,8 +731,16 @@ def handle_event(event: dict) -> str:
         elif kind == "charge.refunded":
             result = "processed" if record_refund(obj) else "ignored"
         elif kind == "invoice.payment_failed" and obj.get("subscription"):
-            sync_subscription(stripe_api.request("GET", f"/subscriptions/{obj['subscription']}"))
+            member_id = sync_subscription(stripe_api.request("GET", f"/subscriptions/{obj['subscription']}"))
+            if member_id:
+                row = subscription_row(member_id) or {}
+                notify(member_id, row, f"failed:{obj.get('id')}", title="Your card was declined",
+                       body=(f"We couldn't take your FayFort {str(row.get('plan') or 'plan').title()} payment. Update your "
+                             f"card within {settings.BILLING_PAST_DUE_GRACE_DAYS} days to keep your plan: open Settings, "
+                             "then Manage subscription."))
             result = "processed"
+        elif kind.startswith("charge.dispute."):
+            result = "processed" if record_dispute(obj) else "ignored"
         db().table("billing_webhook_events").update({"status": result, "error": None}) \
             .eq("stripe_event_id", event_id).execute()
         return result
@@ -522,6 +782,7 @@ async def billing_loop() -> None:
                 if result.get("problem"):
                     logger.warning("Stripe setup needs attention: %s", result["problem"])
                 synced = await asyncio.to_thread(reconcile)
+                await asyncio.to_thread(sweep)
                 logger.info("Stripe billing checked (%s, %s customer(s) reconciled)", stripe_api.mode(), synced)
             except asyncio.CancelledError:
                 raise

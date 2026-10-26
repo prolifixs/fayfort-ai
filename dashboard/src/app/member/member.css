@@ -1544,3 +1544,4 @@ article.shop-tile,
 }
 .member-tour-form textarea { min-height: 84px; resize: vertical; }
 .member-tour-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.member-billing-note{margin:4px 0 0;padding:8px 10px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--color-accent) 8%,var(--color-bg));font-size:var(--text-sm);line-height:1.45}

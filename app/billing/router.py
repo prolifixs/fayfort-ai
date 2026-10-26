@@ -26,6 +26,11 @@ class PauseInput(BaseModel):
     months: int = Field(ge=1, le=12)
 
 
+class MoveInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dry_run: bool = True
+
+
 def _member_call(action, message: str):
     try:
         return action()
@@ -128,5 +133,16 @@ def create_billing_router() -> APIRouter:
         except Exception as exc:
             logger.exception("Billing setup failed")
             raise HTTPException(status_code=503, detail=f"Stripe setup failed: {exc}") from exc
+
+    @router.post("/platform/billing/move-to-current-prices")
+    def move_prices(payload: MoveInput, authorization: str | None = Header(default=None)):
+        """After a price change: move subscribers still on an old price to the current one at their next renewal."""
+        require_admin(authorization)
+        if not stripe_api.configured():
+            raise HTTPException(status_code=409, detail="Stripe isn't connected.")
+        try:
+            return service.move_to_current_prices(dry_run=payload.dry_run)
+        except stripe_api.StripeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return router

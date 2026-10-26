@@ -65,15 +65,17 @@ export function MemberDialog({
 }
 
 const PLAN_ROWS: { label: string; free: string; standard: string; pro: string }[] = [
+  { label: "Price", free: "Free", standard: "$5.99 a month", pro: "$14.99 a month" },
   {
     label: "Sourcing deposit",
     free: "50% of the product price",
     standard: "25% of the product price",
-    pro: "None while you keep buying",
+    pro: "None once you've bought with us in the last 90 days",
   },
-  { label: "Consultation", free: "$100", standard: "$50 (50% off)", pro: "1 free each month, then $50" },
-  { label: "Supplier contacts", free: "$15 each or 5 for $50", standard: "$15 each or 5 for $50", pro: "10 included each month" },
+  { label: "Consultation (1 hour)", free: "$100", standard: "$85", pro: "$50" },
+  { label: "Supplier contacts", free: "$15 each or 5 for $50", standard: "1 included each paid month", pro: "3 included each paid month" },
   { label: "Hotels & restaurants", free: "Free", standard: "Free", pro: "Free" },
+  { label: "Ads", free: "Shown", standard: "None", pro: "None" },
   { label: "Premium themes", free: "—", standard: "Included", pro: "Included" },
 ];
 
@@ -108,8 +110,9 @@ export function MemberPlanComparison({ currentTier }: { currentTier: string }) {
         </tbody>
       </table>
       <p className="member-plan-note">
-        A sourcing deposit counts toward your order when you buy. Plan perks apply while your subscription is active;
-        Pro's deposit-free sourcing starts after your first month.
+        A sourcing deposit counts toward your order when you buy. Your first paid month runs on the plan below (Pro on
+        Standard prices, Standard on Free prices); full perks start with your second paid month. Included contacts renew
+        each paid month.
       </p>
     </div>
   );
