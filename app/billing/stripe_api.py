@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -106,6 +107,11 @@ def request(method: str, path: str, data: dict | None = None, *, params: dict | 
     if not configured():
         raise StripeError("Stripe isn't configured. Set STRIPE_SECRET_KEY on the API server.")
     headers = {"Stripe-Version": API_VERSION}
+    body_bytes = None
+    if data:
+        # httpx only form-encodes a dict; Stripe's nested keys need ordered pairs, so encode them ourselves.
+        body_bytes = urlencode(encode(data)).encode()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
     owned = client is None
@@ -113,7 +119,7 @@ def request(method: str, path: str, data: dict | None = None, *, params: dict | 
     try:
         response = client.request(method, f"{API}{path}", auth=(secret_key(), ""), headers=headers,
                                   params=encode(params) if params else None,
-                                  data=encode(data) if data else None)
+                                  content=body_bytes)
     except httpx.HTTPError as exc:
         raise StripeError(f"Stripe could not be reached: {exc.__class__.__name__}") from exc
     finally:
