@@ -11,11 +11,39 @@ export function MemberConversationPanel({
   selected: NonNullable<OperationsState["selected"]>;
   memberConversationContext: NonNullable<OperationsState["memberConversationContext"]>;
 }) {
-  const { canManage, userId, memberReply, setMemberReply, busy, sendMemberReply } = ops;
+  const { canManage, userId, memberReply, setMemberReply, busy, sendMemberReply, setChatTakeover } = ops;
+  const mayAct = canManage || selected.assigned_worker_id === userId;
+  const takenOver = Boolean(memberConversationContext.staff_takeover_at);
   return (
     <section className="operations-detail-section operations-request-context">
       <h3>Member chat</h3>
       <strong>{memberConversationContext.title}</strong>
+      {!memberConversationContext.linked_request_id && (
+        <div className={`ops-takeover${takenOver ? " is-human" : ""}`} role="status">
+          <span>
+            {takenOver ? (
+              <>
+                <strong>You have this chat.</strong> The AI is paused. It takes over again if nobody from the team writes for 30
+                minutes, or when you hand it back.
+              </>
+            ) : (
+              <>
+                <strong>The AI is answering this member.</strong> Take it over to chat yourself; the AI stays quiet while you do.
+              </>
+            )}
+          </span>
+          {mayAct &&
+            (takenOver ? (
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => void setChatTakeover(false)}>
+                Hand back to the AI
+              </button>
+            ) : (
+              <button type="button" className="primary-button" disabled={busy} onClick={() => void setChatTakeover(true)}>
+                Take over from the AI
+              </button>
+            ))}
+        </div>
+      )}
       {memberConversationContext.linked_request_id && (
         <p>This conversation is linked to a sourcing request. Use the request timeline for fulfillment progress.</p>
       )}
@@ -32,8 +60,8 @@ export function MemberConversationPanel({
                 onSubmit: sendMemberReply,
                 busy,
                 placeholder: "Write a staff reply…",
-                sendLabel: "Send reply and wait for member",
-                note: "Saved in the member's chat and in the work history. The item then waits for the member.",
+                sendLabel: "Send reply",
+                note: "Saved in the member's chat and the work history. Sending takes the chat over, so the AI stays quiet; the item then waits for the member.",
               }
             : null
         }

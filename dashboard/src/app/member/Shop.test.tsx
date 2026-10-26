@@ -114,6 +114,12 @@ describe("shop inside the chat shell", () => {
     fireEvent.click(within(screen.getByRole("region", { name: "Giveaways" })).getByRole("button", { name: "Enter" }));
     expect(await screen.findByText("You're entered. Good luck!")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "You're in" })).toBeDisabled();
+    // Tapping the giveaway opens its details: prize, rules and dates.
+    fireEvent.click(within(screen.getByRole("region", { name: "Giveaways" })).getAllByRole("button", { name: /^About / })[0]);
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText(/One free entry per member/)).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("turns a pasted link into Find It tiers and Source it joins the pool", async () => {

@@ -76,6 +76,8 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path === `${b}/handoffs`) return { handoffs, total: 2, has_more: false };
   if (path === `${b}/handoffs/agents`) return { agents: [{ user_id: "staff-1", status: "active", role: "agent", handoff_availability: "available", handoff_max_active: 3 }, { user_id: "staff-2", status: "active", role: "agent", handoff_availability: "away" }] };
   if (path === "/operations/pending-count") return { pending: 14, overdue: 3 };
+  if (path.endsWith("/take-over")) return { taken_over: true, idle_minutes: 30 };
+  if (path.endsWith("/hand-back")) return { taken_over: false };
   if (path.startsWith("/operations/bookings") || path.startsWith("/operations/availability/") || path === "/platform/staff/candidates") return bookingFixture(path, search);
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };

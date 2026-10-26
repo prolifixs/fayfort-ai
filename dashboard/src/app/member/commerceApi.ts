@@ -75,6 +75,11 @@ export type Giveaway = {
   entered: boolean;
   won: boolean;
   prize_code?: string | null;
+  starts_at?: string;
+  winner_count?: number;
+  entry_count?: number;
+  /** "Amaka O." style names of the winners, once drawn. */
+  winners?: string[];
 };
 
 export type ShopHome = {

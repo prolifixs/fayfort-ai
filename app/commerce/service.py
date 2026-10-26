@@ -904,6 +904,24 @@ def open_giveaways(member_id: str, now: datetime | None = None) -> list[dict]:
                                                    .eq("member_id", member_id).execute())}
     won = {str(r["giveaway_id"]): r for r in rows(db().table("commerce_giveaway_winners")
                                                   .select("giveaway_id,prize_code").eq("member_id", member_id).execute())}
+    ids = [str(item["id"]) for item in found]
+    counts: dict[str, int] = {}
+    for entry in rows(db().table("commerce_giveaway_entries").select("giveaway_id").in_("giveaway_id", ids).limit(20000).execute()) if ids else []:
+        counts[str(entry["giveaway_id"])] = counts.get(str(entry["giveaway_id"]), 0) + 1
+    winner_rows = rows(db().table("commerce_giveaway_winners").select("giveaway_id,member_id,rank").in_("giveaway_id", ids)
+                       .execute()) if ids else []
+    names = {str(p["user_id"]): p for p in rows(db().table("member_profiles").select("user_id,display_name,username")
+                                                  .in_("user_id", list({str(w["member_id"]) for w in winner_rows})).execute())} \
+        if winner_rows else {}
+
+    def public_name(member_id: str) -> str:
+        """First name and initial only ("Amaka O."), so winners can be shown without exposing anyone."""
+        profile = names.get(member_id) or {}
+        parts = (profile.get("display_name") or "").split()
+        if parts:
+            return parts[0][:20] + (f" {parts[-1][0]}." if len(parts) > 1 else "")
+        return f"@{profile['username'][:2]}…" if profile.get("username") else "A member"
+
     out = []
     for item in found:
         starts, ends = ranking.parse_time(item["starts_at"]), ranking.parse_time(item["ends_at"])
@@ -915,7 +933,9 @@ def open_giveaways(member_id: str, now: datetime | None = None) -> list[dict]:
         out.append({**{k: item.get(k) for k in ("title", "description", "prize_text", "starts_at", "ends_at",
                                                 "winner_count", "status")},
                     "id": gid_, "entered": gid_ in entered, "won": gid_ in won,
-                    "prize_code": (won.get(gid_) or {}).get("prize_code")})
+                    "prize_code": (won.get(gid_) or {}).get("prize_code"), "entry_count": counts.get(gid_, 0),
+                    "winners": [public_name(str(w["member_id"])) for w in sorted(winner_rows, key=lambda w: w["rank"])
+                                if str(w["giveaway_id"]) == gid_]})
     return out
 
 
@@ -924,7 +944,8 @@ def draw_order(seed: str, member_ids: list[str]) -> list[str]:
     return sorted(member_ids, key=lambda member: hashlib.sha256(f"{seed}:{member}".encode()).hexdigest())
 
 
-def draw_giveaway(giveaway_id: str, actor_id: str) -> dict:
+def draw_giveaway(giveaway_id: str, actor_id: str | None) -> dict:
+    """actor_id None: the automatic draw when the giveaway ends (app/commerce/campaigns.py)."""
     giveaway = one(db().table("commerce_giveaways").select("*").eq("id", giveaway_id).maybe_single().execute())
     if not giveaway:
         raise LookupError("Giveaway not found.")
@@ -963,6 +984,12 @@ def draw_giveaway(giveaway_id: str, actor_id: str) -> dict:
                     title=f"You won: {giveaway['title']}",
                     body=f"Congratulations! You won {giveaway['prize_text']}.{prize}", href="/member/chat")
         results.append({"member_id": member_id, "rank": rank, "prize_code": code, "prize_error": error})
+    # Everyone else hears the result too.
+    for member_id in [m for m in entries if m not in set(winners)]:
+        queue_email(member_id, category="notifications", template="commerce_giveaway_results",
+                    title=f"Giveaway results: {giveaway['title']}",
+                    body=(f"Thanks for entering. The winner{'s were' if len(winners) != 1 else ' was'} drawn and contacted. "
+                          "Watch Browse for the next giveaway."), href="/member/chat?panel=catalog")
     try:
         from app.accounts import operations_flow
         operations_flow.after_giveaway_draw(giveaway, results)

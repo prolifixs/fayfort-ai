@@ -197,6 +197,16 @@ def sync_campaigns(at: datetime | None = None) -> dict:
                 flow.close_item(f"campaign_{kind}", str(item["metadata"]["source_id"]), status="cancelled",
                                 reason=f"The {KIND_LABEL[kind]} was cancelled.")
                 closed += 1
+    # Ended giveaways are drawn by themselves (owner decision 2026-10-26); the Draw task stays as the fallback.
+    drawn_now = 0
+    for giveaway in rows(db().table("commerce_giveaways").select("id,ends_at,status").eq("status", "open")
+                         .lte("ends_at", at.isoformat()).limit(20).execute()):
+        try:
+            from app.commerce import service as commerce
+            commerce.draw_giveaway(str(giveaway["id"]), None)
+            drawn_now += 1
+        except Exception:
+            logger.exception("Automatic giveaway draw failed for %s; the Draw winners task stays open", giveaway["id"])
     for giveaway in rows(db().table("commerce_giveaways").select("*").eq("status", "drawn").is_("wrapped_up_at", "null")
                          .limit(100).execute()):
         drawn = parse(giveaway.get("drawn_at"))
@@ -211,4 +221,4 @@ def sync_campaigns(at: datetime | None = None) -> dict:
         db().table("commerce_giveaways").update({"results": results, "wrapped_up_at": results["wrapped_up_at"]}) \
             .eq("id", str(giveaway["id"])).execute()
         wrapped += 1
-    return {"opened": opened, "wrapped_up": wrapped, "closed": closed}
+    return {"opened": opened, "wrapped_up": wrapped, "closed": closed, "drawn": drawn_now}

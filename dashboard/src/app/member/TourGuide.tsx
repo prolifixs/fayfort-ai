@@ -24,6 +24,14 @@ const STATUS: Record<MemberTour["status"], string> = {
   cancelled: "Cancelled",
 };
 
+const STATUS_SHORT: Record<MemberTour["status"], string> = {
+  requested: "Waiting for quote",
+  quoted: "Quote ready",
+  confirmed: "Confirmed",
+  completed: "Done",
+  cancelled: "Cancelled",
+};
+
 const CITIES: [string, string][] = [
   ["guangzhou", "Guangzhou"],
   ["yiwu", "Yiwu"],
@@ -104,7 +112,7 @@ export function TourGuideCard({ accessToken, startOpen = false }: { accessToken:
   }
   const recent = items.filter((item) => item.status !== "cancelled").slice(0, 4);
   return (
-    <section className="member-perk member-tour" aria-labelledby="member-perk-tour">
+    <section className="member-perk member-tourguide" aria-labelledby="member-perk-tour">
       <div className="member-perk-head">
         <div>
           <h3 id="member-perk-tour">Tour guide in China</h3>
@@ -112,12 +120,14 @@ export function TourGuideCard({ accessToken, startOpen = false }: { accessToken:
         </div>
         <strong className="member-perk-price">Quoted for your trip</strong>
       </div>
+      {recent.length > 0 && <h4 className="member-tourguide-title">Your trips</h4>}
       {recent.map((item) => (
-        <div className="member-perk-row" key={item.id}>
+        <div className="member-perk-row member-tourguide-trip" key={item.id}>
           <span>
             <strong>{item.summary}</strong>
             <small>
-              {STATUS[item.status]}
+              <em className={`member-tourguide-status is-${item.status}`}>{STATUS_SHORT[item.status]}</em>
+              {STATUS[item.status].split(" · ")[1] ? ` ${STATUS[item.status].split(" · ")[1]}` : ""}
               {item.guide_name && item.status === "confirmed" ? ` · Guide: ${item.guide_name}` : ""}
             </small>
           </span>

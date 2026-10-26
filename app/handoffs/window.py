@@ -169,26 +169,79 @@ def deliver_to_channel(handoff: dict, message: dict) -> None:
 # ---------------------------------------------------------------------------------------------
 # Website member chat
 # ---------------------------------------------------------------------------------------------
+LIVE_WORK = ("open", "claimed", "waiting", "blocked")
+
+
 def member_support_state(conversation_id: str, now: datetime | None = None) -> WindowState | None:
-    """None when no person is involved; otherwise the window state of the chat's staff support."""
+    """None when no person is involved; otherwise the window state of the chat's staff support.
+
+    A person who took the chat over (Operations → Take over, or by replying) keeps the AI quiet until they hand it back
+    or go quiet for HANDOFF_IDLE_MINUTES. Without a takeover, a person's reply since the work item opened keeps the AI
+    quiet for the same idle window. The work item's own "last updated" time is not used: claiming, notes and status
+    changes must not make the AI think nobody is helping.
+    """
     db = _db()
-    items = (db.table("operations_work_items").select("id,status,updated_at,created_at")
-             .eq("member_conversation_id", conversation_id).limit(1).execute().data or [])
-    item = items[0] if isinstance(items, list) and items else None
-    if not isinstance(item, dict) or item.get("status") not in ("open", "claimed"):
-        return None
+    now = now or now_utc()
+    conversation = (db.table("member_conversations").select("id,staff_takeover_at,staff_takeover_by")
+                    .eq("id", conversation_id).limit(1).execute().data or [])
+    conversation = conversation[0] if isinstance(conversation, list) and conversation else {}
     rows = (db.table("member_messages").select("sender_type,created_at").eq("conversation_id", conversation_id)
             .in_("sender_type", ["worker", "assistant"]).order("created_at", desc=True).limit(50).execute().data or [])
     rows = rows if isinstance(rows, list) else []
-    opened = item.get("updated_at") or item.get("created_at")
     last_human = next((row["created_at"] for row in rows if row.get("sender_type") == "worker"), None)
     last_reply = rows[0]["created_at"] if rows else None
-    state = evaluate(opened_at=opened, last_human_at=last_human, last_reply_at=last_reply, now=now)
+    idle = timedelta(minutes=max(1, settings.HANDOFF_IDLE_MINUTES))
+    holding_gap = timedelta(minutes=max(1, settings.HANDOFF_HOLDING_INTERVAL_MINUTES))
+    taken = parse_time(conversation.get("staff_takeover_at"))
+    if taken:
+        human = parse_time(last_human)
+        active_since = max(taken, human) if human else taken
+        if now - active_since < idle:
+            reply_at = parse_time(last_reply)
+            holding_due = (reply_at is None or now - reply_at >= holding_gap) and now - active_since >= holding_gap
+            return WindowState("human_active", human or taken, holding_due)
+        release_member_takeover(conversation_id, reason="idle")
+    items = (db.table("operations_work_items").select("id,status,created_at")
+             .eq("member_conversation_id", conversation_id).in_("status", list(LIVE_WORK))
+             .order("created_at", desc=True).limit(1).execute().data or [])
+    item = items[0] if isinstance(items, list) and items else None
+    if not isinstance(item, dict):
+        return None
+    state = evaluate(opened_at=item.get("created_at"), last_human_at=last_human, last_reply_at=last_reply, now=now)
     # On the website the AI keeps answering while the member waits for a person; it only steps
     # back while a person is actively chatting.
     if state.phase == "waiting":
         return None
     return state
+
+
+TAKEOVER_NOTE = "A FayFort team member has joined this chat and will reply here."
+HAND_BACK_NOTE = "You're back with FayFort AI. Ask for a person any time and our team will join again."
+
+
+def take_over_member_chat(conversation_id: str, worker_id: str, *, announce: bool = True) -> bool:
+    """Returns True when this started a takeover (False when it was already taken over)."""
+    db = _db()
+    found = (db.table("member_conversations").select("staff_takeover_at").eq("id", conversation_id).limit(1)
+             .execute().data or [])
+    already = bool(found and found[0].get("staff_takeover_at"))
+    db.table("member_conversations").update({"staff_takeover_at": now_utc().isoformat(),
+                                             "staff_takeover_by": worker_id}).eq("id", conversation_id).execute()
+    if not already and announce:
+        db.table("member_messages").insert({"conversation_id": conversation_id, "sender_type": "assistant",
+                                            "content": TAKEOVER_NOTE}).execute()
+    return not already
+
+
+def release_member_takeover(conversation_id: str, *, reason: str = "hand_back") -> None:
+    db = _db()
+    try:
+        db.table("member_conversations").update({"staff_takeover_at": None, "staff_takeover_by": None}) \
+            .eq("id", conversation_id).execute()
+        db.table("member_messages").insert({"conversation_id": conversation_id, "sender_type": "assistant",
+                                            "content": HAND_BACK_NOTE}).execute()
+    except Exception:
+        logger.exception("Could not hand a member chat back to the AI (%s)", reason)
 
 
 async def handoff_window_loop() -> None:

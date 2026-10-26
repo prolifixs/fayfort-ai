@@ -117,6 +117,9 @@ export type MemberConversationContext = {
   title: string;
   linked_request_id: string | null;
   retention_hold: boolean;
+  /** Set while a FayFort person has taken the chat over from the AI. */
+  staff_takeover_at?: string | null;
+  staff_takeover_by?: string | null;
   messages: {
     id: string;
     sender_type: "member" | "assistant" | "worker";

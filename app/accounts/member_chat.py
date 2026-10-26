@@ -278,10 +278,11 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             if not archived:
                 _drop_empty_chats(member_id, str(keep) if keep else None)
             query = (supabase.table("member_conversations")
-                .select("id,title,linked_request_id,retention_hold,last_activity_at,created_at,archived_at,archived_by")
+                .select("id,title,linked_request_id,retention_hold,last_activity_at,created_at,archived_at,archived_by,member_hidden_at")
                 .eq("member_id", member_id))
             query = query.not_.is_("archived_at", "null") if archived else query.is_("archived_at", "null")
             rows = (query.order("archived_at" if archived else "last_activity_at", desc=True).limit(100).execute().data or [])
+            rows = [row for row in rows if not row.get("member_hidden_at")]  # deleted by the member, kept for the team
             archived_count = None
             if not archived:
                 counted = (supabase.table("member_conversations").select("id", count="exact")
@@ -411,6 +412,13 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
             if storage_paths:
                 supabase.storage.from_("member-chat-review-media").remove(storage_paths)
 
+            # A chat the team worked on keeps its history (work events are append-only): hide it for the member.
+            staffed = (supabase.table("operations_work_items").select("id")
+                .eq("member_conversation_id", conversation_ref).limit(1).execute().data or [])
+            if staffed:
+                supabase.table("member_conversations").update({"member_hidden_at": datetime.now(timezone.utc).isoformat()}) \
+                    .eq("id", conversation_ref).eq("member_id", member_id).execute()
+                return {"deleted": True, "conversation_id": conversation_ref}
             deleted = (supabase.table("member_conversations").delete()
                 .eq("id", conversation_ref).eq("member_id", member_id)
                 .eq("retention_hold", False).is_("linked_request_id", "null")
@@ -429,9 +437,9 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
     def list_member_messages(conversation_id: uuid.UUID, authorization: str | None = Header(default=None)):
         member_id = require_verified_member(authorization)
         try:
-            owner = (supabase.table("member_conversations").select("id")
+            owner = (supabase.table("member_conversations").select("id,member_hidden_at")
                 .eq("id", str(conversation_id)).eq("member_id", member_id).maybe_single().execute())
-            if not _response_data(owner):
+            if not _response_data(owner) or (_response_data(owner) or {}).get("member_hidden_at"):
                 raise HTTPException(status_code=404, detail="Chat not found.")
             rows = (supabase.table("member_messages").select("id,sender_type,content,related_product_ids,find_it,product_ref,created_at,actor_user_id")
                 .eq("conversation_id", str(conversation_id)).order("created_at").limit(500).execute().data or [])
@@ -471,10 +479,10 @@ def create_member_chat_router(require_verified_member: Callable[[str | None], st
         member_id = require_verified_member(authorization)
         user_row = None
         try:
-            owner = (supabase.table("member_conversations").select("id,retention_hold,linked_request_id")
+            owner = (supabase.table("member_conversations").select("id,retention_hold,linked_request_id,member_hidden_at")
                 .eq("id", str(conversation_id)).eq("member_id", member_id).maybe_single().execute())
             conversation = _response_data(owner)
-            if not conversation:
+            if not conversation or conversation.get("member_hidden_at"):
                 raise HTTPException(status_code=404, detail="Chat not found.")
             if conversation.get("retention_hold"):
                 raise HTTPException(status_code=409,

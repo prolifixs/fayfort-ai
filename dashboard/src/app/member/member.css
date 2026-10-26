@@ -1545,3 +1545,32 @@ article.shop-tile,
 .member-tour-form textarea { min-height: 84px; resize: vertical; }
 .member-tour-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .member-billing-note{margin:4px 0 0;padding:8px 10px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--color-accent) 8%,var(--color-bg));font-size:var(--text-sm);line-height:1.45}
+/* Tour guide card (renamed from .member-tour, which is the first-visit tour overlay and made this card full-screen) */
+.member-perk{align-content:start}
+.member-tourguide>.primary-button,.member-tourguide>.secondary-button{justify-self:start}
+.member-tourguide-title{margin:4px 0 0;color:var(--color-muted);font-size:var(--text-xs);font-weight:var(--weight-strong);letter-spacing:.04em;text-transform:uppercase}
+.member-tourguide-trip strong{white-space:normal}
+.member-tourguide-status{display:inline-block;margin-right:4px;padding:1px 8px;border-radius:999px;background:var(--color-hover);color:var(--color-text);font-style:normal;font-weight:var(--weight-strong)}
+.member-tourguide-status.is-quoted{background:color-mix(in srgb,var(--color-accent) 14%,var(--color-bg));color:var(--color-accent)}
+.member-tourguide-status.is-confirmed{background:color-mix(in srgb,#147964 16%,var(--color-bg));color:#147964}
+/* Giveaway details (docs/OPERATIONS_FIXES_PLAN.md) */
+button.shop-section-giveaway{width:100%;padding:0;border:0;background:none;font:inherit;text-align:left;cursor:pointer}
+.shop-section-giveaway small{color:var(--color-accent);font-weight:var(--weight-strong)}
+button.giveaway-open{width:100%;border:0;font:inherit;cursor:pointer}
+.giveaway-title-button{padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.giveaway-title-button:hover strong,.giveaway-title-button:focus-visible strong{text-decoration:underline}
+.giveaway-sheet-backdrop{position:fixed;inset:0;z-index:var(--z-dialog,100);display:grid;place-items:center;padding:16px;background:var(--color-scrim,rgba(10,20,30,.45))}
+.giveaway-sheet{position:relative;display:grid;gap:10px;width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:24px;border-radius:var(--radius-lg,16px);background:var(--color-bg);color:var(--color-text);box-shadow:var(--shadow-lg);box-sizing:border-box}
+.giveaway-sheet h2{margin:0;font-size:var(--text-xl)}
+.giveaway-sheet p{margin:0;line-height:1.5}
+.giveaway-sheet-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:var(--color-hover);color:var(--color-text);font-size:22px;line-height:1;cursor:pointer}
+.giveaway-sheet-art{display:grid;place-items:center;width:56px;height:56px;border-radius:14px;background:color-mix(in srgb,#e8b54a 22%,var(--color-bg));font-size:28px}
+.giveaway-sheet-kicker{color:var(--color-accent);font-size:var(--text-xs);font-weight:var(--weight-strong);letter-spacing:.04em;text-transform:uppercase}
+.giveaway-sheet-copy{color:var(--color-muted)}
+.giveaway-sheet-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin:4px 0}
+.giveaway-sheet-facts dt{color:var(--color-muted);font-size:var(--text-xs)}
+.giveaway-sheet-facts dd{margin:0;font-weight:var(--weight-strong)}
+.giveaway-sheet-rules{margin:0;padding-left:18px;color:var(--color-muted);font-size:var(--text-sm);line-height:1.6}
+.giveaway-sheet-won{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,#147964 14%,var(--color-bg))}
+.giveaway-sheet-winners{font-weight:var(--weight-strong)}
+.giveaway-sheet>.primary-button,.giveaway-sheet>.secondary-button{justify-self:stretch;min-height:44px}

@@ -482,7 +482,21 @@ export function useOperationsCenter() {
         body: JSON.stringify({ content }),
       });
       setMemberReply("");
-    }, "Reply sent. The conversation is waiting for the member.");
+      setMemberConversationContext((current) =>
+        current && !current.staff_takeover_at ? { ...current, staff_takeover_at: new Date().toISOString(), staff_takeover_by: userId } : current,
+      );
+    }, "Reply sent. You have the chat now: the AI stays quiet until you hand it back.");
+  }
+  async function setChatTakeover(takeOver: boolean) {
+    if (!token || !selected) return;
+    await run(async () => {
+      await apiRequest(`/operations/work-items/${selected.id}/${takeOver ? "take-over" : "hand-back"}`, token, { method: "POST" });
+      setMemberConversationContext((current) =>
+        current
+          ? { ...current, staff_takeover_at: takeOver ? new Date().toISOString() : null, staff_takeover_by: takeOver ? userId : null }
+          : current,
+      );
+    }, takeOver ? "You've taken this chat over. The AI stays quiet until you hand it back." : "Handed back. The AI answers the member again.");
   }
   async function sendBusinessReply(event: FormEvent) {
     event.preventDefault();
@@ -1050,6 +1064,7 @@ export function useOperationsCenter() {
     claim,
     saveStatus,
     sendMemberReply,
+    setChatTakeover,
     sendBusinessReply,
     returnToAutomation,
     transfer,

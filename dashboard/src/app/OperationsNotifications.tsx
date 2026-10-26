@@ -21,6 +21,12 @@ const TONE: Record<string, NoticeTone> = {
   infrastructure_alert: "alert",
   review_needed: "review",
   review_done: "review",
+  member_message: "message",
+  new_work: "assign",
+  payment_received: "review",
+  booking: "due",
+  tour_booking: "due",
+  work_done: "review",
 };
 /** These play the urgent sound. */
 const URGENT = new Set(["work_overdue", "automation_failed", "infrastructure_alert"]);
@@ -62,7 +68,7 @@ export function OperationsNotifications({ accessToken }: { accessToken: string }
   );
   useEffect(() => {
     void load(false);
-    const timer = window.setInterval(() => void load(true), 30000);
+    const timer = window.setInterval(() => void load(true), 20000);
     return () => window.clearInterval(timer);
   }, [load]);
   const closeToast = useCallback(() => setToast(null), []);

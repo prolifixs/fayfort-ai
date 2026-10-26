@@ -333,6 +333,8 @@ def confirm(booking: dict) -> dict:
     _email(booking, "confirmed", "Your booking is confirmed",
            f"{KIND_LABEL.get(booking['kind'], 'Booking')} on {when_text(parse(booking['starts_at']), booking.get('member_time_zone'))}. "
            + ("Your call link is in your booking." if booking.get("call_link") else "We'll send the call link before it starts."))
+    _notify_staff(booking, f"New {KIND_LABEL.get(booking['kind'], 'booking').lower()} booked",
+                  f"{when_text(parse(booking['starts_at']))}" + (f": {booking['topic']}" if booking.get("topic") else ""), "confirmed")
     _sync_calendar(booking)
     return booking
 
@@ -401,6 +403,9 @@ def move(booking: dict, starts: datetime, *, by: str, reason: str | None = None)
     _email(moved, "moved", "Your booking has a new time",
            f"Moved from {when_text(old, moved.get('member_time_zone'))} to "
            f"{when_text(starts, moved.get('member_time_zone'))}{note}.")
+    if not staff:
+        _notify_staff(moved, "A member moved their booking", f"Now {when_text(starts)} (was {when_text(old)}).",
+                      f"moved:{moved['reschedule_count']}")
     _sync_calendar(moved)
     return moved
 
@@ -432,6 +437,9 @@ def cancel(booking: dict, *, by: str, reason: str | None = None, refund: bool | 
         if refund_state == "due":
             body += " Your refund is on its way; it can take a few days to show on your card."
         _email(cancelled, "cancelled", "Your booking is cancelled", body)
+    if by == "member":
+        _notify_staff(cancelled, "A member cancelled a booking",
+                      f"{when_text(parse(booking['starts_at']))}" + (" · refund due" if refund_state == "due" else ""), "cancelled")
     _sync_calendar(cancelled)
     return cancelled
 
@@ -513,6 +521,26 @@ def _email(booking: dict, key: str, title: str, body: str) -> None:
         return
     commerce.queue_email(str(booking["member_id"]), category="notifications", template=f"commerce_booking_{key}",
                          title=title, body=body, href="/member/chat?panel=tools&tool=consultation")
+
+
+def _notify_staff(booking: dict, title: str, body: str, key: str) -> None:
+    """Operations inbox: the host, the CEO's assistants (for CEO bookings) and administrators."""
+    try:
+        recipients = {str(booking["host_id"])}
+        host = one(db().table("fayfort_workers").select("staff_role").eq("user_id", str(booking["host_id"])).limit(1).execute())
+        if (host or {}).get("staff_role") == "ceo":
+            recipients |= {str(r["user_id"]) for r in rows(db().table("fayfort_workers").select("user_id")
+                                                           .eq("staff_role", "assistant").eq("status", "active").execute())}
+        href = f"/operations?view=bookings&booking={booking['id']}"
+        db().table("operations_worker_notifications").upsert([
+            {"worker_id": r, "work_item_id": booking.get("work_item_id"), "notification_type": "booking", "title": title[:160],
+             "body": body[:500], "href": href, "dedupe_key": f"booking:{booking['id']}:{key}:{r}"} for r in recipients
+        ], on_conflict="dedupe_key", ignore_duplicates=True).execute()
+        db().rpc("notify_platform_admins", {"p_notification_type": "booking", "p_work_item_id": booking.get("work_item_id"),
+                                            "p_title": title[:160], "p_body": body[:500], "p_href": href,
+                                            "p_dedupe": f"booking:{booking['id']}:{key}"}).execute()
+    except Exception:
+        logger.exception("Could not notify the team about a booking")
 
 
 def _sync_calendar(booking: dict) -> None:

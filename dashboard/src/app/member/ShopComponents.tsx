@@ -168,6 +168,83 @@ export function TrendTile({
   );
 }
 
+/** Everything about one giveaway: prize, rules, dates, entries and, after the draw, the winners and your code. */
+export function GiveawaySheet({
+  giveaway,
+  onEnter,
+  busy,
+  onClose,
+}: {
+  giveaway: Giveaway;
+  onEnter: (giveaway: Giveaway) => void;
+  busy?: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const day = (value?: string) =>
+    value ? new Date(value).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+  const open = giveaway.status === "open";
+  return (
+    <div className="giveaway-sheet-backdrop" onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="giveaway-sheet" role="dialog" aria-modal="true" aria-labelledby="giveaway-sheet-title">
+        <button type="button" className="giveaway-sheet-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+        <span className="giveaway-sheet-art" aria-hidden="true">
+          🎁
+        </span>
+        <small className="giveaway-sheet-kicker">{open ? "Giveaway · free to enter" : "Giveaway · winners drawn"}</small>
+        <h2 id="giveaway-sheet-title">{giveaway.title}</h2>
+        <p className="giveaway-sheet-prize">
+          <strong>Prize:</strong> {giveaway.prize_text}
+        </p>
+        {giveaway.description && <p className="giveaway-sheet-copy">{giveaway.description}</p>}
+        <dl className="giveaway-sheet-facts">
+          {giveaway.starts_at && (
+            <div>
+              <dt>Opened</dt>
+              <dd>{day(giveaway.starts_at)}</dd>
+            </div>
+          )}
+          <div>
+            <dt>{open ? "Ends" : "Ended"}</dt>
+            <dd>{open ? <Countdown endsAt={giveaway.ends_at} /> : day(giveaway.ends_at)}</dd>
+          </div>
+          <div>
+            <dt>Winners</dt>
+            <dd>{giveaway.winner_count ?? 1}</dd>
+          </div>
+          <div>
+            <dt>Entries so far</dt>
+            <dd>{giveaway.entry_count ?? 0}</dd>
+          </div>
+        </dl>
+        <ul className="giveaway-sheet-rules">
+          <li>One free entry per member. No purchase needed.</li>
+          <li>Winners are drawn at random when it ends, and emailed straight away.</li>
+          <li>A store prize comes as a code that makes it free at checkout, valid for 60 days.</li>
+        </ul>
+        {giveaway.won ? (
+          <p className="giveaway-sheet-won" role="status">
+            You won!{giveaway.prize_code ? <> Your code: <strong>{giveaway.prize_code}</strong></> : " We'll contact you about your prize."}
+          </p>
+        ) : !open && giveaway.winners?.length ? (
+          <p className="giveaway-sheet-winners">Winner{giveaway.winners.length === 1 ? "" : "s"}: {giveaway.winners.join(", ")}</p>
+        ) : null}
+        {open && (
+          <button type="button" className={giveaway.entered ? "secondary-button" : "primary-button"} disabled={busy || giveaway.entered} onClick={() => onEnter(giveaway)}>
+            {giveaway.entered ? "You're in. Good luck!" : "Enter free"}
+          </button>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function GiveawayTile({
   giveaway,
   onEnter,
@@ -177,15 +254,19 @@ export function GiveawayTile({
   onEnter: (giveaway: Giveaway) => void;
   busy?: boolean;
 }) {
+  const [details, setDetails] = useState(false);
   return (
     <article className="shop-tile giveaway" aria-label={giveaway.title}>
-      <div className="shop-tile-media" aria-hidden="true">
-        <span>🎁</span>
+      <button type="button" className="shop-tile-media giveaway-open" onClick={() => setDetails(true)} aria-label={`About ${giveaway.title}`}>
+        <span aria-hidden="true">🎁</span>
         <b className="shop-badge">Giveaway</b>
-      </div>
+      </button>
+      {details && <GiveawaySheet giveaway={giveaway} onEnter={onEnter} busy={busy} onClose={() => setDetails(false)} />}
       <div className="shop-tile-copy">
         <small>{giveaway.status === "open" ? <Countdown endsAt={giveaway.ends_at} /> : "Winners drawn"}</small>
-        <strong>{giveaway.title}</strong>
+        <button type="button" className="giveaway-title-button" onClick={() => setDetails(true)}>
+          <strong>{giveaway.title}</strong>
+        </button>
         <span className="shop-price muted">Prize: {giveaway.prize_text}</span>
         {giveaway.won ? (
           <small className="shop-won">
@@ -281,9 +362,12 @@ export function SectionTiles({
   busyId?: string;
 }) {
   const live = giveaways.filter((giveaway) => giveaway.status === "open");
+  const [openGiveaway, setOpenGiveaway] = useState<Giveaway | null>(null);
   if (!sections.length && !live.length) return null;
+  const shown = openGiveaway ? giveaways.find((g) => g.id === openGiveaway.id) || openGiveaway : null;
   return (
     <div className="shop-sections" aria-label="Store sections">
+      {shown && <GiveawaySheet giveaway={shown} onEnter={onEnter} busy={busyId === shown.id} onClose={() => setOpenGiveaway(null)} />}
       {live.slice(0, 1).map((giveaway) => (
         <section key={giveaway.id} className="shop-section-tile accent-gold is-giveaway" aria-label={`Giveaway: ${giveaway.title}`}>
           <header>
@@ -292,10 +376,11 @@ export function SectionTiles({
               <Countdown endsAt={giveaway.ends_at} />
             </span>
           </header>
-          <p className="shop-section-giveaway">
+          <button type="button" className="shop-section-giveaway" onClick={() => setOpenGiveaway(giveaway)}>
             <strong>{giveaway.title}</strong>
             <span>{giveaway.prize_text}</span>
-          </p>
+            <small>Details and rules ›</small>
+          </button>
           <button type="button" className="primary-button" disabled={giveaway.entered || busyId === giveaway.id} onClick={() => onEnter(giveaway)}>
             {giveaway.entered ? "You're in" : "Enter free"}
           </button>

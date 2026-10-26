@@ -1069,7 +1069,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                     "dispute_case": dispute_case}
             if conversation_id:
                 result = (supabase.table("member_conversations")
-                    .select("id,title,linked_request_id,retention_hold")
+                    .select("id,title,linked_request_id,retention_hold,staff_takeover_at,staff_takeover_by")
                     .eq("id", str(conversation_id)).maybe_single().execute())
                 conversation = result.data if result is not None else None
                 if not conversation:
@@ -1279,6 +1279,12 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 message = message["message"]
             if not message:
                 raise RuntimeError("Member reply was not returned")
+            # Replying takes the chat over from the AI (it stays quiet until handed back or the idle window ends).
+            try:
+                from app.handoffs import window as handoff_window
+                handoff_window.take_over_member_chat(str(item["member_conversation_id"]), staff["user_id"], announce=False)
+            except Exception:
+                logger.exception("Could not mark the member chat as taken over")
             return {"message": {key: message.get(key) for key in
                     ("id", "sender_type", "content", "related_product_ids", "created_at")}}
         except Exception as exc:
@@ -1289,6 +1295,38 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             if "linked request" in message or "not a member conversation" in message:
                 raise HTTPException(status_code=409, detail="This conversation is linked to a sourcing request or is no longer available.") from exc
             raise HTTPException(status_code=409, detail="The reply could not be sent. Refresh the conversation and try again.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/take-over")
+    def take_over_member_chat(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        """The AI stops answering this member chat until a person hands it back (or goes quiet for the idle window)."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if not item.get("member_conversation_id"):
+            raise HTTPException(status_code=409, detail="This work item has no member chat.")
+        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+            raise HTTPException(status_code=403, detail="Claim this conversation before taking it over.")
+        from app.handoffs import window as handoff_window
+        try:
+            started = handoff_window.take_over_member_chat(str(item["member_conversation_id"]), staff["user_id"])
+        except Exception as exc:
+            logger.exception("Could not take over a member chat")
+            raise HTTPException(status_code=503, detail="The chat could not be taken over. Try again.") from exc
+        if started:
+            operations_flow.add_event(item, "status_changed", "Took the chat over from the AI.", **by(staff))
+        return {"taken_over": True, "idle_minutes": settings.HANDOFF_IDLE_MINUTES}
+
+    @router.post("/operations/work-items/{work_item_id}/hand-back")
+    def hand_member_chat_back(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if not item.get("member_conversation_id"):
+            raise HTTPException(status_code=409, detail="This work item has no member chat.")
+        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+            raise HTTPException(status_code=403, detail="Claim this conversation before handing it back.")
+        from app.handoffs import window as handoff_window
+        handoff_window.release_member_takeover(str(item["member_conversation_id"]))
+        operations_flow.add_event(item, "status_changed", "Handed the chat back to the AI.", **by(staff))
+        return {"taken_over": False}
 
     @router.post("/operations/work-items/{work_item_id}/business-reply", status_code=201)
     def reply_to_business_handoff(work_item_id: UUID, payload: MemberConversationReply,
