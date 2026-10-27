@@ -65,6 +65,20 @@ const lists = {
   candidates: [], log: [], review_queue: [], can_review: true, categories_list: [], tunnels: [], hostnames: [], deposits_due: [],
 };
 
+// Operations desks (R2): counts and pipeline stages for the rail, My work and the desk headers.
+const stage = (key: string, label: string, count: number) => ({ key, label, count });
+const desks = {
+  mine: 3, mine_due_today: 1, mine_overdue: 1,
+  desks: [
+    { department: "conversation_intake", total: 2, available: 1, mine: 1, waiting: 0, overdue: 0, stages: [stage("member_app", "Member app chats", 1), stage("customer", "Customer chats", 1)] },
+    { department: "sourcing", total: 9, available: 4, mine: 1, waiting: 3, overdue: 1, stages: [stage("review", "Review", 4), stage("sourcing", "Sourcing", 2), stage("with_member", "Options with the member", 2), stage("paid", "Paid", 0), stage("group_buy", "Group buys", 1)] },
+    { department: "fulfillment", total: 5, available: 2, mine: 1, waiting: 1, overdue: 0, stages: [stage("confirmed", "Confirmed", 1), stage("warehouse", "In the warehouse", 1), stage("on_the_way", "On the way", 1), stage("delivered", "Delivered", 0), stage("shop_order", "Shop orders to pack", 2)] },
+    { department: "member_support", total: 3, available: 3, mine: 0, waiting: 0, overdue: 0, stages: [stage("money", "Money", 1), stage("bookings", "Bookings", 1), stage("campaigns", "Giveaways", 1), stage("reviews", "Photo reviews", 0), stage("chats", "Chats", 0)] },
+    { department: "disputes", total: 1, available: 1, mine: 0, waiting: 0, overdue: 0, stages: [stage("new", "New", 1), stage("working", "Being worked on", 0), stage("waiting", "Waiting", 0), stage("blocked", "Stuck", 0)] },
+    { department: "store_team", total: 4, available: 2, mine: 0, waiting: 0, overdue: 0, stages: [stage("listings", "Listings", 2), stage("finds", "Finds", 1), stage("sections", "Sections", 1), stage("campaigns", "Campaigns", 0)] },
+  ],
+};
+
 function fixture(path: string, search: URLSearchParams): unknown {
   const b = `/businesses/${businessId}`;
   if (path === "/dashboard/businesses") return { businesses: [{ business_id: businessId, name: "FayFort Hair Lagos", role: "owner" }, { business_id: "biz-2", name: "FayFort Fabrics", role: "owner" }] };
@@ -81,6 +95,7 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path.startsWith("/operations/bookings") || path.startsWith("/operations/availability/") || path === "/platform/staff/candidates") return bookingFixture(path, search);
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
+  if (path === "/operations/desks") return desks;
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };
   if (path === "/operations/work-items") return { work_items: workItems };
   if (path === "/operations/work-items/w4/source-context") return { source_type: "shopify_order", flow: { kind: "shopify_order", metadata: workItems[2].metadata, member_name: "Amaka Obi", order: { order_name: "#1042", total: "184.00", currency: "USD", financial_status: "paid", fulfillment_status: null, line_items: [{ title: "Body wave wig 22 inch", quantity: 1, variant_title: "Natural black" }, { title: "Edge control", quantity: 2 }] } } };

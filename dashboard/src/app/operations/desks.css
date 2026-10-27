@@ -1,0 +1,79 @@
+/* Operations Center by desk (R2): a left rail beside the work on wide screens, a scrolling menu above it on phones and
+   tablets. Everything sits in the same 1500px column as the header. */
+.ops-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--space-4); align-items: start; max-width: 1500px; margin: 0 auto; }
+.ops-shell-main { min-width: 0; }
+.ops-shell-main > .ops-toolbar,
+.ops-shell-main > .ops-flash,
+.ops-shell-main > .ops-batch-bar,
+.ops-shell-main > .ops-maintenance,
+.ops-shell-main > .operations-center-grid { max-width: none; }
+
+.ops-rail { position: sticky; top: var(--space-4); display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); box-shadow: var(--shadow-sm); }
+.ops-rail-group { display: grid; gap: 2px; }
+.ops-rail-group h2 { margin: var(--space-2) var(--space-2) var(--space-1); color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: .04em; text-transform: uppercase; }
+.ops-rail-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-text); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); text-align: left; cursor: pointer; }
+.ops-rail-item:hover { background: var(--color-hover); }
+.ops-rail-item.is-sub { min-height: 34px; padding-left: calc(var(--space-3) + 14px); color: var(--color-muted); font-weight: normal; }
+.ops-rail-item.is-active { background: color-mix(in srgb, var(--accent) 12%, var(--color-bg)); color: var(--accent); font-weight: var(--weight-strong); }
+.ops-rail-item:focus-visible { outline: 2px solid var(--color-focus, var(--accent)); outline-offset: -2px; }
+.ops-rail-badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--color-hover); color: var(--color-text); font-size: var(--text-xs); line-height: 22px; text-align: center; }
+.ops-rail-badge.is-urgent { background: var(--color-danger); color: #fff; }
+
+.ops-desk-head { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); box-shadow: var(--shadow-sm); }
+.ops-desk-title { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-5); }
+.ops-desk-title h2 { margin: 0 0 2px; font-size: var(--text-xl); }
+.ops-desk-title p { margin: 0; max-width: 60ch; color: var(--color-muted); font-size: var(--text-sm); }
+.ops-desk-counts { display: flex; gap: var(--space-2); margin: 0; }
+.ops-desk-counts div { min-width: 86px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ops-desk-counts dt { color: var(--color-muted); font-size: var(--text-xs); }
+.ops-desk-counts dd { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; }
+.ops-desk-counts .is-urgent { border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-danger) 7%, var(--color-bg)); }
+.ops-desk-counts .is-urgent dd { color: var(--color-danger); }
+
+.ops-pipeline { display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.ops-stage { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; min-height: 38px; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-pill); background: var(--color-bg); color: var(--color-text); font: inherit; font-size: var(--text-sm); white-space: nowrap; cursor: pointer; }
+.ops-stage i { margin-left: -2px; color: var(--color-muted); font-style: normal; }
+.ops-stage b { min-width: 20px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--color-hover); font-size: var(--text-xs); line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+.ops-stage.is-empty { color: var(--color-muted); }
+.ops-stage[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+.ops-stage[aria-pressed="true"] b, .ops-stage[aria-pressed="true"] i { background: color-mix(in srgb, #fff 22%, transparent); color: #fff; }
+.ops-stage:focus-visible { outline: 2px solid var(--color-focus, var(--accent)); outline-offset: 2px; }
+
+.ops-desk-how summary { width: fit-content; color: var(--accent); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; }
+.ops-desk-how > div { margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--color-hover); font-size: var(--text-sm); }
+.ops-desk-how h3 { margin: var(--space-2) 0 var(--space-1); font-size: var(--text-sm); }
+.ops-desk-how ol, .ops-desk-how ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
+
+.ops-tool-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-3); }
+.ops-tool-card { display: grid; gap: var(--space-2); align-content: start; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.ops-tool-card header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.ops-tool-card h3 { margin: 0; font-size: var(--text-base); }
+.ops-tool-card p { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+.ops-tool-card ul { margin: 0; padding-left: 1.1rem; font-size: var(--text-sm); }
+.ops-tool-count { color: var(--color-muted); font-size: var(--text-xs); white-space: nowrap; }
+.ops-tool-count b { color: var(--color-text); font-size: var(--text-base); }
+.ops-tool-card footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.ops-tool-full { color: var(--accent); font-size: var(--text-sm); font-weight: var(--weight-medium); text-decoration: none; }
+.ops-tool-full:hover { text-decoration: underline; }
+
+.ops-home-desks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.ops-home-desk { display: grid; gap: 2px; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.ops-home-desk:hover { border-color: var(--accent); }
+.ops-home-desk span { color: var(--color-muted); font-size: var(--text-sm); }
+.ops-home-desk em { color: var(--color-danger); font-style: normal; font-weight: var(--weight-medium); }
+
+/* Phones and tablets: the rail becomes one scrolling row of chips above the work. */
+@media (max-width: 1099px) {
+  .ops-shell { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .ops-rail { position: static; display: flex; gap: var(--space-1); padding: var(--space-2); overflow-x: auto; scrollbar-width: none; }
+  .ops-rail::-webkit-scrollbar { display: none; }
+  .ops-rail-group { display: flex; gap: var(--space-1); }
+  .ops-rail-group + .ops-rail-group { padding-left: var(--space-1); border-left: 1px solid var(--color-border); }
+  .ops-rail-group h2 { display: none; }
+  .ops-rail-item, .ops-rail-item.is-sub { flex-shrink: 0; min-height: 38px; padding: 0 var(--space-3); white-space: nowrap; color: var(--color-text); }
+  .ops-desk-head { padding: var(--space-4); }
+}
+@media (max-width: 560px) {
+  .ops-desk-counts { width: 100%; }
+  .ops-desk-counts div { flex: 1; min-width: 0; }
+}

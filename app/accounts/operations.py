@@ -17,6 +17,7 @@ from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
+from app.accounts.desks import desk_stage, desk_summaries, latest_request_stages, my_due_counts
 
 logger = logging.getLogger(__name__)
 Department = Literal["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"]
@@ -466,6 +467,28 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             logger.exception("Could not count pending operations work")
             raise HTTPException(status_code=503, detail="Pending work could not be counted.") from exc
 
+    @router.get("/operations/desks")
+    def operations_desks(authorization: str | None = Header(default=None)):
+        """The left rail and My work: for each desk this person works on, what's free, theirs, waiting, overdue and the
+        pipeline stage counts (docs/OPERATIONS_RESTRUCTURE_PLAN.md, R2)."""
+        staff = staff_identity(authorization)
+        admin = staff.get("role") == "platform_admin"
+        departments = list(DEPARTMENTS) if admin else departments_for(staff["user_id"])
+        try:
+            rows = (supabase.table("operations_work_items")
+                    .select("id,department,work_type,status,due_at,assigned_worker_id,claimed_until,member_request_id,"
+                            "member_conversation_id,business_conversation_id,handoff_id")
+                    .in_("status", ["open", "claimed", "waiting", "blocked"]).limit(3000).execute().data or [])
+            stages = latest_request_stages(supabase, [row.get("member_request_id") for row in rows
+                                                      if row.get("member_request_id")
+                                                      and row.get("department") in ("sourcing", "fulfillment")])
+            desks = desk_summaries(rows, stages, staff["user_id"], departments)
+            mine = [row for row in rows if row.get("assigned_worker_id") == staff["user_id"]]
+            return {"desks": desks, **my_due_counts(mine)}
+        except Exception as exc:
+            logger.exception("Could not summarise the operations desks")
+            raise HTTPException(status_code=503, detail="The desks could not be loaded.") from exc
+
     @router.get("/operations/work-items/{work_item_id}/mention-options")
     def operations_mention_options(work_item_id: UUID, authorization: str | None = Header(default=None)):
         staff = staff_identity(authorization)
@@ -711,7 +734,7 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
 
     @router.get("/operations/work-items")
     def list_work_items(
-        scope: Literal["mine", "available", "all"] = Query(default="mine"),
+        scope: Literal["mine", "available", "all", "desk"] = Query(default="mine"),
         department: Department | None = None,
         status: WorkStatus | None = None,
         view: Literal["active", "archive"] = Query(default="active"),
@@ -724,6 +747,8 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         admin = staff.get("role") == "platform_admin"
         if scope == "all" and not admin:
             raise HTTPException(status_code=403, detail="Only a platform administrator can view all operations work.")
+        if scope == "desk" and not department:
+            raise HTTPException(status_code=422, detail="Pick a desk.")
         try:
             query = supabase.table("operations_work_items").select(WORK_ITEM_FIELDS)
             if department:
@@ -769,6 +794,11 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                         ("summary", "next_action", "work_type", "id", "member_request_id")).casefold()]
             if view != "archive":
                 rows.sort(key=queue_rank)
+                # The desk's pipeline stage, so the strip can filter the list (app/accounts/desks.py).
+                stages = latest_request_stages(supabase, [row.get("member_request_id") for row in rows
+                                                          if row.get("member_request_id")])
+                for row in rows:
+                    row["desk_stage"] = desk_stage(row, stages.get(str(row.get("member_request_id") or "")))
             if not admin and scope == "available" and view != "archive":
                 now = datetime.now().astimezone()
                 rows = [row for row in rows if row.get("assigned_worker_id") in (None, staff["user_id"])

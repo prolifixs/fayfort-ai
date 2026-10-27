@@ -223,3 +223,37 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
   agents → Your availability, which workers no longer open).
 - Tests: `tests/test_admin_pages.py`, knowledge tests sign in as a platform admin, App.test worker navigation,
   `ChatAvailability.test.tsx`, e2e `ops-worker-header.spec.ts` (phone and laptop, no sideways scroll).
+
+## 6. R2 build notes (desk shell)
+
+- **Server:** `app/accounts/desks.py` decides each live item's pipeline stage (`desk_stage`): Sourcing and Fulfillment
+  follow the member request's latest timeline stage, Member support and Store team go by work type, Conversations by
+  where the chat came from (member app or customer channels), Disputes by status. Anything that fits no stage falls
+  back to its status (New, Being worked on, Waiting, Stuck), so nothing goes uncounted.
+  - `GET /operations/desks`: for each desk the person works on (administrators: all six) what's free to pick up,
+    theirs, waiting, overdue, and the stage counts; plus My work counts (claimed, due by the end of today in China
+    time, overdue).
+  - `GET /operations/work-items?scope=desk&department=…`: everything live on one desk, waiting work included.
+    Workers only get desks they belong to. Every live item in a list now carries `desk_stage`.
+  - Stages the strip shows: Conversations (Member app chats, Customer chats) · Sourcing (Review, Sourcing, Options
+    with the member, Paid, Group buys) · Fulfillment (Confirmed, In the warehouse, On the way, Delivered, Shop orders
+    to pack) · Member support (Money, Bookings, Giveaways, Photo reviews, Chats) · Disputes (New, Being worked on,
+    Waiting, Stuck) · Store team (Listings, Finds, Sections, Campaigns). A deposit stage needs payment data on the
+    list and is left for R4.
+- **Rail** (`operations/Desks.tsx`): My work, then Your desks (only the worker's own; Products sits under Store team,
+  Bookings and tours under Member support), then Shared (Schedule, Archive, Guide; Bookings here for people without
+  Member support, such as the CEO's assistant), then Administrators (Team, Reports). Badges: My work shows what you
+  hold, each desk what's free to pick up; red when something is overdue. On phones and tablets (under 1100px) the rail
+  is one scrolling row above the work and keeps the open desk in sight. The top tabs are gone.
+- **My work** is the home page: claimed, due today and overdue counts, a card per desk (free to pick up, overdue) that
+  opens it, then the list of everything you've claimed. Administrators can still switch to All work.
+- **A desk:** header with its one-line purpose and counts, the pipeline strip (tap a stage to filter the list, All to
+  clear), "How this desk works" (each stage explained and where its work goes next), then tool cards. The list has
+  Everything / Free to pick up and the status filter. The address carries the desk (`/operations?view=desk&desk=sourcing`)
+  so a desk can be bookmarked; old `?view=queue` links open My work.
+- **Tool cards** (the pattern later phases fill in): Store team: Products and Schedule. Member support: Bookings and
+  tours. Sourcing: open sourcing batches. Fulfillment: shop orders to pack (filters the list; "Open full page ↗" to
+  the Shop for administrators). Conversations and Disputes get theirs in R3 and R5.
+- **Phone header:** Notifications, Dark and Refresh share one row evenly; the bell drops its word under 440px.
+- Tests: `tests/test_operations_desks.py`, Operations Center tests use the rail (new: My work and the pipeline filter),
+  e2e `ops-desks.spec.ts` at phone, iPad and desktop.

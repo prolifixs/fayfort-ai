@@ -24,6 +24,8 @@ export type WorkItem = {
   metadata?: Record<string, unknown> | null;
   created_at: string;
   completed_at?: string | null;
+  /** Its stage on the desk's pipeline strip (app/accounts/desks.py); live work only. */
+  desk_stage?: string;
 };
 export type WorkNote = { id: string; author_id: string; note: string; created_at: string };
 export type MentionWorker = { user_id: string; email: string; label: string };

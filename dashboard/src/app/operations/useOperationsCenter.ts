@@ -48,8 +48,16 @@ export function useOperationsCenter() {
   const [departmentsForUser, setDepartmentsForUser] = useState<Department[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [userId, setUserId] = useState("");
-  const [scope, setScope] = useState<"mine" | "available" | "all">("mine");
-  const [filterDepartment, setFilterDepartment] = useState("");
+  // "desk": everything live on one department's desk (filterDepartment), docs/OPERATIONS_RESTRUCTURE_PLAN.md R2.
+  const [scope, setScope] = useState<"mine" | "available" | "all" | "desk">(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("desk") && departments.includes(params.get("desk") as Department) ? "desk" : "mine";
+  });
+  const [filterDepartment, setFilterDepartment] = useState(() => {
+    const desk = new URLSearchParams(window.location.search).get("desk") || "";
+    return departments.includes(desk as Department) ? desk : "";
+  });
+  const [filterStage, setFilterStage] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [items, setItems] = useState<WorkItem[]>([]);
   const [listView, setListView] = useState<"active" | "archive">("active");
@@ -559,8 +567,9 @@ export function useOperationsCenter() {
       );
       setDisputeSummary("");
       setFilterStatus("");
-      setScope(canManage ? "all" : "available");
+      setScope("desk");
       setFilterDepartment("disputes");
+      setFilterStage("");
       setItems((current) => [result.work_item, ...current.filter((item) => item.id !== result.work_item.id)]);
       setSelected(result.work_item);
       setNotice("Separate dispute case opened in the Disputes queue. The request timeline is unchanged.");
@@ -960,6 +969,8 @@ export function useOperationsCenter() {
     setScope,
     filterDepartment,
     setFilterDepartment,
+    filterStage,
+    setFilterStage,
     filterStatus,
     setFilterStatus,
     items,

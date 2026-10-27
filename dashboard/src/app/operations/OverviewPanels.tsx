@@ -466,32 +466,45 @@ export function QueueFilters({ ops }: { ops: OperationsState }) {
     visibleDepartments,
     sourcingBatches,
   } = ops;
-  const scopes: [typeof scope, string][] = [
-    ["mine", "My work"],
-    ["available", "Available"],
-    ...(canManage ? ([["all", "All work"]] as [typeof scope, string][]) : []),
-  ];
+  // On a desk: the whole desk, what's free to pick up, or mine. On My work: only mine, across every desk
+  // (docs/OPERATIONS_RESTRUCTURE_PLAN.md R2; administrators still have All work).
+  const onDesk = scope !== "mine" && scope !== "all" && Boolean(filterDepartment);
+  const scopes: [typeof scope, string][] = onDesk
+    ? [
+        ["desk", "Everything"],
+        ["available", "Free to pick up"],
+      ]
+    : canManage
+      ? [
+          ["mine", "Mine"],
+          ["all", "All work"],
+        ]
+      : [];
   return (
     <nav className="ops-toolbar" aria-label="Operations queue filters">
-      <div className="ops-segmented" role="group" aria-label="Queue scope">
-        {scopes.map(([value, label]) => (
-          <button key={value} type="button" className="ops-seg" aria-pressed={scope === value} onClick={() => setScope(value)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {scopes.length > 0 && (
+        <div className="ops-segmented" role="group" aria-label="Queue scope">
+          {scopes.map(([value, label]) => (
+            <button key={value} type="button" className="ops-seg" aria-pressed={scope === value} onClick={() => setScope(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="ops-toolbar-filters">
-        <label className="ops-select">
-          <span>Department</span>
-          <select aria-label="Filter department" value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)}>
-            <option value="">All</option>
-            {visibleDepartments.map((department) => (
-              <option key={department} value={department}>
-                {departmentLabel[department]}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!onDesk && (
+          <label className="ops-select">
+            <span>Desk</span>
+            <select aria-label="Filter department" value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)}>
+              <option value="">All</option>
+              {visibleDepartments.map((department) => (
+                <option key={department} value={department}>
+                  {departmentLabel[department]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="ops-select">
           <span>Status</span>
           <select aria-label="Filter status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
@@ -505,7 +518,7 @@ export function QueueFilters({ ops }: { ops: OperationsState }) {
               ))}
           </select>
         </label>
-        {sourcingBatches.length > 0 && (
+        {sourcingBatches.length > 0 && !onDesk && (
           <details className="ops-batches">
             <summary>Sourcing batches · {sourcingBatches.length}</summary>
             <ul>
@@ -563,7 +576,6 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     canManage,
     userId,
     scope,
-    items,
     selected,
     setSelected,
     recentId,
@@ -573,8 +585,11 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     busy,
     claim,
     listView,
+    filterStage,
   } = ops;
   const archive = listView === "archive";
+  // A stage picked on the desk's pipeline strip narrows the list (live work only carries a stage).
+  const items = filterStage && !archive ? ops.items.filter((item) => item.desk_stage === filterStage) : ops.items;
   const now = useNow();
   // Back on the list (phones and tablets), bring the card you were just on into view.
   useEffect(() => {
@@ -594,8 +609,10 @@ export function WorkList({ ops }: { ops: OperationsState }) {
     : scope === "mine"
       ? "My work"
       : scope === "available"
-        ? "Available work"
-        : "All operations work";
+        ? "Free to pick up"
+        : scope === "desk"
+          ? "On this desk"
+          : "All operations work";
   return (
     <section className="operations-work-list" aria-label="Operations work items">
       <div className="operations-section-title">
@@ -606,9 +623,11 @@ export function WorkList({ ops }: { ops: OperationsState }) {
         <p className="operations-empty-copy">
           {archive
             ? "Nothing finished matches this search."
-            : scope === "mine"
-              ? "You have nothing claimed. Look in Available to pick up work."
-              : "Nothing waiting here. New requests, chats, shop orders and group buys appear automatically."}
+            : filterStage
+              ? "Nothing at this stage right now."
+              : scope === "mine"
+                ? "You have nothing claimed. Open one of your desks to pick up work."
+                : "Nothing waiting here. New requests, chats, shop orders and group buys appear automatically."}
         </p>
       ) : (
         groups.map((group) => (

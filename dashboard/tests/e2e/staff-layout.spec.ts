@@ -72,7 +72,8 @@ test("Operations Center puts the queue first and keeps chats in the shared threa
   await page.setViewportSize({ width: 1280, height: 800 });
   await signedInStaff(page);
   await page.goto("/operations");
-  await expect(page.getByRole("tab", { name: "Queue" })).toHaveAttribute("aria-selected", "true");
+  const rail = page.getByRole("navigation", { name: "Operations desks" });
+  await expect(rail.getByRole("button", { name: /My work/ })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("region", { name: "Workforce overview" })).toHaveCount(0);
   const queue = page.getByRole("region", { name: "Operations work items" });
   await queue.getByRole("button", { name: /split payment/ }).click();
@@ -81,7 +82,7 @@ test("Operations Center puts the queue first and keeps chats in the shared threa
   await expect(page.getByRole("region", { name: "Member conversation messages" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Reply to member" })).toBeVisible();
   await page.screenshot({ path: `${OUT}/operations-laptop.png`, fullPage: true });
-  await page.getByRole("tab", { name: "Team" }).click();
+  await rail.getByRole("button", { name: "Team", exact: true }).click();
   await expect(page.getByRole("region", { name: "Workforce overview" })).toBeVisible();
 });
 
@@ -97,11 +98,11 @@ for (const size of [SIZES[0], SIZES[2]]) {
     await expect(page.getByRole("link", { name: /Open order in Shopify/ })).toHaveAttribute("href", /admin\/orders\/5001/);
     await noSideScroll(page);
     await page.screenshot({ path: `${OUT}/ops-store-order-${size.name}.png`, fullPage: true });
-    await page.getByRole("tab", { name: "Archive" }).click();
+    await page.getByRole("navigation", { name: "Operations desks" }).getByRole("button", { name: "Archive" }).click();
     await expect(page.getByRole("button", { name: /Packed and shipped #1031/ })).toBeVisible();
     await noSideScroll(page);
     await page.screenshot({ path: `${OUT}/ops-archive-${size.name}.png`, fullPage: true });
-    await page.getByRole("tab", { name: "Guide" }).click();
+    await page.getByRole("navigation", { name: "Operations desks" }).getByRole("button", { name: "Guide" }).click();
     await expect(page.getByRole("complementary", { name: "Guides" })).toBeVisible();
     await noSideScroll(page);
     await page.screenshot({ path: `${OUT}/ops-guide-${size.name}.png`, fullPage: true });

@@ -45,3 +45,13 @@
 .chat-status.is-offline .shift-dot { background: var(--color-text-muted, #6b6b6b); box-shadow: none; animation: none; }
 .chat-status.is-away .shift-dot { background: var(--color-warning, #a15c00); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning, #a15c00) 22%, transparent); animation: none; }
 .chat-availability .shift-pop > button { width: 100%; }
+/* Phones: Notifications, Dark and Refresh share one row evenly; the bell drops its word on narrow screens (the button
+   keeps its label for screen readers), so nothing spills out of its button. */
+@media (max-width: 700px) {
+  .ops-head-actions > :not(.shift-control) { flex: 1 1 0; }
+  .ops-head-actions > .operations-notifications > .ops-head-button,
+  .ops-head-actions > .ops-head-button { width: 100%; justify-content: center; }
+}
+@media (max-width: 440px) {
+  .operations-notifications-toggle > span { display: none; }
+}

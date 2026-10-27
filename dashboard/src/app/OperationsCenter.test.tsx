@@ -54,11 +54,24 @@ const report = {
   data_limit_reached: false,
 };
 
+const rail = () => screen.findByRole("navigation", { name: "Operations desks" });
+function desksFor(identity: { departments: string[]; can_manage: boolean }) {
+  const all = ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"];
+  return {
+    mine: 1, mine_due_today: 0, mine_overdue: 0,
+    desks: (identity.can_manage ? all : identity.departments).map((department) => ({
+      department, total: 1, available: 1, mine: 0, waiting: 0, overdue: department === "sourcing" ? 1 : 0,
+      stages: department === "sourcing" ? [{ key: "review", label: "Review", count: 1 }, { key: "sourcing", label: "Sourcing", count: 0 }] : [],
+    })),
+  };
+}
+
 function routeApi(identity: { user_id: string; departments: string[]; can_manage: boolean }, items: Record<string, unknown>[] = [sourcingItem, openItem]) {
   mocks.apiRequest.mockImplementation(async (path: string) => {
     if (path === "/operations/me/departments") return identity;
     if (path.startsWith("/operations/work-items?")) return { work_items: items };
     if (path === "/operations/sourcing/batches") return { batches: [] };
+    if (path === "/operations/desks") return desksFor(identity);
     if (path === "/operations/workforce") return workforce;
     if (path === "/operations/automation-health") return automationHealth;
     if (path.startsWith("/operations/reports?")) return report;
@@ -87,11 +100,13 @@ describe("Operations Center", () => {
   it("shows admin workforce, reports, and the queue, then loads the selected request's working context", async () => {
     routeApi({ user_id: "admin-1", departments: [], can_manage: true });
     render(<OperationsCenterPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Team" }));
+    fireEvent.click(within(await rail()).getByRole("button", { name: "Team" }));
     expect(await screen.findByRole("region", { name: "Workforce overview" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Reports" }));
+    fireEvent.click(within(await rail()).getByRole("button", { name: "Reports" }));
     expect(await screen.findByRole("region", { name: "Operations reports and reconciliation" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Queue" }));
+    fireEvent.click(within(await rail()).getByRole("button", { name: /My work/ }));
+    // Administrators keep All work on My work.
+    fireEvent.click(within(screen.getByRole("group", { name: "Queue scope" })).getByRole("button", { name: "All work" }));
     const queue = screen.getByRole("region", { name: "Operations work items" });
     expect(within(queue).getByText("2 shown")).toBeInTheDocument();
     fireEvent.click(within(queue).getByRole("button", { name: /Desk lamp sourcing/ }));
@@ -113,12 +128,42 @@ describe("Operations Center", () => {
     expect(screen.queryByRole("region", { name: "Workforce overview" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Operations reports and reconciliation" })).not.toBeInTheDocument();
     expect(mocks.apiRequest).not.toHaveBeenCalledWith("/operations/workforce", "staff-token");
-    fireEvent.click(within(within(filters).getByRole("group", { name: "Queue scope" })).getByRole("button", { name: /Available/ }));
+    expect(filters).toBeInTheDocument();
+    // Workers pick up work on their desk: open Fulfillment, then Free to pick up.
+    fireEvent.click(within(await rail()).getByRole("button", { name: /Fulfillment/ }));
+    expect(await screen.findByRole("region", { name: "Fulfillment desk" })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith(expect.stringMatching(/scope=desk.*department=fulfillment/), "staff-token"));
+    fireEvent.click(within(screen.getByRole("group", { name: "Queue scope" })).getByRole("button", { name: "Free to pick up" }));
     fireEvent.click(await within(screen.getByRole("region", { name: "Operations work items" })).findByRole("button", { name: "Claim" }));
     await waitFor(() =>
       expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/work-items/work-2/claim", "staff-token", { method: "POST" }),
     );
     expect(await screen.findByText("Work claimed for 15 minutes.")).toBeInTheDocument();
+  });
+
+  it("opens on My work and filters a desk by its pipeline stage", async () => {
+    const review = { ...sourcingItem, id: "work-3", summary: "[SYNTHETIC] New lamp request", status: "open", assigned_worker_id: null, desk_stage: "review" };
+    const researching = { ...sourcingItem, id: "work-4", summary: "[SYNTHETIC] Lamp research", desk_stage: "sourcing" };
+    routeApi({ user_id: "worker-1", departments: ["sourcing"], can_manage: false }, [review, researching]);
+    window.history.replaceState(null, "", "/operations");
+    render(<OperationsCenterPage />);
+    const home = await screen.findByRole("region", { name: "My work" });
+    expect(await within(home).findByRole("button", { name: /Sourcing.*1 free to pick up.*1 overdue/ })).toBeInTheDocument();
+    const nav = await rail();
+    expect(within(nav).queryByRole("button", { name: /Disputes/ })).not.toBeInTheDocument(); // only my desks
+    expect(within(nav).queryByRole("button", { name: "Team" })).not.toBeInTheDocument();
+    fireEvent.click(within(home).getByRole("button", { name: /Sourcing/ }));
+    const desk = await screen.findByRole("region", { name: "Sourcing desk" });
+    expect(window.location.search).toContain("desk=sourcing");
+    const strip = within(desk).getByRole("group", { name: "Pipeline" });
+    fireEvent.click(within(strip).getByRole("button", { name: /Review/ }));
+    const queue = screen.getByRole("region", { name: "Operations work items" });
+    await waitFor(() => expect(within(queue).getByText("1 shown")).toBeInTheDocument());
+    expect(within(queue).getByRole("button", { name: /New lamp request/ })).toBeInTheDocument();
+    expect(within(queue).queryByRole("button", { name: /Lamp research/ })).not.toBeInTheDocument();
+    fireEvent.click(within(strip).getByRole("button", { name: /All/ }));
+    await waitFor(() => expect(within(queue).getByText("2 shown")).toBeInTheDocument());
+    window.history.replaceState(null, "", "/");
   });
 
   it("lets the worker who claimed a sourcing request ask the member a question from the step panel", async () => {
@@ -189,7 +234,7 @@ describe("Operations Center", () => {
       assigned_worker_id: null, claimed_until: null, completed_at: now };
     routeApi({ user_id: "admin-1", departments: [], can_manage: true }, [done]);
     render(<OperationsCenterPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Archive" }));
+    fireEvent.click(within(await rail()).getByRole("button", { name: "Archive" }));
     await waitFor(() =>
       expect(mocks.apiRequest).toHaveBeenCalledWith(expect.stringMatching(/^\/operations\/work-items\?.*view=archive.*days=30/), "staff-token"),
     );
@@ -206,7 +251,7 @@ describe("Operations Center", () => {
   it("opens a guide for every work type from the Guide tab", async () => {
     routeApi({ user_id: "worker-1", departments: ["fulfillment"], can_manage: false }, [openItem]);
     render(<OperationsCenterPage />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Guide" }));
+    fireEvent.click(within(await rail()).getByRole("button", { name: "Guide" }));
     const index = await screen.findByRole("complementary", { name: "Guides" });
     const buttons = within(index).getAllByRole("button");
     expect(buttons.length).toBeGreaterThan(8);

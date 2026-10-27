@@ -45,6 +45,8 @@ import { FayfortLoader } from "./brand/FayfortLogo";
 import { ProductsWorkspace } from "./operations/StoreTeam";
 import { BookingsPanel } from "./operations/BookingsPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
+import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
+import type { Department } from "./operations/types";
 
 type View = "queue" | "products" | "bookings" | "schedule" | "archive" | "guide" | "team" | "reports";
 const VIEWS: View[] = ["queue", "products", "bookings", "schedule", "archive", "guide", "team", "reports"];
@@ -72,7 +74,8 @@ export function OperationsCenterPage() {
   const [staffTheme, setStaffTheme] = useStaffTheme();
   const [view, setView] = useState<View>(() => {
     const asked = new URLSearchParams(window.location.search).get("view");
-    const wanted = (asked === "tours" ? "bookings" : asked) as View | null; // Tour bookings moved into Bookings
+    // Tour bookings moved into Bookings; My work and the desks are the queue (R2).
+    const wanted = (asked === "tours" ? "bookings" : asked === "mywork" || asked === "desk" ? "queue" : asked) as View | null;
     return wanted && VIEWS.includes(wanted) ? wanted : "queue";
   });
   const [help, setHelp] = useState<string | null>(null);
@@ -147,10 +150,107 @@ export function OperationsCenterPage() {
         ops.setSelected(null);
         ops.setListView(listView);
       }
+      // The archive looks across every desk this person can see.
+      if (next === "archive" && (ops.scope === "desk" || ops.filterDepartment)) {
+        ops.setScope(canManage ? "all" : "available");
+        ops.setFilterDepartment("");
+        ops.setFilterStage("");
+      }
     }
   }
   const storeTeam = canManage || departmentsForUser.includes("store_team");
   const tourTeam = canManage || departmentsForUser.includes("member_support");
+  // The rail (R2): My work, one desk per department this person works on, then the shared pages.
+  const desks = useDesks(token, items);
+  const onDesk = view === "queue" && (ops.scope === "desk" || ops.scope === "available") && Boolean(ops.filterDepartment);
+  const deskDepartment = onDesk ? (ops.filterDepartment as Department) : null;
+  const activeRail = view !== "queue" ? view : deskDepartment ? `desk:${deskDepartment}` : "mywork";
+  const myDesks = DESK_ORDER.filter((department) => canManage || departmentsForUser.includes(department));
+  const deskSummary = (department: Department) => desks?.desks.find((desk) => desk.department === department);
+  const railEntries: RailEntry[] = [
+    { id: "mywork", label: "My work", group: "home", badge: desks?.mine, urgent: Boolean(desks?.mine_overdue) },
+    ...myDesks.flatMap((department): RailEntry[] => {
+      const summary = deskSummary(department);
+      const entry: RailEntry = { id: `desk:${department}`, label: DESK_LABEL[department], group: "desks", badge: summary?.available, urgent: Boolean(summary?.overdue) };
+      if (department === "store_team" && storeTeam) return [entry, { id: "products", label: "Products", group: "desks", sub: true }];
+      if (department === "member_support" && tourTeam) return [entry, { id: "bookings", label: "Bookings and tours", group: "desks", sub: true }];
+      return [entry];
+    }),
+    ...(tourTeam ? [] : [{ id: "bookings", label: "Bookings", group: "shared" } as RailEntry]),
+    { id: "schedule", label: "Schedule", group: "shared" },
+    { id: "archive", label: "Archive", group: "shared" },
+    { id: "guide", label: "Guide", group: "shared" },
+    ...(canManage
+      ? ([
+          { id: "team", label: "Team", group: "admin" },
+          { id: "reports", label: "Reports", group: "admin" },
+        ] as RailEntry[])
+      : []),
+  ];
+  function openRail(id: string) {
+    if (id === "mywork" || id.startsWith("desk:")) {
+      const department = id.startsWith("desk:") ? id.slice(5) : "";
+      setView("queue");
+      if (ops.listView !== "active") ops.setListView("active");
+      if (activeRail !== id) ops.setSelected(null);
+      ops.setScope(department ? "desk" : "mine");
+      ops.setFilterDepartment(department);
+      ops.setFilterStage("");
+      ops.setFilterStatus("");
+      return;
+    }
+    openView(id as View);
+  }
+  // Keep the address in step with the rail so a desk can be bookmarked or shared.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", view === "queue" ? (deskDepartment ? "desk" : "mywork") : view);
+    if (deskDepartment) url.searchParams.set("desk", deskDepartment);
+    else url.searchParams.delete("desk");
+    if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());
+  }, [view, deskDepartment]);
+  function deskTools(department: Department) {
+    const summary = deskSummary(department);
+    const stageCount = (key: string) => summary?.stages.find((stage) => stage.key === key)?.count ?? 0;
+    if (department === "store_team")
+      return (
+        <>
+          {storeTeam && <ToolCard title="Products" line="The store, sourcing items, listings in progress, Finds and sections." onOpen={() => openRail("products")} openLabel="Open Products" />}
+          <ToolCard title="Schedule" line="Finds drops, campaigns and sections coming up." onOpen={() => openRail("schedule")} openLabel="Open the schedule" />
+        </>
+      );
+    if (department === "member_support")
+      return (
+        <ToolCard title="Bookings and tours" line="Today's consultations, the CEO's hours and tour guides." count={stageCount("bookings")} countLabel="to handle" onOpen={() => openRail("bookings")} openLabel="Open bookings" />
+      );
+    if (department === "sourcing")
+      return (
+        <ToolCard title="Sourcing batches" line="Requests for the same item, researched once." count={ops.sourcingBatches.length} countLabel="open">
+          {ops.sourcingBatches.length > 0 && (
+            <ul>
+              {ops.sourcingBatches.slice(0, 3).map((batch) => (
+                <li key={batch.id}>
+                  {batch.title} · {batch.items.length} requests
+                </li>
+              ))}
+            </ul>
+          )}
+        </ToolCard>
+      );
+    if (department === "fulfillment")
+      return (
+        <ToolCard
+          title="Shop orders"
+          line="Orders from the online shop waiting to be packed."
+          count={stageCount("shop_order")}
+          countLabel="to pack"
+          onOpen={() => ops.setFilterStage("shop_order")}
+          openLabel="Show them"
+          fullHref={canManage ? "/?page=shop" : undefined}
+        />
+      );
+    return null;
+  }
   function openWorkItem(id: string) {
     const url = new URL(window.location.href);
     url.searchParams.set("workItem", id);
@@ -168,20 +268,6 @@ export function OperationsCenterPage() {
     if (next && VIEWS.includes(next)) openView(next);
   }
   const params = new URLSearchParams(window.location.search);
-  const tabs: [View, string][] = [
-    ["queue", "Queue"],
-    ...(storeTeam ? ([["products", "Products"]] as [View, string][]) : []),
-    ["bookings", "Bookings"],
-    ["schedule", "Schedule"],
-    ["archive", "Archive"],
-    ["guide", "Guide"],
-    ...(canManage
-      ? ([
-          ["team", "Team"],
-          ["reports", "Reports"],
-        ] as [View, string][])
-      : []),
-  ];
   const finished = selected ? ["completed", "cancelled"].includes(selected.status) : false;
   // Doing the work needs it claimed by you, administrators included; they can still change status and route work.
   const owner = Boolean(selected && selected.assigned_worker_id === userId && ["claimed", "waiting"].includes(selected.status));
@@ -230,22 +316,6 @@ export function OperationsCenterPage() {
             </div>
           )}
         </div>
-        {token && !authLoading && (
-          <div className="ops-tabs" role="tablist" aria-label="Operations views">
-            {tabs.map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={view === id}
-                className={view === id ? "ops-tab is-active" : "ops-tab"}
-                onClick={() => openView(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
       </header>
       {authLoading ? (
         <FayfortLoader label="Checking your FayFort staff sign-in…" />
@@ -262,7 +332,9 @@ export function OperationsCenterPage() {
           <a href="/">Return to Control Center</a>
         </section>
       ) : (
-        <>
+        <div className="ops-shell">
+          <OpsRail entries={railEntries} active={activeRail} onOpen={openRail} />
+          <div className="ops-shell-main">
           {canManage && view === "team" && <WorkforcePanel ops={ops} />}
           {canManage && view === "reports" && <ReportsPanel ops={ops} />}
           {canManage && view === "reports" && <AutomationActivity ops={ops} />}
@@ -310,6 +382,19 @@ export function OperationsCenterPage() {
           )}
           {(view === "queue" || view === "archive") && (
             <>
+              {view === "queue" &&
+                (deskDepartment ? (
+                  <DeskHeader
+                    key={deskDepartment}
+                    department={deskDepartment}
+                    summary={deskSummary(deskDepartment)}
+                    stage={ops.filterStage}
+                    onStage={ops.setFilterStage}
+                    tools={deskTools(deskDepartment)}
+                  />
+                ) : (
+                  <MyWorkHome desks={desks} onOpenDesk={(department) => openRail(`desk:${department}`)} />
+                ))}
               {view === "queue" ? <QueueFilters ops={ops} /> : <ArchiveControls ops={ops} />}
               {(error || notice) && (
                 <div className={`ops-flash ${error ? "is-error" : "is-ok"}`} role={error ? "alert" : "status"}>
@@ -327,7 +412,7 @@ export function OperationsCenterPage() {
                 <section className="operations-work-detail" aria-label="Selected work details" ref={detailRef}>
                   {!selected ? (
                     <div className="operations-empty">
-                      <h2>{view === "archive" ? "Pick finished work to look back at" : "Pick a work item"}</h2>
+                      <h2>{view === "archive" ? "Pick finished work to look back at" : deskDepartment ? `Pick work from ${DESK_LABEL[deskDepartment]}` : "Pick a work item"}</h2>
                       <p>
                         {view === "archive"
                           ? "Finished work keeps its full history here. It can't be changed; an administrator can reopen it."
@@ -513,7 +598,8 @@ export function OperationsCenterPage() {
               </div>
             </>
           )}
-        </>
+          </div>
+        </div>
       )}
       {help && <HelpSheet guideKey={help} onClose={() => setHelp(null)} />}
     </main>
