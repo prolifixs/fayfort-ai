@@ -77,3 +77,33 @@
   .ops-desk-counts { width: 100%; }
   .ops-desk-counts div { flex: 1; min-width: 0; }
 }
+
+/* Sourcing and Fulfillment tool cards (R4). */
+.ops-trends, .ops-tool-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ops-trends li { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ops-trend-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.ops-trend-top a { min-width: 0; overflow: hidden; color: var(--color-text); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.ops-trend-top b { flex-shrink: 0; color: var(--accent); font-size: var(--text-sm); }
+.ops-trend-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-muted); font-size: var(--text-xs); }
+.ops-trend-bar { display: block; height: 6px; border-radius: 999px; background: var(--color-hover); overflow: hidden; }
+.ops-trend-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.ops-tool-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--color-border-subtle, var(--color-border)); }
+.ops-tool-list li:first-child { border-top: 0; }
+.ops-tool-list li > div { display: grid; gap: 2px; min-width: 0; }
+.ops-tool-list strong { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.ops-tool-list small { color: var(--color-muted); font-size: var(--text-xs); }
+.ops-tool-list .secondary-button { flex-shrink: 0; min-height: 34px; padding: 0 var(--space-3); }
+.ops-pool-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-1); }
+.ops-pool-form label { display: grid; gap: 2px; color: var(--color-muted); font-size: var(--text-xs); }
+.ops-pool-form input, .ops-pool-form select { width: 100%; min-height: 36px; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); font: inherit; }
+.ops-pool-note, .ops-pool-actions, .ops-pool-form > small, .ops-pool-form > .form-error { grid-column: 1 / -1; }
+.ops-pool-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ops-tool-card { grid-template-columns: minmax(0, 1fr); }
+.ops-tool-card .ops-answers-form input { min-height: 38px; }
+.ops-tool-card ul.ops-trends, .ops-tool-card ul.ops-tool-list { padding-left: 0; }
+.ops-pool-form { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.ops-trends, .ops-tool-list { grid-template-columns: minmax(0, 1fr); }
+.ops-trends li, .ops-pool-form label { min-width: 0; }
+.ops-pool-form input, .ops-pool-form select { min-width: 0; max-width: 100%; }
+.ops-trends li { grid-template-columns: minmax(0, 1fr); }
+.ops-pool-form { grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); }

@@ -71,11 +71,31 @@ const desks = {
   mine: 3, mine_due_today: 1, mine_overdue: 1,
   desks: [
     { department: "conversation_intake", total: 2, available: 1, mine: 1, waiting: 0, overdue: 0, stages: [stage("member_app", "Member app chats", 1), stage("customer", "Customer chats", 1)] },
-    { department: "sourcing", total: 9, available: 4, mine: 1, waiting: 3, overdue: 1, stages: [stage("review", "Review", 4), stage("sourcing", "Sourcing", 2), stage("with_member", "Options with the member", 2), stage("paid", "Paid", 0), stage("group_buy", "Group buys", 1)] },
+    { department: "sourcing", total: 9, available: 4, mine: 1, waiting: 3, overdue: 1, stages: [stage("review", "Review", 2), stage("deposit", "Deposit due", 2), stage("sourcing", "Sourcing", 2), stage("with_member", "Options sent", 1), stage("chosen", "Chosen", 1), stage("invoice", "Invoice sent", 0), stage("paid", "Paid", 0), stage("group_buy", "Group buys", 1)] },
     { department: "fulfillment", total: 5, available: 2, mine: 1, waiting: 1, overdue: 0, stages: [stage("confirmed", "Confirmed", 1), stage("warehouse", "In the warehouse", 1), stage("on_the_way", "On the way", 1), stage("delivered", "Delivered", 0), stage("shop_order", "Shop orders to pack", 2)] },
     { department: "member_support", total: 3, available: 3, mine: 0, waiting: 0, overdue: 0, stages: [stage("money", "Money", 1), stage("bookings", "Bookings", 1), stage("campaigns", "Giveaways", 1), stage("reviews", "Photo reviews", 0), stage("chats", "Chats", 0)] },
     { department: "disputes", total: 1, available: 1, mine: 0, waiting: 0, overdue: 0, stages: [stage("new", "New", 1), stage("working", "Being worked on", 0), stage("waiting", "Waiting", 0), stage("blocked", "Stuck", 0)] },
     { department: "store_team", total: 4, available: 2, mine: 0, waiting: 0, overdue: 0, stages: [stage("listings", "Listings", 2), stage("finds", "Finds", 1), stage("sections", "Sections", 1), stage("campaigns", "Campaigns", 0)] },
+  ],
+};
+
+// Sourcing and Fulfillment desks (R4).
+const sourcingOverview = {
+  trends: [
+    { id: "t1", title: "Satin hair bonnet with wide band", url: "https://www.tiktok.com/@a/video/1", platform: "tiktok", status: "open", want_count: 37, share_count: 41, pool: null, ready: false, in_store: false },
+    { id: "t2", title: "Dual-sided edge brush", url: "https://www.tiktok.com/@b/video/2", platform: "tiktok", status: "pooling", want_count: 18, share_count: 20, pool: { target: 25, price: 4.5, currency: "USD", deadline: null, progress: 0.72 }, ready: false, in_store: false },
+    { id: "t3", title: "Ankara headwrap set", url: "https://www.instagram.com/p/3", platform: "instagram", status: "pooling", want_count: 30, share_count: 30, pool: { target: 30, price: 9, currency: "USD", deadline: null, progress: 1 }, ready: true, in_store: false },
+  ],
+  deposits_due: [
+    { request_id: "r1", work_item_id: "w3", title: "Source Ankara fabric, 6 yards, wedding colours", stage: "under_review", tier: "free", rate: 0.5, expected_total: 180, currency: "USD", suggested_deposit: 90, claimed: false },
+    { request_id: "r2", work_item_id: "w3", title: "Bone straight bundles, 30 inch", stage: "submitted", tier: "standard", rate: 0.25, expected_total: null, currency: null, suggested_deposit: null, claimed: true },
+  ],
+};
+const fulfillmentOrders = {
+  to_pack_count: 2, shipped_this_week: 6,
+  to_pack: [
+    { id: "o1", order_name: "#1042", total: "184.00", currency: "USD", placed_at: iso(26), units: 3, work_item_id: "w4", claimed: false },
+    { id: "o2", order_name: "#1044", total: "36.00", currency: "USD", placed_at: iso(3), units: 1, work_item_id: null, claimed: false },
   ],
 };
 
@@ -113,6 +133,9 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/desks") return desks;
+  if (path === "/operations/sourcing/overview") return sourcingOverview;
+  if (path === "/operations/fulfillment/orders") return fulfillmentOrders;
+  if (path === "/operations/catalog") return { products: [{ id: "p1", name: "Body wave lace wig 22 inch", where: "Store", price_min: 120, currency: "USD", in_stock: true }, { id: "p2", name: "Lace front glue", where: "Sourcing catalog", price_min: 2.1, price_max: 2.8, currency: "USD", min_order: 50, lead_time_min_days: 7, lead_time_max_days: 12 }] };
   if (path.endsWith("/customer") && path.startsWith("/operations/work-items/")) return customerCard(path);
   if (path === "/operations/answers") return { answers: answers.filter((answer) => (search.get("q") || "").split(/\s+/).some((word) => word.length > 2 && (answer.title + answer.full).toLowerCase().includes(word.toLowerCase()))) };
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };

@@ -20,8 +20,8 @@ STATUS_TO_STAGE = {"open": "new", "claimed": "working", "waiting": "waiting", "b
 DESK_STAGES: dict[str, list[tuple[str, str]]] = {
     "conversation_intake": [("member_app", "Member app chats"), ("customer", "Customer chats"), *STATUS_STAGES],
     "sourcing": [
-        ("review", "Review"), ("sourcing", "Sourcing"), ("with_member", "Options with the member"),
-        ("paid", "Paid"), ("group_buy", "Group buys"), *STATUS_STAGES,
+        ("review", "Review"), ("deposit", "Deposit due"), ("sourcing", "Sourcing"), ("with_member", "Options sent"),
+        ("chosen", "Chosen"), ("invoice", "Invoice sent"), ("paid", "Paid"), ("group_buy", "Group buys"), *STATUS_STAGES,
     ],
     "fulfillment": [
         ("confirmed", "Confirmed"), ("warehouse", "In the warehouse"), ("on_the_way", "On the way"),
@@ -67,8 +67,9 @@ FULFILLMENT_REQUEST_STAGE = {
 }
 
 
-def desk_stage(row: dict, request_stage: str | None = None) -> str:
-    """The pipeline stage a live work item is in on its desk."""
+def desk_stage(row: dict, request_stage: str | None = None, money: str | None = None) -> str:
+    """The pipeline stage a live work item is in on its desk. `money` is where a sourcing request is with payment
+    (app/accounts/sourcing_desk.money_states): "deposit", "chosen" or "invoice"."""
     department = row.get("department")
     work_type = row.get("work_type") or ""
     fallback = STATUS_TO_STAGE.get(row.get("status") or "", "new")
@@ -81,6 +82,8 @@ def desk_stage(row: dict, request_stage: str | None = None) -> str:
     if department == "sourcing":
         if work_type == "group_buy":
             return "group_buy"
+        if money in ("deposit", "chosen", "invoice") and request_stage not in ("purchase_confirmed", "cancelled"):
+            return money
         return SOURCING_REQUEST_STAGE.get(request_stage or "", fallback if not row.get("member_request_id") else "review")
     if department == "fulfillment":
         if work_type == "store_order":
@@ -107,7 +110,7 @@ def _claim_lapsed(row: dict, now: datetime) -> bool:
 
 
 def desk_summaries(rows: Iterable[dict], request_stages: dict[str, str], user_id: str, departments: Iterable[str],
-                   now: datetime | None = None) -> list[dict]:
+                   now: datetime | None = None, money: dict[str, str] | None = None) -> list[dict]:
     """Counts for each desk this person can see: what's free to pick up, theirs, waiting, overdue, and by stage."""
     now = now or datetime.now(timezone.utc)
     wanted = list(departments)
@@ -120,7 +123,8 @@ def desk_summaries(rows: Iterable[dict], request_stages: dict[str, str], user_id
         live = by_department[department]
         stage_counts: dict[str, int] = {}
         for row in live:
-            stage = desk_stage(row, request_stages.get(str(row.get("member_request_id") or "")))
+            request_id = str(row.get("member_request_id") or "")
+            stage = desk_stage(row, request_stages.get(request_id), (money or {}).get(request_id))
             stage_counts[stage] = stage_counts.get(stage, 0) + 1
         summaries.append({
             "department": department,

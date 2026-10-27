@@ -286,3 +286,32 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
   in the Control Center's Conversations page, not on the desk.
 - Tests: `tests/test_conversation_desk.py`, `CustomerPane.test.tsx`, e2e `ops-conversations.spec.ts` at phone, iPad,
   laptop and wide sizes.
+
+## 8. R4 build notes (Sourcing and Fulfillment desks)
+
+- **Sourcing strip with money stages** (`app/accounts/sourcing_desk.money_states`): Review · **Deposit due** (a deposit
+  invoice is out, unpaid) · Sourcing · Options sent · **Chosen** (the member picked an option, no invoice yet) ·
+  **Invoice sent** (order invoice out, unpaid) · Paid · Group buys. A paid request is always Paid, whatever invoices
+  remain.
+- **Tool cards, Sourcing** (`GET /operations/sourcing/overview`, for Sourcing workers and administrators):
+  - **Trends and group buys:** what members keep sharing, most wanted first ("37 want this"), group-buy progress,
+    "Ready to invoice" when a pool has filled, "In the store" when it's already listed. **Start a group buy** on an open
+    trend (`POST /operations/sourcing/trends/{id}/pool`): buyers needed, group price, currency, optional closing date
+    and note for members. It's recorded in the commerce audit trail. When the pool fills, the Group buy item lands on
+    this desk as before. *Decision taken while building (owner can reverse):* Sourcing workers can start group buys
+    here; before, only administrators could, from Shop.
+  - **Deposits due:** live sourcing requests whose member's plan needs a deposit and that have no deposit or order
+    invoice yet, oldest first, with plan, rate and a suggested amount when the expected total is set. Pro members in
+    good standing are left out. "Open" goes to the request, where the deposit step sends it.
+  - **Sourcing batches** (as in R2).
+  - **Already in the catalog?** (`GET /operations/catalog?q=`, any staff member): searches active store and sourcing
+    catalog products whose name has every word, with price, minimum order and lead time.
+- **Tool cards, Fulfillment:**
+  - **Shop orders** (`GET /operations/fulfillment/orders`, for Fulfillment workers and administrators): paid shop
+    orders still to pack, oldest first, with units, total, how long ago they were paid, whether someone has it, "Open"
+    to the pack-and-ship item, and how many shipped this week. "Open full page ↗" to the Shop for administrators.
+  - **Sourced requests:** confirmed and warehouse counts, filters the list to Confirmed.
+- **Not in R4:** a supplier directory (the Control Center's Directory & Tools stays an administrator page); the catalog
+  search covers "do we already have it?".
+- Tests: `tests/test_sourcing_desk.py`, `SourcingTools.test.tsx`, e2e `ops-sourcing.spec.ts` at phone, iPad and
+  desktop.

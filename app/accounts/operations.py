@@ -17,7 +17,7 @@ from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
-from app.accounts import conversation_desk
+from app.accounts import conversation_desk, sourcing_desk
 from app.accounts.desks import desk_stage, desk_summaries, latest_request_stages, my_due_counts
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,15 @@ class ChatHandOff(BaseModel):
         if len(value.strip()) < 3:
             raise ValueError("Say what the other desk should do.")
         return value.strip()
+
+
+class PoolStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: int = Field(ge=2, le=10000)
+    price: float = Field(gt=0, le=1000000)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    deadline: datetime | None = None
+    note: str | None = Field(default=None, max_length=500)
 
 
 class WorkItemTransition(BaseModel):
@@ -539,6 +548,63 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             logger.exception("Could not hand off from a chat")
             raise HTTPException(status_code=503, detail="That couldn't be sent to the other desk. Try again.") from exc
 
+    def desk_staff(authorization: str | None, department: str) -> dict:
+        """Platform administrators, or workers on that desk."""
+        staff = staff_identity(authorization)
+        if staff.get("role") != "platform_admin" and department not in departments_for(staff["user_id"]):
+            raise HTTPException(status_code=403, detail="This is for the people on that desk.")
+        return staff
+
+    @router.get("/operations/sourcing/overview")
+    def sourcing_overview(authorization: str | None = Header(default=None)):
+        """The Sourcing desk's tool cards (R4): trends members want and requests whose deposit hasn't been asked."""
+        desk_staff(authorization, "sourcing")
+        try:
+            from app.membership import plans
+            return {"trends": sourcing_desk.trends(supabase),
+                    "deposits_due": sourcing_desk.deposits_due(supabase, plans.deposit_terms)}
+        except Exception as exc:
+            logger.exception("Could not load the sourcing overview")
+            raise HTTPException(status_code=503, detail="The Sourcing desk's cards could not be loaded.") from exc
+
+    @router.post("/operations/sourcing/trends/{trend_id}/pool")
+    def sourcing_start_pool(trend_id: UUID, payload: PoolStart, authorization: str | None = Header(default=None)):
+        """Start a group buy from a trend: members who want it see the group price and join (R4)."""
+        staff = desk_staff(authorization, "sourcing")
+        try:
+            pool = sourcing_desk.start_pool(supabase, str(trend_id), target=payload.target, price=payload.price,
+                                            currency=payload.currency,
+                                            deadline=payload.deadline.isoformat() if payload.deadline else None,
+                                            note=(payload.note or "").strip() or None, actor_id=staff["user_id"])
+            return {"trend": pool}
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Could not start a pool")
+            raise HTTPException(status_code=503, detail="The group buy could not be started.") from exc
+
+    @router.get("/operations/catalog")
+    def operations_catalog(q: str = Query(min_length=2, max_length=100), authorization: str | None = Header(default=None)):
+        """Is it already in the store or the sourcing catalog? For any staff member (R4)."""
+        staff_identity(authorization)
+        try:
+            return {"products": sourcing_desk.catalog_search(supabase, q)}
+        except Exception as exc:
+            logger.exception("Could not search the catalog")
+            raise HTTPException(status_code=503, detail="The catalog could not be searched.") from exc
+
+    @router.get("/operations/fulfillment/orders")
+    def fulfillment_orders(authorization: str | None = Header(default=None)):
+        """The Fulfillment desk's Orders card (R4): paid shop orders still to pack."""
+        desk_staff(authorization, "fulfillment")
+        try:
+            return sourcing_desk.shop_orders(supabase)
+        except Exception as exc:
+            logger.exception("Could not load shop orders")
+            raise HTTPException(status_code=503, detail="Shop orders could not be loaded.") from exc
+
     @router.get("/operations/desks")
     def operations_desks(authorization: str | None = Header(default=None)):
         """The left rail and My work: for each desk this person works on, what's free, theirs, waiting, overdue and the
@@ -554,7 +620,9 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
             stages = latest_request_stages(supabase, [row.get("member_request_id") for row in rows
                                                       if row.get("member_request_id")
                                                       and row.get("department") in ("sourcing", "fulfillment")])
-            desks = desk_summaries(rows, stages, staff["user_id"], departments)
+            money = sourcing_desk.money_states(supabase, [row.get("member_request_id") for row in rows
+                                                          if row.get("member_request_id") and row.get("department") == "sourcing"])
+            desks = desk_summaries(rows, stages, staff["user_id"], departments, money=money)
             mine = [row for row in rows if row.get("assigned_worker_id") == staff["user_id"]]
             return {"desks": desks, **my_due_counts(mine)}
         except Exception as exc:
@@ -869,8 +937,11 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
                 # The desk's pipeline stage, so the strip can filter the list (app/accounts/desks.py).
                 stages = latest_request_stages(supabase, [row.get("member_request_id") for row in rows
                                                           if row.get("member_request_id")])
+                money = sourcing_desk.money_states(supabase, [row.get("member_request_id") for row in rows
+                                                              if row.get("member_request_id") and row.get("department") == "sourcing"])
                 for row in rows:
-                    row["desk_stage"] = desk_stage(row, stages.get(str(row.get("member_request_id") or "")))
+                    request_id = str(row.get("member_request_id") or "")
+                    row["desk_stage"] = desk_stage(row, stages.get(request_id), money.get(request_id))
             if not admin and scope == "available" and view != "archive":
                 now = datetime.now().astimezone()
                 rows = [row for row in rows if row.get("assigned_worker_id") in (None, staff["user_id"])

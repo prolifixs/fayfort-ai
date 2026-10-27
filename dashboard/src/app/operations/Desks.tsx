@@ -34,9 +34,12 @@ export const DESK_LABEL: Record<Department, string> = {
 export const STAGE_HELP: Record<string, string> = {
   member_app: "Members writing in the FayFort app who asked for a person.",
   customer: "Instagram, Messenger and website customers the AI handed over.",
-  review: "New requests: check the details, set the ETA, ask for a deposit if their plan needs one.",
+  review: "New requests: check the details, set the ETA, ask for a deposit if their plan needs one (Deposits due lists them).",
   sourcing: "Finding suppliers and options.",
+  deposit: "A deposit invoice is out; buying waits until it's paid.",
   with_member: "Options sent or a question asked; the member's move.",
+  chosen: "The member picked an option; send the invoice.",
+  invoice: "The invoice is out; paying it moves the request to Fulfillment by itself.",
   paid: "The member has paid; it moves to Fulfillment.",
   group_buy: "Several members buying the same item together.",
   confirmed: "Paid and ready to buy from the supplier.",

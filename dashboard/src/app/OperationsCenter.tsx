@@ -47,6 +47,7 @@ import { BookingsPanel } from "./operations/BookingsPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
 import { CustomerPane, AnswersSearch, isChatItem } from "./operations/CustomerPane";
 import { MemberChatsPanel } from "./workspace/MemberChatsPanel";
+import { CatalogCard, DepositsCard, OrdersCard, TrendsCard, useSourcingOverview } from "./operations/SourcingTools";
 import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
 import type { Department } from "./operations/types";
 
@@ -213,6 +214,7 @@ export function OperationsCenterPage() {
     else url.searchParams.delete("desk");
     if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());
   }, [view, deskDepartment]);
+  const sourcingOverview = useSourcingOverview(token, deskDepartment === "sourcing", items);
   function deskTools(department: Department) {
     const summary = deskSummary(department);
     const stageCount = (key: string) => summary?.stages.find((stage) => stage.key === key)?.count ?? 0;
@@ -246,30 +248,30 @@ export function OperationsCenterPage() {
       );
     if (department === "sourcing")
       return (
-        <ToolCard title="Sourcing batches" line="Requests for the same item, researched once." count={ops.sourcingBatches.length} countLabel="open">
-          {ops.sourcingBatches.length > 0 && (
-            <ul>
-              {ops.sourcingBatches.slice(0, 3).map((batch) => (
-                <li key={batch.id}>
-                  {batch.title} · {batch.items.length} requests
-                </li>
-              ))}
-            </ul>
-          )}
-        </ToolCard>
+        <>
+          {token && <TrendsCard token={token} trends={sourcingOverview.data?.trends || []} onChanged={sourcingOverview.reload} />}
+          <DepositsCard deposits={sourcingOverview.data?.deposits_due || []} onOpen={openWorkItem} />
+          <ToolCard title="Sourcing batches" line="Requests for the same item, researched once." count={ops.sourcingBatches.length} countLabel="open">
+            {ops.sourcingBatches.length > 0 && (
+              <ul>
+                {ops.sourcingBatches.slice(0, 3).map((batch) => (
+                  <li key={batch.id}>
+                    {batch.title} · {batch.items.length} requests
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ToolCard>
+          {token && <CatalogCard token={token} />}
+        </>
       );
     if (department === "fulfillment")
-      return (
-        <ToolCard
-          title="Shop orders"
-          line="Orders from the online shop waiting to be packed."
-          count={stageCount("shop_order")}
-          countLabel="to pack"
-          onOpen={() => ops.setFilterStage("shop_order")}
-          openLabel="Show them"
-          fullHref={canManage ? "/?page=shop" : undefined}
-        />
-      );
+      return token ? (
+        <>
+          <OrdersCard token={token} enabled={deskDepartment === "fulfillment"} reloadKey={items} canManage={canManage} onOpen={openWorkItem} />
+          <ToolCard title="Sourced requests" line="Paid member requests: buy, receive at the warehouse, ship." count={stageCount("confirmed") + stageCount("warehouse")} countLabel="to move" onOpen={() => ops.setFilterStage("confirmed")} openLabel="Show confirmed" />
+        </>
+      ) : null;
     return null;
   }
   function openWorkItem(id: string) {
