@@ -285,7 +285,7 @@ describe("member shell addresses and menu (facelift phase 2)", () => {
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Member navigation" });
     const labels = within(nav).getAllByRole("link").map((link) => link.textContent);
-    expect(labels).toEqual(["Chats", "Shop", "Finds", "Orders & requests", "Saved", "Bookings & tools", "Membership", "Settings", "Notifications"]);
+    expect(labels).toEqual(["Home", "Chats", "Shop", "Finds", "Orders & requests", "Saved", "Bookings & tools", "Membership", "Settings", "Notifications"]);
     expect(within(nav).getByRole("link", { name: "Orders & requests" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("heading", { name: "Orders & requests", level: 1 })).toBeInTheDocument();
     fireEvent.click(within(nav).getByRole("link", { name: "Shop" }));
@@ -311,5 +311,30 @@ describe("member shell addresses and menu (facelift phase 2)", () => {
     const missing = await screen.findByRole("region", { name: "This page isn’t here" });
     fireEvent.click(within(missing).getByRole("link", { name: "Shop" }));
     expect(window.location.pathname).toBe("/member/shop");
+  });
+});
+
+describe("member Home (facelift phase 3)", () => {
+  it("shows what needs the member and sends them to pay in Orders & requests", async () => {
+    window.history.replaceState({}, "", "/member/home");
+    render(<App />);
+    const needs = await screen.findByRole("region", { name: "Needs you" });
+    expect(await within(needs).findByText("Lace closure")).toBeInTheDocument();
+    expect(within(needs).getByText("$45.00")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /^Good (morning|afternoon|evening)/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Member navigation" })).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(needs).getAllByRole("link", { name: "Review and pay" })[0]);
+    expect(window.location.pathname).toBe("/member/orders");
+  });
+
+  it("starts a chat from Ask FayFort with the question ready to send", async () => {
+    window.history.replaceState({}, "", "/member");
+    render(<App />);
+    const ask = await screen.findByRole("region", { name: "Need something from China?" });
+    expect(window.location.pathname).toBe("/member/home"); // the bare address is tidied
+    fireEvent.change(within(ask).getByLabelText("Ask FayFort"), { target: { value: "20 lace front wigs to Lagos" } });
+    fireEvent.click(within(ask).getByRole("button", { name: "Send to FayFort" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/member/chat"));
+    expect(await screen.findByDisplayValue("20 lace front wigs to Lagos")).toBeInTheDocument();
   });
 });

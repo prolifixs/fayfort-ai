@@ -39,11 +39,12 @@ import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, 
 import { VisitorPopups } from "../consent/VisitorPopups";
 import { NotificationInbox } from "../MemberNotifications";
 import { MembershipPanel, NotFoundPanel, SettingsSection } from "./AccountPanels";
+import { HomePanel } from "./HomePanel";
 import { MEMBER_NAV, MEMBER_ACCOUNT_NAV, MEMBER_TABS, NavIcon } from "./memberNav";
 import { canonicalHref, panelFor, panelHref, type MemberPanel } from "./memberRoutes";
 
-/** Sections about the member's account: no chat beside them. */
-const ACCOUNT_PANELS: MemberPanel[] = ["settings", "membership", "notifications", "notfound"];
+/** Sections with no chat beside them: Home (it has its own Ask FayFort box) and the account pages. */
+const ACCOUNT_PANELS: MemberPanel[] = ["home", "settings", "membership", "notifications", "notfound"];
 /** Which section the current address opens (memberRoutes.ts: /member/shop, /member/orders, old ?panel= links …). */
 function panelFromUrl(): MemberPanel {
   return panelFor(window.location.pathname, window.location.search, window.location.hash);
@@ -170,11 +171,12 @@ export function MemberChatPage() {
   const seenMessageIds = useRef<Set<string>>(new Set());
   const [activePanel, setActivePanel] = useState<MemberPanel>(panelFromUrl);
   const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
-  function selectMemberPanel(panel: MemberPanel) {
+  /** `href` keeps a deep link inside the section, for example /member/orders#request-… from Home. */
+  function selectMemberPanel(panel: MemberPanel, href?: string) {
     setActivePanel(panel);
     setSidebarOpen(false);
     setChatExpanded(false);
-    window.history.pushState({ memberPanel: panel }, "", panelHref(panel));
+    window.history.pushState({ memberPanel: panel }, "", href || panelHref(panel));
   }
   /** Product pages open beside the chat, so the member can keep asking about the item. */
   function openProduct(card: ShopCard | { id: string }) {
@@ -480,13 +482,21 @@ export function MemberChatPage() {
       subscription.unsubscribe();
     };
   }, [loadChats, loadRequests, openRequestedChat, loadShop]);
-  async function createChat() {
+  /** Ask FayFort on Home: a new chat with the question ready in the message box, for the member to send. */
+  async function askFromHome(text: string) {
+    setDraft(text.slice(0, 4000));
+    await createChat(true);
+    window.setTimeout(() => composerRef.current?.focus(), 80);
+  }
+  /** `fresh`: always start a new conversation (Ask FayFort on Home), never reopen the latest one. */
+  async function createChat(fresh = false) {
     if (!token || busy || loading) return;
     setSidebarOpen(false);
+    if (activePanel !== "chat") window.history.pushState({ memberPanel: "chat" }, "", panelHref("chat"));
     setActivePanel("chat");
     setChatExpanded(false);
     if (activeChat && messages.length === 0) return;
-    if (!activeChat && chats.length) {
+    if (!fresh && !activeChat && chats.length) {
       await chooseChat(chats[0]);
       return;
     }
@@ -900,6 +910,7 @@ export function MemberChatPage() {
   const memberName =
     typeof profile?.display_name === "string" && profile.display_name.trim() ? profile.display_name.trim() : "Member";
   const panelTitles: Record<MemberPanel, string> = {
+    home: "Home",
     chat: activeChat?.title || "New chat",
     catalog: "Shop",
     finds: "Finds",
@@ -931,7 +942,7 @@ export function MemberChatPage() {
   if (authLoading || !token || !verified) {
     return (
       <main className="mapp-gate">
-        <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
+        <a className="mapp-brand" href="/member/home" aria-label="FayFort member home">
           <BrandMark />
           <span>FayFort</span>
         </a>
@@ -971,7 +982,7 @@ export function MemberChatPage() {
         aria-hidden={!isDesktop && !sidebarOpen ? true : undefined}
       >
         <div className="mapp-sidebar-head">
-          <a className="mapp-brand" href="/member/chat" aria-label="FayFort chat home">
+          <a className="mapp-brand" href="/member/home" aria-label="FayFort member home">
             <BrandMark />
             <span>FayFort</span>
           </a>
@@ -1346,6 +1357,14 @@ export function MemberChatPage() {
           }
         />
         <div className={split ? "mapp-content split" : "mapp-content"}>
+              {activePanel === "home" && (
+                <HomePanel
+                  accessToken={token}
+                  memberName={memberName}
+                  onGo={(panel, href) => selectMemberPanel(panel, href)}
+                  onAsk={(text) => void askFromHome(text)}
+                />
+              )}
               {activePanel === "catalog" && (
                 <BrowsePanel
                   accessToken={token}

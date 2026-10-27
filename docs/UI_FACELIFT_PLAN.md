@@ -57,10 +57,10 @@ Method: ui-ux-pro-max priorities (accessibility, touch targets, performance, con
 - Theme editor blocks saving a failing colour.
 
 ## Phases
-1. **Done:** fonts self-hosted on web and dashboard; base theme on the FayFort palette; Fraunces headings in the member panel (zero-specificity rule); 16px body; motion tokens; website member link and /go destinations; proxy serves /fonts/.
-2. Panel shell: navy glass sidebar, top bar, bottom nav, routes, account pages inside shell, dead-link fix.
-3. Member Home + Orders + Shop/Finds cards.
-4. Chat and panels restyle, skeletons, motion.
+1. **Done (b949292):** fonts self-hosted on web and dashboard; base theme on the FayFort palette; Fraunces headings in the member panel (zero-specificity rule); 16px body; motion tokens; website member link and /go destinations; proxy serves /fonts/.
+2. **Done:** panel shell. Navy frame from the theme (text colour for light themes, deepened page colour for dark ones), light content sheet, Ask FayFort button, approved menu with an Account group (Membership, Settings, Notifications), frosted phone tab bar (Chats, Shop, Finds, Orders, More) and frosted phone menu drawer. Every section has its own address (memberRoutes.ts): /member/shop, /member/finds, /member/orders, /member/saved, /member/tools, /member/product?product=, /member/settings, /member/membership, /member/notifications. Old /member/chat?panel= and /member/products links still work and are tidied. Unknown /member/ paths show a friendly not-found page inside the shell; signed-out visitors are sent back to the page they wanted after signing in. The retired standalone products, settings, membership and notifications pages are gone. Emails and the website now link to the new addresses (the LANDED claim link is unchanged). "Tools" is labelled "Bookings & tools" because it also holds the supplier directory.
+3. **Done:** member Home at /member/home, now where members land after signing in (also the bare /member address and the website's My dashboard button). Needs you (invoices to pay, questions to answer, options to choose, each linking into Orders & requests), Ask FayFort (starts a new chat with the question ready to send), On its way (requests and store orders with a step bar), FayFort Finds (three 4:5 tiles and the next drop). Loading placeholders instead of "Loading". Home is first in the menu and in the phone bar (Home, Chats, Shop, Orders, More). Each page now has one title: the top bar names the section and the repeated heading inside is kept for screen readers only.
+4. Chat and the other sections restyled on the new cards, skeletons everywhere, motion (sheets, chat bubbles).
 5. Website refinements (header glass on scroll, glass hero card, pricing glass, shimmer).
 6. Themes migrated to the new model + contrast validation.
 7. Assets pass (empty states, OG images, favicon, photography).

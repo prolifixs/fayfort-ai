@@ -7,6 +7,7 @@
  */
 
 export type MemberPanel =
+  | "home"
   | "chat"
   | "catalog"
   | "finds"
@@ -21,6 +22,7 @@ export type MemberPanel =
 
 /** The path each section lives at. "notfound" keeps whatever address the member typed. */
 export const PANEL_PATHS: Record<Exclude<MemberPanel, "notfound">, string> = {
+  home: "/member/home",
   chat: "/member/chat",
   catalog: "/member/shop",
   finds: "/member/finds",
@@ -40,6 +42,7 @@ const PATH_PANELS = new Map(Object.entries(PANEL_PATHS).map(([panel, path]) => [
 
 // ?panel= values from before the paths existed. "directory" moved into Tools on 2026-10-20.
 const LEGACY_PANELS: Record<string, MemberPanel> = {
+  home: "home",
   catalog: "catalog",
   browse: "catalog",
   shop: "catalog",
@@ -67,7 +70,8 @@ export function panelFor(pathname: string, search: string, hash = ""): MemberPan
     const legacy = params.get("panel");
     return (legacy && LEGACY_PANELS[legacy]) || "chat";
   }
-  if (path === "/member" || path === "/member/rewards") return "chat";
+  if (path === "/member") return "home";
+  if (path === "/member/rewards") return "chat";
   // The old products page also held requests: its #request-, #review- and #rate- links belong to Orders.
   if (path === "/member/products") {
     if (/^#(request|review|rate)-/.test(hash)) return "requests";
@@ -82,7 +86,7 @@ export function panelFor(pathname: string, search: string, hash = ""): MemberPan
 
 /** The tidy address for a section, keeping deep-link details such as ?product=, ?tool=, ?find= and #request-…. */
 export function panelHref(panel: MemberPanel, search = "", hash = ""): string {
-  if (panel === "notfound") return PANEL_PATHS.chat;
+  if (panel === "notfound") return PANEL_PATHS.home;
   const params = new URLSearchParams(search);
   params.delete("panel");
   if (panel !== "saved") params.delete("saved");

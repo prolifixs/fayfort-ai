@@ -252,7 +252,7 @@ export function MemberNotificationsPage() {
   }, []);
   if (!dashboardAuthConfigured) return <main className="auth-page"><section className="auth-card"><h1>Member sign-in is not configured</h1><p>Set up the member authentication environment before viewing notifications.</p></section></main>;
   return <main className="auth-page member-chat-page"><section className="member-chat-shell member-notifications-page">
-    <header className="member-chat-header"><BrandMark href="/member/chat" label="Member chat" /><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/chat">Back to chat</a></header>
+    <header className="member-chat-header"><BrandMark href="/member/home" label="Member home" /><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/chat">Back to chat</a></header>
     {loading ? <FayfortLoader label="Loading notifications…" /> : !accessToken ? <div className="member-chat-empty"><h2>Sign in to view notifications</h2><a className="primary-button" href="/member/account">Member sign in</a></div> : <NotificationInbox accessToken={accessToken} />}
   </section></main>;
 }

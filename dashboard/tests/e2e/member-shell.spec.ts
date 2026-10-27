@@ -8,6 +8,7 @@ const SIZES = [
   { name: "laptop", width: 1280, height: 800 },
 ];
 const SCREENS = [
+  { name: "home", path: "/member/home", heading: "Home" },
   { name: "chat", path: "/member/chat?conversation=c1", heading: /./ },
   { name: "shop", path: "/member/shop", heading: "Shop" },
   { name: "orders", path: "/member/orders", heading: "Orders & requests" },

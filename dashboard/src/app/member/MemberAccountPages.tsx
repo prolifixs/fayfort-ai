@@ -150,7 +150,7 @@ export function MemberAccountPage() {
           if (back) window.location.assign(back);
           // Staff and business owners continue to the Control Center (two-step verification runs there).
           else if ((await landingFor(data.session)) === "/") window.location.assign("/");
-          else if (await loadMemberProfile(data.session.access_token, data.user.email)) window.location.assign("/member/chat");
+          else if (await loadMemberProfile(data.session.access_token, data.user.email)) window.location.assign("/member/home");
         }
       }
     } catch (e) {

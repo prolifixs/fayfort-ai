@@ -441,7 +441,7 @@ export function DashboardWorkspace({
             <i className={eventStatus === "Live" ? "event-dot live" : "event-dot"} /> Events {eventStatus}
           </span>
           {navButton("My account")}
-          <a className="nav-item" href="/member/chat" title="Your own member account: orders, chats and points">
+          <a className="nav-item" href="/member/home" title="Your own member account: orders, chats and points">
             <NavIcon name="My account" />
             <span className="nav-label">My member account</span>
           </a>

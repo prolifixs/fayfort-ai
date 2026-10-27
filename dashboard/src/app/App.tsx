@@ -58,7 +58,7 @@ function AppRoutes() {
         <MemberPhotoReviewApp platformAdmin={true} />
       </StaffRoute>
     );
-  if (window.location.pathname.startsWith("/member/"))
+  if (window.location.pathname === "/member" || window.location.pathname.startsWith("/member/"))
     return (
       <MemberThemeRuntime>
         <MemberRoutePage />
@@ -128,7 +128,7 @@ export function ControlCenterApp() {
     let alive = true;
     void landingFor(session).then((next) => {
       if (!alive) return;
-      if (next === "/member/chat") window.location.replace("/member/chat");
+      if (next === "/member/home") window.location.replace("/member/home");
       else setLanding(next);
     });
     return () => {

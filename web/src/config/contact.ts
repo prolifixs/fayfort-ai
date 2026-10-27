@@ -15,7 +15,7 @@ export const JOIN_URL = `${APP_URL}/member/signup`
 export const SIGN_IN_URL = `${APP_URL}/member/account`
 export const CHAT_URL = `${APP_URL}/member/chat`
 // Where the website's "My dashboard" button goes for members (the member Home once it exists, docs/UI_FACELIFT_PLAN.md).
-export const MEMBER_HOME_URL = CHAT_URL
+export const MEMBER_HOME_URL = `${APP_URL}/member/home`
 export const BROWSE_URL = `${APP_URL}/member/shop`
 export const DIRECTORY_URL = `${APP_URL}/member/tools?tool=directory`
 export const REQUESTS_URL = `${APP_URL}/member/orders`

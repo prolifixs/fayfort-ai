@@ -144,7 +144,7 @@ describe("landing after sign-in", () => {
     respond({ "/dashboard/businesses": { businesses: [{ business_id: "b" }] } });
     expect(await landingFor(session())).toBe("/");
     respond({ "/workers/me": { worker: { status: "inactive" } }, "/members/me": { profile: { user_id: "u" } } });
-    expect(await landingFor(session())).toBe("/member/chat");
+    expect(await landingFor(session())).toBe("/member/home");
   });
 });
 

@@ -7,6 +7,7 @@ import type { MemberPanel } from "./memberRoutes";
 export type NavItem = { panel: MemberPanel; label: string; short?: string; icon: string; tour?: string };
 
 const ICONS = {
+  home: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
   chats: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.7 8.7 0 0 1-3.4-.7L4 20l1.4-3.5A7.2 7.2 0 0 1 4 12c0-4.1 3.6-7.5 8-7.5s8 3.1 8 7Z",
   shop: "M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8zM9 8V7a3 3 0 0 1 6 0v1",
   finds: "M12 3l2.2 5.6L20 9.3l-4.4 3.8L17 19l-5-3.1L7 19l1.4-5.9L4 9.3l5.8-.7z",
@@ -20,6 +21,7 @@ const ICONS = {
 };
 
 export const MEMBER_NAV: NavItem[] = [
+  { panel: "home", label: "Home", icon: ICONS.home, tour: "home" },
   { panel: "chat", label: "Chats", icon: ICONS.chats, tour: "chats-nav" },
   { panel: "catalog", label: "Shop", icon: ICONS.shop, tour: "browse" },
   { panel: "finds", label: "Finds", icon: ICONS.finds, tour: "finds" },
@@ -34,12 +36,12 @@ export const MEMBER_ACCOUNT_NAV: NavItem[] = [
   { panel: "notifications", label: "Notifications", icon: ICONS.notifications },
 ];
 
-/** Phone tab bar: four sections and More (opens the full menu). Home joins in phase 3. */
+/** Phone tab bar: Home, Chats, Shop, Orders and More (opens the full menu, where Finds, Saved and the rest are). */
 export const MEMBER_TABS: (NavItem | { panel: "more"; label: string; icon: string })[] = [
   MEMBER_NAV[0],
   MEMBER_NAV[1],
   MEMBER_NAV[2],
-  MEMBER_NAV[3],
+  MEMBER_NAV[4],
   { panel: "more", label: "More", icon: ICONS.more },
 ];
 

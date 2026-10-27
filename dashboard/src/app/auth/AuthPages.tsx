@@ -200,7 +200,7 @@ export function AuthCallbackPage() {
     return (
       <AuthCard audience={audience} title="Password updated">
         <p role="status">Your password has been changed. Other devices stay signed in until you sign them out.</p>
-        <a className="primary-button auth-link-button" href={home || (audience === "staff" ? "/" : "/member/chat")}>
+        <a className="primary-button auth-link-button" href={home || (audience === "staff" ? "/" : "/member/home")}>
           Continue
         </a>
       </AuthCard>

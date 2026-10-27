@@ -1,7 +1,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { apiRequest } from "../../lib/api";
 
-export type Landing = "/" | "/member/chat";
+export type Landing = "/" | "/member/home";
 
 /** Platform admin claim (server-managed app_metadata). */
 export function isPlatformAdmin(session: Pick<Session, "user"> | null | undefined): boolean {
@@ -24,6 +24,6 @@ export async function landingFor(session: Session): Promise<Landing> {
   ]);
   if (worker?.worker?.status === "active") return "/";
   if (Array.isArray(businesses?.businesses) && businesses.businesses.length > 0) return "/";
-  if (member?.profile) return "/member/chat";
+  if (member?.profile) return "/member/home";
   return "/";
 }
