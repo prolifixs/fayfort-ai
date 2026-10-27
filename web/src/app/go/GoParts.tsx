@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FAYFAY_SOCIAL_HANDLE, FAYFORT_INSTAGRAM, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
+import { FAYFAY_SOCIAL_HANDLE, FAYFORT_INSTAGRAM, MEMBER_HOME_URL, SIGN_IN_URL, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
 import { FayfortLogo } from '../components/brand/FayfortLogo'
 import { CookieSettingsLink } from '../../consent/CookieBanner'
 import NewsletterForm from '../../consent/NewsletterForm'
@@ -91,9 +91,17 @@ export function GoHeader({ back = false }: { back?: boolean }) {
         </span>
         <span>{back ? 'All links' : 'FAYFORT'}</span>
       </Link>
-      <a className="go-top-site" href="/">
-        fayfort.com
-      </a>
+      <span className="go-top-links">
+        <a className="go-top-site" href="/">
+          fayfort.com
+        </a>
+        <a className="go-top-account visitor-only" href={SIGN_IN_URL}>
+          Sign in
+        </a>
+        <a className="go-top-account member-only" href={MEMBER_HOME_URL}>
+          My dashboard
+        </a>
+      </span>
     </header>
   )
 }

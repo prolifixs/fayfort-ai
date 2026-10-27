@@ -5,13 +5,22 @@ import { FayfortLogo } from '@/app/components/brand/FayfortLogo'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import { JOIN_URL, SIGN_IN_URL } from '@/config/contact'
+import { JOIN_URL, MEMBER_HOME_URL, SIGN_IN_URL } from '@/config/contact'
 
 const LINKS: [string, string][] = [
   ['/how-it-works', 'How it works'],
   ['/services', 'Services'],
+  ['/go/shop', 'Shop'],
+  ['/go/finds', 'Finds'],
   ['/ebook/landed', 'LANDED'],
   ['/about-us', 'About'],
+]
+
+// Extra destinations in the phone menu (the same ones as fayfort.com/go).
+const MENU_EXTRA: [string, string][] = [
+  ['/go/request', 'Find me a product'],
+  ['/go/consultation', 'Book a consultation'],
+  ['/go/tour-guide', 'Tour guide in China'],
 ]
 
 export function BrandLockup({ className }: { className: string }) {
@@ -23,7 +32,7 @@ export function BrandLockup({ className }: { className: string }) {
   )
 }
 
-/** Sticky header: links, Sign in and Join free; on phones a menu sheet. */
+/** Sticky header: links, then Sign in and Join free for visitors or My dashboard for members; on phones a menu sheet. */
 export default function SiteHeader() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
@@ -48,8 +57,9 @@ export default function SiteHeader() {
           ))}
         </nav>
         <div className="header-actions">
-          <a className="header-signin" href={SIGN_IN_URL}>Sign in</a>
-          <a className="button button-blue header-join" href={JOIN_URL}>Join free</a>
+          <a className="header-signin visitor-only" href={SIGN_IN_URL}>Sign in</a>
+          <a className="button button-blue header-join visitor-only" href={JOIN_URL}>Join free</a>
+          <a className="button button-blue header-join member-only" href={MEMBER_HOME_URL}>My dashboard</a>
           <button
             type="button"
             className="menu-button"
@@ -64,12 +74,13 @@ export default function SiteHeader() {
       </div>
       <div id="site-menu" className="menu-sheet" hidden={!open}>
         <nav aria-label="Menu">
-          {LINKS.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
+          {[...LINKS, ...MENU_EXTRA].map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
           <Link href="/#contact">Contact</Link>
         </nav>
         <div className="menu-sheet-actions">
-          <a className="button button-blue" href={JOIN_URL}>Join free</a>
-          <a className="button button-ghost" href={SIGN_IN_URL}>Sign in</a>
+          <a className="button button-blue visitor-only" href={JOIN_URL}>Join free</a>
+          <a className="button button-ghost visitor-only" href={SIGN_IN_URL}>Sign in</a>
+          <a className="button button-blue member-only" href={MEMBER_HOME_URL}>My dashboard</a>
         </div>
       </div>
     </header>

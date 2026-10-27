@@ -11,6 +11,10 @@ export const MEMBER_COOKIE = 'ff_member'
 export const POPUP_COOKIE = 'ff_popup'
 export const VISITS_COOKIE = 'ff_visits'
 export const CONSENT_DAYS = 180
+// Runs before the first paint: members (ff_member) see "My dashboard" in the header instead of Sign in / Join free,
+// with no flash. Pure CSS switch on html.is-member (.member-only / .visitor-only).
+export const MEMBER_BOOT_SCRIPT =
+  "if(/(?:^|; )ff_member=1/.test(document.cookie))document.documentElement.classList.add('is-member')"
 export const CONSENT_EVENT = 'ff-consent-change'
 export const OPEN_SETTINGS_EVENT = 'ff-open-cookie-settings'
 // Cookies set by the marketing pixels; removed when marketing is switched off.

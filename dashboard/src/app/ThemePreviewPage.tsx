@@ -12,7 +12,7 @@ type PreviewPage="chat"|"catalog"|"saved"|"notifications"|"requests"|"settings";
 
 const pages:PreviewPage[]=["chat","catalog","saved","notifications","requests","settings"];
 const pageLabels:Record<PreviewPage,string>={chat:"Chat",catalog:"Catalog",saved:"Saved products",notifications:"Notifications",requests:"Request timeline",settings:"Settings"};
-const baseColors:ThemeColors={page_background:"#FFFFFF",surface:"#F7F9FA",text:"#17212B",muted_text:"#526170",accent:"#005A9C",accent_foreground:"#FFFFFF",border:"#637180",focus:"#005A9C"};
+const baseColors:ThemeColors={page_background:"#FFFFFF",surface:"#F4F5FA",text:"#02144E",muted_text:"#4A5578",accent:"#0540F2",accent_foreground:"#FFFFFF",border:"#7A84A6",focus:"#0540F2"};
 
 export function ThemePreviewPage(){
  const themeId=new URLSearchParams(window.location.search).get("theme")||"";

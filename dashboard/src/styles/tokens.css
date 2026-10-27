@@ -7,6 +7,8 @@
 :root {
   /* Type */
   --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Headings, big numbers and empty states (fonts.css). Member themes with their own font use it for headings too. */
+  --font-display: Fraunces, Georgia, "Times New Roman", serif;
   --text-2xs: 0.6875rem; /* 11px: badges, counters */
   --text-xs: 0.75rem;    /* 12px: captions, meta */
   --text-sm: 0.8125rem;  /* 13px: secondary UI */
@@ -60,9 +62,13 @@
   --z-dialog: 100;
   --z-toast: 120;
 
-  /* Motion */
+  /* Motion (docs/UI_FACELIFT_PLAN.md): transform and opacity only; exits about 30% faster than entries. */
   --ease: cubic-bezier(.2, .7, .2, 1);
-  --duration: 180ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --duration-fast: 120ms;   /* press, hover */
+  --duration: 200ms;        /* small UI: menus, chips, toggles */
+  --duration-slow: 320ms;   /* pages, sheets, drawers */
+  --stagger: 40ms;          /* list items, first eight only */
 
   /* Base colours (the FayFort base theme). Themes override these eight. */
   --color-bg: #ffffff;
@@ -83,6 +89,13 @@
   /* Staff apps keep the FayFort green */
   --staff-accent: #197c69;
 }
+
+/* Member panel type: Fraunces + Inter for the FayFort standard font; a theme with its own font uses it throughout.
+   Body text is 16px in the member panel (no zoom on phones); staff apps keep their denser scale. */
+.member-theme-runtime { --font-display: var(--font-sans); --text-base: 1rem; }
+.member-theme-runtime[data-theme-font="system"] { --font-display: Fraunces, Georgia, "Times New Roman", serif; }
+/* Zero specificity, so any component rule that sets its own font or weight still wins. */
+:where(.member-theme-runtime) :where(h1, h2) { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.015em; }
 
 /* Derived colours: declared wherever the base colours can change, so themes recompute them. */
 :root,

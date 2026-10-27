@@ -38,12 +38,13 @@ _BASE_MEMBER_THEME = {
     "theme_id": "base",
     "display_name": "FayFort base",
     "design": {
-        "palette_preset": "ocean-blue",
+        # FayFort Navy: the website's brand board (docs/UI_FACELIFT_PLAN.md). Ink blue #0540F2 is 6.95:1 on white.
+        "palette_preset": "fayfort-navy",
         "wrapper_style": "soft",
         "colors": {
-            "page_background": "#FFFFFF", "surface": "#F7F9FA", "text": "#17212B",
-            "muted_text": "#526170", "accent": "#005A9C", "accent_foreground": "#FFFFFF",
-            "border": "#637180", "focus": "#005A9C",
+            "page_background": "#FFFFFF", "surface": "#F4F5FA", "text": "#02144E",
+            "muted_text": "#4A5578", "accent": "#0540F2", "accent_foreground": "#FFFFFF",
+            "border": "#7A84A6", "focus": "#0540F2",
         },
         "font_family": "system",
         "pattern": "none",

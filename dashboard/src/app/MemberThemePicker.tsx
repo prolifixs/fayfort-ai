@@ -28,7 +28,7 @@ const clock = (iso: string | null | undefined) => {
 const BASE_DESIGN: MiniThemeDesign = {
   wrapper_style: "soft",
   font_family: "system",
-  colors: { page_background: "#FFFFFF", surface: "#F7F9FA", text: "#17212B", muted_text: "#526170", accent: "#005A9C", accent_foreground: "#FFFFFF", border: "#637180", focus: "#005A9C" },
+  colors: { page_background: "#FFFFFF", surface: "#F4F5FA", text: "#02144E", muted_text: "#4A5578", accent: "#0540F2", accent_foreground: "#FFFFFF", border: "#7A84A6", focus: "#0540F2" },
 };
 
 /** Member Settings → Choose a theme: every theme drawn as a small picture of the app, a big preview of the one

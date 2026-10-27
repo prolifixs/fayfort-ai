@@ -12,9 +12,9 @@ export const GO_PAGES = ['/go/giveaway', '/go/shop', '/go/consultation', '/go/to
 export const isPublicSitePath = (pathname: string) =>
   PUBLIC_SITE_PATHS.includes(pathname) || GO_PAGES.includes(pathname) || pathname.startsWith('/ebook/landed/')
 
-// Build output, public images, and single-segment files in /public (favicon, robots.txt, sitemap.xml).
+// Build output, public images, self-hosted fonts, and single-segment files in /public (favicon, robots.txt, sitemap.xml).
 export const isStaticAsset = (pathname: string) =>
-  pathname.startsWith('/_next/') || pathname.startsWith('/images/') || /^\/[^/]+\.[a-z0-9]+$/i.test(pathname)
+  pathname.startsWith('/_next/') || pathname.startsWith('/images/') || pathname.startsWith('/fonts/') || /^\/[^/]+\.[a-z0-9]+$/i.test(pathname)
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl

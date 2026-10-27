@@ -30,7 +30,7 @@
   right: 16px;
   z-index: 90;
 }
-.ffc-banner h2 { color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 0; line-height: 1.3; margin: 0; }
+.ffc-banner h2 { color: #fff; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0; line-height: 1.3; margin: 0; }
 .ffc-banner p { margin: 0; }
 .ffc-banner a { color: #ff8cc6; text-decoration: underline; text-underline-offset: 3px; }
 .ffc-options { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
@@ -95,7 +95,7 @@
 }
 .ffp-close:hover { background: #e0e4f2; }
 .ffp-kicker { color: var(--ffc-pink-deep); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; margin: 0; text-transform: uppercase; }
-.ffp-card h2 { font-family: Iowan Old Style, Baskerville, Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin: 0; padding-right: 36px; }
+.ffp-card h2 { font-family: Fraunces, Iowan Old Style, Baskerville, Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin: 0; padding-right: 36px; }
 .ffp-lede { color: var(--ffc-muted); font-size: 14.5px; line-height: 1.5; margin: 0; }
 .ffp-picks { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin: 4px 0 0; padding: 0; }
 .ffp-picks a { color: inherit; display: grid; gap: 3px; text-decoration: none; }

@@ -23,7 +23,7 @@ describe("ThemeStudioPage",()=>{
   await screen.findByText("Theme draft created. It is private until published.");
   await waitFor(()=>expect(fetchMock.mock.calls.some(([,init])=>init?.method==="POST")).toBe(true));
   const write=fetchMock.mock.calls.find(([,init])=>init?.method==="POST");
-  expect(JSON.parse(String(write?.[1]?.body))).toMatchObject({theme_id:"spring-dawn",display_name:"Spring Dawn",design:{palette_preset:"ocean-blue",wrapper_style:"soft"}});
+  expect(JSON.parse(String(write?.[1]?.body))).toMatchObject({theme_id:"spring-dawn",display_name:"Spring Dawn",design:{palette_preset:"fayfort-navy",wrapper_style:"soft"}});
   expect(screen.getByRole("img",{name:/Spring Dawn: preview of the member app/})).toBeInTheDocument();
  });
 

@@ -1,11 +1,11 @@
 /**
  * Text fonts a member theme can use (Theme Studio). Same keys as app/accounts/member_themes.py THEME_FONTS.
- * "system" is FayFort's standard stack and loads nothing; the others load once from Google Fonts when used.
+ * "system" is FayFort's standard pair (Fraunces headings, Inter text), self-hosted in styles/fonts.css; the others load once from Google Fonts when used.
  */
 export type ThemeFont = "system" | "poppins" | "quicksand" | "nunito" | "montserrat" | "dm-sans" | "playfair" | "lora";
 
 export const THEME_FONTS: { key: ThemeFont; label: string; note: string; family: string; google?: string }[] = [
-  { key: "system", label: "FayFort standard", note: "Clean and neutral", family: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
+  { key: "system", label: "FayFort standard", note: "Fraunces headings with Inter", family: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
   { key: "poppins", label: "Poppins", note: "Bold, modern, confident", family: '"Poppins", system-ui, sans-serif', google: "Poppins:wght@400;500;600;700" },
   { key: "quicksand", label: "Quicksand", note: "Soft and rounded", family: '"Quicksand", system-ui, sans-serif', google: "Quicksand:wght@400;500;600;700" },
   { key: "nunito", label: "Nunito", note: "Friendly and easy to read", family: '"Nunito", system-ui, sans-serif', google: "Nunito:wght@400;600;700;800" },

@@ -13,7 +13,7 @@ type ResolvedTheme={theme_id:string;display_name:string;revision?:number|null;de
 type MemberThemeResponse={selected_theme:string;active_theme:ResolvedTheme;fallback_reason:string|null};
 type PreviewThemeResponse=ResolvedTheme;
 
-const baseDesign:ThemeDesign={palette_preset:"ocean-blue",wrapper_style:"soft",colors:{page_background:"#FFFFFF",surface:"#F7F9FA",text:"#17212B",muted_text:"#526170",accent:"#005A9C",accent_foreground:"#FFFFFF",border:"#637180",focus:"#005A9C"}};
+const baseDesign:ThemeDesign={palette_preset:"fayfort-navy",wrapper_style:"soft",colors:{page_background:"#FFFFFF",surface:"#F4F5FA",text:"#02144E",muted_text:"#4A5578",accent:"#0540F2",accent_foreground:"#FFFFFF",border:"#7A84A6",focus:"#0540F2"}};
 
 /** Trying a theme on the whole app lasts 15 seconds for every member, then the saved theme comes back (owner
  * decision, 2026-10-19, to stop free members using paid themes through the preview). The end time is stored, so

@@ -12,8 +12,9 @@ type ThemeRevision = ThemeDesign & {revision:number;created_at?:string};
 type Theme = {theme_id:string;display_name:string;description:string|null;draft_display_name:string|null;draft_description:string|null;status:"draft"|"published"|"archived";requires_paid:boolean;is_builtin:boolean;draft_revision:number|null;published_revision:number|null;draft:ThemeRevision|null;published:ThemeRevision|null};
 type ThemeForm = {theme_id:string;display_name:string;description:string;design:ThemeDesign};
 
-const defaults:ThemeForm={theme_id:"",display_name:"",description:"",design:{palette_preset:"ocean-blue",wrapper_style:"soft",colors:{page_background:"#FFFFFF",surface:"#F7F9FA",text:"#17212B",muted_text:"#526170",accent:"#005A9C",accent_foreground:"#FFFFFF",border:"#637180",focus:"#005A9C"},font_family:"system",pattern:"none",pattern_strength:"subtle"}};
+const defaults:ThemeForm={theme_id:"",display_name:"",description:"",design:{palette_preset:"fayfort-navy",wrapper_style:"soft",colors:{page_background:"#FFFFFF",surface:"#F4F5FA",text:"#02144E",muted_text:"#4A5578",accent:"#0540F2",accent_foreground:"#FFFFFF",border:"#7A84A6",focus:"#0540F2"},font_family:"system",pattern:"none",pattern_strength:"subtle"}};
 const palettes:Record<string,ThemeColors>={
+  "fayfort-navy":{page_background:"#FFFFFF",surface:"#F4F5FA",text:"#02144E",muted_text:"#4A5578",accent:"#0540F2",accent_foreground:"#FFFFFF",border:"#7A84A6",focus:"#0540F2"},
   "ocean-blue":{page_background:"#FFFFFF",surface:"#F7F9FA",text:"#17212B",muted_text:"#526170",accent:"#005A9C",accent_foreground:"#FFFFFF",border:"#637180",focus:"#005A9C"},
   "forest-green":{page_background:"#F6FAF7",surface:"#FFFFFF",text:"#15251D",muted_text:"#4D6257",accent:"#17633E",accent_foreground:"#FFFFFF",border:"#61796B",focus:"#17633E"},
   "plum-evening":{page_background:"#FBF8FC",surface:"#FFFFFF",text:"#291A31",muted_text:"#65566B",accent:"#693B78",accent_foreground:"#FFFFFF",border:"#81758A",focus:"#693B78"},

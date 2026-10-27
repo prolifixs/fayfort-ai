@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Camera, Check, Compass, MessageCircle, Package, Search, ShoppingBag, Truck, Users } from 'lucide-react'
-import { CHAT_URL, BROWSE_URL, DIRECTORY_URL, FAYFORT_INSTAGRAM, JOIN_URL, REQUESTS_URL, SUPPORT_EMAIL, SUPPORT_HOURS, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
+import { CHAT_URL, BROWSE_URL, DIRECTORY_URL, FAYFORT_INSTAGRAM, JOIN_URL, MEMBER_HOME_URL, REQUESTS_URL, SUPPORT_EMAIL, SUPPORT_HOURS, WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/config/contact'
 import { revealDelay } from './components'
 import { FAQ } from './faq'
 import HeroGlobe from './globe/HeroGlobe'
@@ -72,7 +72,8 @@ export default function HomePage() {
           <h1 className="is-visible" data-reveal style={revealDelay(1)}>From China’s factories <em>to your door.</em></h1>
           <p className="page-lede is-visible" data-reveal style={revealDelay(2)}>We source, inspect and ship for importers in Africa, the UK and the US, and you follow every step in your free FayFort dashboard.</p>
           <div className="home-actions is-visible" data-reveal style={revealDelay(3)}>
-            <a className="button button-blue button-large" href={JOIN_URL}>Join free <ArrowRight size={18} /></a>
+            <a className="button button-blue button-large visitor-only" href={JOIN_URL}>Join free <ArrowRight size={18} /></a>
+            <a className="button button-blue button-large member-only" href={MEMBER_HOME_URL}>Go to my dashboard <ArrowRight size={18} /></a>
             <Link className="button button-ghost button-large" href="/how-it-works">See how it works</Link>
           </div>
           <p className="home-proof is-visible" data-reveal style={revealDelay(4)}>Nigeria · Ghana · Zimbabwe · South Africa · Kenya · UK · US</p>
