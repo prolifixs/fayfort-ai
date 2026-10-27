@@ -1,0 +1,64 @@
+/* Conversations desk (R3): the customer card as a third pane beside a chat on wide screens, under the chat on laptops,
+   and after it on phones. */
+.operations-center-grid.has-customer { grid-template-columns: minmax(260px, .85fr) minmax(400px, 1.4fr); }
+.operations-center-grid.has-customer > .operations-work-list { grid-row: span 2; }
+.operations-center-grid.has-customer > .ops-customer-pane { grid-column: 2; }
+/* With the card under the chat, the chat can't stay pinned or it would cover the card. */
+@media (max-width: 1199px) {
+  .operations-center-grid.has-customer > .operations-work-detail { position: static; max-height: none; overflow: visible; }
+}
+@media (min-width: 1200px) {
+  .operations-center-grid.has-customer { grid-template-columns: minmax(230px, .8fr) minmax(380px, 1.35fr) minmax(250px, .75fr); }
+  .operations-center-grid.has-customer > .operations-work-list { grid-row: auto; }
+  .operations-center-grid.has-customer > .ops-customer-pane { grid-column: 3; position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
+}
+@media (max-width: 900px) {
+  .operations-center-grid.has-customer { grid-template-columns: 1fr; }
+  .operations-center-grid.has-customer > .operations-work-list { grid-row: auto; }
+  .operations-center-grid.has-customer > .ops-customer-pane { grid-column: auto; }
+}
+
+.ops-customer-pane { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
+.ops-pane-card { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--operations-line, var(--color-border)); border-radius: 14px; background: var(--operations-surface, var(--color-bg)); min-width: 0; }
+.ops-pane-card h3 { margin: 0; font-size: var(--text-base); }
+.ops-pane-card h4 { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--color-muted); }
+.ops-pane-card p { margin: 0; font-size: var(--text-sm); }
+.ops-customer-head { display: flex; align-items: center; gap: var(--space-3); }
+.ops-customer-head small { color: var(--color-muted); font-size: var(--text-sm); }
+.ops-customer-avatar { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, var(--color-bg)); color: var(--accent); font-weight: var(--weight-strong); }
+.ops-customer-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--space-2); margin: 0; }
+.ops-customer-facts div { min-width: 0; }
+.ops-customer-facts dt { color: var(--color-muted); font-size: var(--text-xs); }
+.ops-customer-facts dd { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.ops-customer-requests, .ops-customer-list, .ops-answers { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ops-customer-requests li { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ops-customer-requests li > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.ops-customer-requests small { color: var(--color-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.ops-missing { color: var(--color-warning, #a15c00); font-weight: var(--weight-medium); }
+.ops-customer-list li { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--text-sm); }
+.ops-customer-list li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-customer-list small { flex-shrink: 0; color: var(--color-muted); }
+.ops-customer-list li.is-current span { font-weight: var(--weight-strong); }
+.ops-answers-form { display: flex; gap: var(--space-2); }
+.ops-answers-form input { flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); font: inherit; }
+.ops-answers li { display: grid; gap: 6px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ops-answers li p { color: var(--color-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ops-answer-title { display: flex; align-items: center; gap: var(--space-2); padding: 0; border: 0; background: none; color: var(--color-text); font: inherit; font-weight: var(--weight-strong); text-align: left; cursor: pointer; }
+.ops-answer-actions { display: flex; align-items: center; gap: var(--space-3); }
+.ops-send-desk { display: grid; gap: var(--space-2); }
+.ops-send-desk label { display: grid; gap: 4px; color: var(--color-muted); font-size: var(--text-sm); }
+.ops-send-desk select, .ops-send-desk textarea { width: 100%; min-height: 40px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); font: inherit; }
+.ops-sent { color: var(--color-success); }
+
+/* A hand-off's note and the chat it came from (FlowPanel, chat_handoff). */
+.ops-handoff-from { color: var(--color-muted); font-size: var(--text-sm); }
+.ops-handoff-note { margin: 0; padding: var(--space-3) var(--space-4); border-left: 3px solid var(--accent); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 7%, var(--color-bg)); white-space: pre-wrap; }
+.ops-transcript { display: grid; gap: var(--space-2); max-height: 360px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.ops-transcript li { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--color-hover); }
+.ops-transcript li.is-member, .ops-transcript li.is-customer { background: color-mix(in srgb, var(--accent) 8%, var(--color-bg)); }
+.ops-transcript small { color: var(--color-muted); font-size: var(--text-xs); }
+.ops-transcript p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Conversations desk tool cards: Answers sits among them; the member app chats open under the desk. */
+.ops-tool-row > .ops-pane-card { border-radius: var(--radius-md); }
+.ops-member-chats { padding: var(--space-3); }

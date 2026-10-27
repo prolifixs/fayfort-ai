@@ -17,6 +17,7 @@ from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
+from app.accounts import conversation_desk
 from app.accounts.desks import desk_stage, desk_summaries, latest_request_stages, my_due_counts
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,19 @@ class WorkItemCreate(BaseModel):
         if not normalized:
             raise ValueError("This field cannot be blank.")
         return normalized
+
+
+class ChatHandOff(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    department: Department
+    note: str = Field(min_length=3, max_length=500)
+
+    @field_validator("note")
+    @classmethod
+    def trim_note(cls, value: str) -> str:
+        if len(value.strip()) < 3:
+            raise ValueError("Say what the other desk should do.")
+        return value.strip()
 
 
 class WorkItemTransition(BaseModel):
@@ -466,6 +480,64 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         except Exception as exc:
             logger.exception("Could not count pending operations work")
             raise HTTPException(status_code=503, detail="Pending work could not be counted.") from exc
+
+    def is_chat_item(item: dict) -> bool:
+        return bool(item.get("member_conversation_id") or item.get("business_conversation_id") or item.get("handoff_id"))
+
+    @router.get("/operations/work-items/{work_item_id}/customer")
+    def work_item_customer(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        """The customer card beside a chat (R3). Member chats stay private until claimed, like the chat itself."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if item.get("member_conversation_id") and staff.get("role") != "platform_admin" \
+                and item.get("assigned_worker_id") != staff["user_id"]:
+            return {"card": None, "locked": True}
+        try:
+            return {"card": conversation_desk.customer_card(supabase, item), "locked": False}
+        except Exception as exc:
+            logger.exception("Could not load the customer card")
+            raise HTTPException(status_code=503, detail="The customer card could not be loaded.") from exc
+
+    @router.get("/operations/answers")
+    def operations_answers(q: str = Query(min_length=2, max_length=200), authorization: str | None = Header(default=None)):
+        """Answers: read-only search of what the AI knows, for whoever is answering a chat (R3)."""
+        staff_identity(authorization)
+        try:
+            return {"answers": conversation_desk.search_answers(supabase, q)}
+        except Exception as exc:
+            logger.exception("Could not search answers")
+            raise HTTPException(status_code=503, detail="Answers could not be searched.") from exc
+
+    @router.post("/operations/work-items/{work_item_id}/hand-off", status_code=201)
+    def hand_off_from_chat(work_item_id: UUID, payload: ChatHandOff, authorization: str | None = Header(default=None)):
+        """Send something from a chat to another desk as its own work item; the chat stays where it is (R3)."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if not is_chat_item(item):
+            raise HTTPException(status_code=409, detail="Only chats can be handed to another desk this way.")
+        if item.get("status") in ("completed", "cancelled"):
+            raise HTTPException(status_code=409, detail="This chat is finished. Reopen it first.")
+        if staff.get("role") != "platform_admin" and item.get("assigned_worker_id") != staff["user_id"]:
+            raise HTTPException(status_code=403, detail="Claim this chat before handing anything from it to another desk.")
+        if payload.department == item.get("department"):
+            raise HTTPException(status_code=422, detail="Pick another desk.")
+        try:
+            reference = conversation_desk.chat_reference(supabase, item)
+            source_id, values = conversation_desk.handoff_values(item, reference, payload.department, payload.note,
+                                                                 staff["user_id"])
+            created = operations_flow.ensure_item(source_kind="chat_handoff", source_id=source_id, **values)
+            if not created:
+                raise RuntimeError("The hand-off item was not created")
+            label = conversation_desk.DEPARTMENT_LABEL.get(payload.department, payload.department)
+            operations_flow.add_event(item, "handed_off", f"Sent to {label}: {payload.note}",
+                                      details={"work_item_id": str(created["id"]), "department": payload.department},
+                                      actor_user_id=staff["user_id"], actor_type="worker")
+            return {"work_item": created}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not hand off from a chat")
+            raise HTTPException(status_code=503, detail="That couldn't be sent to the other desk. Try again.") from exc
 
     @router.get("/operations/desks")
     def operations_desks(authorization: str | None = Header(default=None)):

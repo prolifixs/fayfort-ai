@@ -79,6 +79,23 @@ const desks = {
   ],
 };
 
+// Conversations desk (R3): customer cards and Answers.
+function customerCard(path: string) {
+  if (path.includes("/w1/"))
+    return { locked: false, card: { kind: "member", member_id: "m1", name: "Amaka Obi", profile: { member_tier: "pro", rank_level: 3, country: "Nigeria", created_at: "2026-06-02T00:00:00Z" },
+      chats: [{ id: "mc1", title: "TikTok wig", current: true }, { id: "mc0", title: "Ankara for a wedding", last_activity_at: iso(24 * 9) }],
+      requests: [{ id: "r1", title: "Body wave wig 22 inch", stage: "options_sent", missing: [] }, { id: "r0", title: "Ankara, 6 yards", stage: "delivered", missing: [] }],
+      invoices: [{ id: "i1", title: "Deposit for body wave wig", amount: 30, currency: "USD", status: "sent" }] } };
+  return { locked: false, card: { kind: "customer", name: "Chioma", profile: { channel: "instagram", username: "chioma.styles", first_seen: iso(24 * 30), summary: "Asked about paying for a $412 order in two parts." },
+    chats: [{ id: "bc1", title: "Split payment on a $412 order", current: true }, { id: "bc0", title: "Wig colours", last_activity_at: iso(24 * 12) }],
+    requests: [{ id: "cr1", title: "product order", stage: "awaiting_customer", missing: ["delivery_city", "preferred_length"], details: { product: "Bob wig with bangs", quantity: 2 } }],
+    invoices: [] } };
+}
+const answers = [
+  { id: "f1", kind: "faq", title: "Can I split my payment?", text: "Yes. Orders over $300 can be paid in two parts…", full: "Yes. Orders over $300 can be paid in two parts: half to start sourcing, half before shipping." },
+  { id: "k1", kind: "knowledge", title: "Payments and deposits", text: "Free members pay a 50% deposit, Standard 25%…", full: "Free members pay a 50% deposit, Standard 25%, Pro none in good standing. Split payments are possible on orders over $300." },
+];
+
 function fixture(path: string, search: URLSearchParams): unknown {
   const b = `/businesses/${businessId}`;
   if (path === "/dashboard/businesses") return { businesses: [{ business_id: businessId, name: "FayFort Hair Lagos", role: "owner" }, { business_id: "biz-2", name: "FayFort Fabrics", role: "owner" }] };
@@ -96,6 +113,8 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/desks") return desks;
+  if (path.endsWith("/customer") && path.startsWith("/operations/work-items/")) return customerCard(path);
+  if (path === "/operations/answers") return { answers: answers.filter((answer) => (search.get("q") || "").split(/\s+/).some((word) => word.length > 2 && (answer.title + answer.full).toLowerCase().includes(word.toLowerCase()))) };
   if (path === "/operations/work-items" && search.get("view") === "archive") return { work_items: archivedItems, has_more: false };
   if (path === "/operations/work-items") return { work_items: workItems };
   if (path === "/operations/work-items/w4/source-context") return { source_type: "shopify_order", flow: { kind: "shopify_order", metadata: workItems[2].metadata, member_name: "Amaka Obi", order: { order_name: "#1042", total: "184.00", currency: "USD", financial_status: "paid", fulfillment_status: null, line_items: [{ title: "Body wave wig 22 inch", quantity: 1, variant_title: "Natural black" }, { title: "Edge control", quantity: 2 }] } } };

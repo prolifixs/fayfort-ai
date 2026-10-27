@@ -184,6 +184,9 @@ export type FlowContext = {
   kind: string;
   metadata: Record<string, unknown>;
   member_name?: string;
+  /** chat_handoff (R3): the chat it was sent from and who sent it. */
+  from_chat?: { id: string; sender_type: string; content: string; created_at: string }[];
+  handed_by_name?: string;
   order?: {
     id: string;
     order_name: string | null;
@@ -386,3 +389,23 @@ export const requestNextStages: Record<string, string[]> = {
 };
 export const statusLabel = (value: string) =>
   value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
+
+/** The customer card beside a chat (GET /operations/work-items/{id}/customer, R3). */
+export type CustomerCard = {
+  kind: "member" | "customer";
+  member_id?: string;
+  name: string;
+  profile: Record<string, string | number | null | undefined>;
+  chats: { id: string; title: string; last_activity_at?: string | null; status?: string | null; current?: boolean }[];
+  requests: {
+    id: string;
+    title: string;
+    stage?: string | null;
+    eta_at?: string | null;
+    created_at?: string | null;
+    missing: string[];
+    details?: Record<string, string | number>;
+  }[];
+  invoices: { id: string; title: string; amount: number | string; currency: string; status: string; created_at?: string }[];
+};
+export type Answer = { id: string; kind: "knowledge" | "faq"; title: string; text: string; full: string };

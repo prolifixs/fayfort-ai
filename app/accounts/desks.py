@@ -46,6 +46,7 @@ WORK_TYPE_STAGE = {
         "giveaway_draw": "campaigns", "giveaway_prize": "campaigns",
         "photo_review": "reviews",
         "member_conversation": "chats", "business_conversation": "chats", "human_handoff": "chats",
+        "chat_handoff": "chats",
     },
     "store_team": {
         "list_store_product": "listings", "list_sourcing_item": "listings", "map_product": "listings",

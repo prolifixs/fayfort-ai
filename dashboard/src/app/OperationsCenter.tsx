@@ -45,6 +45,8 @@ import { FayfortLoader } from "./brand/FayfortLogo";
 import { ProductsWorkspace } from "./operations/StoreTeam";
 import { BookingsPanel } from "./operations/BookingsPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
+import { CustomerPane, AnswersSearch, isChatItem } from "./operations/CustomerPane";
+import { MemberChatsPanel } from "./workspace/MemberChatsPanel";
 import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
 import type { Department } from "./operations/types";
 
@@ -62,6 +64,7 @@ const SOURCE_LABEL: Record<string, string> = {
   invoice_void: "From a cancelled request's invoice",
   paid_after_cancel: "From a payment after a cancellation",
   store_listing: "From the Store team's Products workspace",
+  chat_handoff: "Sent from a chat on the Conversations desk",
   unmapped_product: "From a Shopify product with no category",
   retire_product: "From a listing nobody has wanted lately",
   merch_section: "From a store section on Browse",
@@ -79,6 +82,7 @@ export function OperationsCenterPage() {
     return wanted && VIEWS.includes(wanted) ? wanted : "queue";
   });
   const [help, setHelp] = useState<string | null>(null);
+  const [showMemberChats, setShowMemberChats] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
   const [firstWeek, setFirstWeek] = useFirstWeek(ops.canManage);
   const selectedId = ops.selected?.id;
@@ -212,6 +216,23 @@ export function OperationsCenterPage() {
   function deskTools(department: Department) {
     const summary = deskSummary(department);
     const stageCount = (key: string) => summary?.stages.find((stage) => stage.key === key)?.count ?? 0;
+    if (department === "conversation_intake")
+      return (
+        <>
+          <ToolCard
+            title="Member app chats"
+            line="Every chat in the FayFort app, also the ones the AI is handling. Take one over when a member needs a person."
+            count={stageCount("member_app")}
+            countLabel="waiting for a person"
+            onOpen={() => setShowMemberChats((value) => !value)}
+            openLabel={showMemberChats ? "Hide the chats" : "Browse all chats"}
+            fullHref={canManage ? "/?page=conversations" : undefined}
+          />
+          <ToolCard title="Customer chats" line="Instagram, Messenger and website customers the AI handed to a person." count={stageCount("customer")} countLabel="waiting" onOpen={() => ops.setFilterStage("customer")} openLabel="Show them" />
+          {/* With a chat open, Answers sits beside it in the customer card instead. */}
+          {!(selected && isChatItem(selected)) && <AnswersSearch ops={ops} />}
+        </>
+      );
     if (department === "store_team")
       return (
         <>
@@ -382,19 +403,22 @@ export function OperationsCenterPage() {
           )}
           {(view === "queue" || view === "archive") && (
             <>
-              {view === "queue" &&
-                (deskDepartment ? (
-                  <DeskHeader
-                    key={deskDepartment}
-                    department={deskDepartment}
-                    summary={deskSummary(deskDepartment)}
-                    stage={ops.filterStage}
-                    onStage={ops.setFilterStage}
-                    tools={deskTools(deskDepartment)}
-                  />
-                ) : (
-                  <MyWorkHome desks={desks} onOpenDesk={(department) => openRail(`desk:${department}`)} />
-                ))}
+              {view === "queue" && deskDepartment && (
+                <DeskHeader
+                  key={deskDepartment}
+                  department={deskDepartment}
+                  summary={deskSummary(deskDepartment)}
+                  stage={ops.filterStage}
+                  onStage={ops.setFilterStage}
+                  tools={deskTools(deskDepartment)}
+                />
+              )}
+              {view === "queue" && deskDepartment === "conversation_intake" && showMemberChats && token && (
+                <section className="ops-desk-head ops-member-chats" aria-label="All member app chats">
+                  <MemberChatsPanel accessToken={token} />
+                </section>
+              )}
+              {view === "queue" && !deskDepartment && <MyWorkHome desks={desks} onOpenDesk={(department) => openRail(`desk:${department}`)} />}
               {view === "queue" ? <QueueFilters ops={ops} /> : <ArchiveControls ops={ops} />}
               {(error || notice) && (
                 <div className={`ops-flash ${error ? "is-error" : "is-ok"}`} role={error ? "alert" : "status"}>
@@ -407,7 +431,7 @@ export function OperationsCenterPage() {
                 </div>
               )}
               {view === "queue" && ops.batchWorkIds.length > 0 && <SourcingBatchForm ops={ops} />}
-              <div className="operations-center-grid">
+              <div className={`operations-center-grid${selected && isChatItem(selected) ? " has-customer" : ""}`}>
                 <WorkList ops={ops} />
                 <section className="operations-work-detail" aria-label="Selected work details" ref={detailRef}>
                   {!selected ? (
@@ -595,6 +619,7 @@ export function OperationsCenterPage() {
                     </>
                   )}
                 </section>
+                {selected && isChatItem(selected) && <CustomerPane ops={ops} selected={selected} />}
               </div>
             </>
           )}

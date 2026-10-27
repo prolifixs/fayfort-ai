@@ -82,7 +82,7 @@ export function DashboardWorkspace({
   eventStreaming = true,
 }: WorkspaceProps) {
   const linkedPage = new URLSearchParams(window.location.search).get("page");
-  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : linkedPage === "account" ? "My account" : "Overview");
+  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : linkedPage === "account" ? "My account" : linkedPage === "conversations" ? "Conversations" : "Overview");
   const [conversationTarget, setConversationTarget] = useState<ConversationRow | null>(null);
   const [requestTargetId, setRequestTargetId] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);

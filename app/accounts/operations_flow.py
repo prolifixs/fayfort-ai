@@ -386,6 +386,11 @@ def source_context(item: dict) -> dict:
     elif kind == "invoice":
         detail["invoice"] = one(db().table("commerce_invoices").select(
             "id,title,status,error,amount,currency,request_id,created_at").eq("id", source_id).limit(1).execute())
+    elif kind == "chat_handoff":
+        # Sent here from a chat on the Conversations desk (R3): the note, who sent it and the chat itself.
+        from app.accounts.conversation_desk import chat_transcript
+        detail["from_chat"] = chat_transcript(db(), meta)
+        detail["handed_by_name"] = staff_name(str(meta.get("handed_by") or ""))
     member_id = meta.get("member_id")
     if member_id:
         profile = one(db().table("member_profiles").select("display_name").eq("user_id", str(member_id)).limit(1).execute())
@@ -395,6 +400,20 @@ def source_context(item: dict) -> dict:
             detail["chat"] = {"conversation_id": chat["id"] if chat else None,
                               "messages": chat_messages(chat["id"]) if chat else []}
     return {"source_type": kind, "flow": {"kind": kind, "metadata": meta, **detail}}
+
+
+def staff_name(user_id: str) -> str:
+    """A worker's display name (or email) for "sent by" lines."""
+    if not user_id:
+        return "A colleague"
+    try:
+        response = db().auth.admin.get_user_by_id(user_id)
+        user = getattr(response, "user", None)
+        metadata = getattr(user, "user_metadata", None) or {}
+        name = metadata.get("display_name") or metadata.get("full_name") or metadata.get("name")
+        return str(name or getattr(user, "email", None) or "A colleague").strip()
+    except Exception:
+        return "A colleague"
 
 
 STORE_TEAM_KINDS = ("store_listing", "unmapped_product", "retire_product", "merch_section",

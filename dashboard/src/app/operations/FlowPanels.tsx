@@ -3,7 +3,8 @@ import { StaffChatThread, fromMemberMessage } from "../staff/StaffChatThread";
 import { MemberPhotoReviewQueue } from "../staff/MemberPhotoReview";
 import { StoreFlowPanel } from "./StoreTeam";
 import { currentStepIndex, DEPARTMENT_GUIDES, GLOSSARY, GUIDES, TOOL_GUIDES, type Guide, type Step } from "./playbooks";
-import { departmentLabel, departments, requestNextStages, statusLabel, type FlowContext, type WorkItem } from "./types";
+import { departmentLabel, departments, requestNextStages, statusLabel, type Department, type FlowContext, type WorkItem } from "./types";
+import { DESK_LABEL } from "./Desks";
 import type { OperationsState } from "./useOperationsCenter";
 import { formatSpan, shortDate, toLocalInput, useNow, workClock } from "./clock";
 
@@ -793,6 +794,35 @@ export function FlowPanel({ ops, selected }: { ops: OperationsState; selected: S
           <FlowChat ops={ops} selected={selected} />
         </div>
       );
+    case "chat_handoff": {
+      const transcript = flow.from_chat || [];
+      const from = DESK_LABEL[(meta.from_department as Department) || "conversation_intake"] || "Conversations";
+      return (
+        <div className="ops-flow ops-handoff">
+          <p className="ops-handoff-from">
+            Sent from {from} by <strong>{flow.handed_by_name || "a colleague"}</strong> · {new Date(selected.created_at).toLocaleString()}
+          </p>
+          <blockquote className="ops-handoff-note">{String(meta.note || selected.next_action)}</blockquote>
+          <h4>The chat it came from</h4>
+          {transcript.length === 0 ? (
+            <p className="operations-muted">The chat has no messages to show.</p>
+          ) : (
+            <ol className="ops-transcript" aria-label="The chat it came from">
+              {transcript.map((message) => (
+                <li key={message.id} className={`is-${message.sender_type}`}>
+                  <small>
+                    {message.sender_type === "member" || message.sender_type === "customer" ? String(meta.who || "Customer") : message.sender_type === "assistant" || message.sender_type === "ai" ? "FayFort AI" : "FayFort team"} ·{" "}
+                    {new Date(message.created_at).toLocaleString()}
+                  </small>
+                  <p>{message.content}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+          {meta.member_id ? <FlowChat ops={ops} selected={selected} /> : <p className="operations-muted">Customers on Instagram, Messenger or the website are answered by Conversations; ask them there if you need more.</p>}
+        </div>
+      );
+    }
     default:
       return <p className="operations-muted">{selected.next_action}</p>;
   }

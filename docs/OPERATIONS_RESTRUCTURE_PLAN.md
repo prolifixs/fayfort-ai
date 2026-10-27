@@ -257,3 +257,32 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
 - **Phone header:** Notifications, Dark and Refresh share one row evenly; the bell drops its word under 440px.
 - Tests: `tests/test_operations_desks.py`, Operations Center tests use the rail (new: My work and the pipeline filter),
   e2e `ops-desks.spec.ts` at phone, iPad and desktop.
+
+## 7. R3 build notes (Conversations desk)
+
+- **One inbox:** the desk lists every chat waiting for a person, member app and customer channels together, and its
+  strip splits them (Member app chats, Customer chats). The **Member app chats** tool card opens the full list of
+  app chats under the desk, including the ones the AI is still handling, with Take over. Administrators also get
+  "Open full page ↗" to the Control Center's Conversations (`/?page=conversations`). The **Customer chats** card
+  filters the list to Instagram, Messenger and website chats.
+- **Three panes:** on screens 1200px and wider, a chat opens as list · chat · customer card side by side. Between 900
+  and 1199px the card sits under the chat, and the chat stops being pinned so it can't cover the card. On phones
+  everything stacks. The same card shows next to a chat opened from My work, and on hand-off items in other desks.
+- **Customer card** (`GET /operations/work-items/{id}/customer`, `app/accounts/conversation_desk.py`):
+  - Members: name, plan, rank, country and city, member since, their requests with each one's stage, invoices and
+    their other chats. Member chats stay private until claimed, as before. No phone numbers or emails are shown.
+  - Customers: name, channel, username, first message, what the AI noted, the requests the AI found with what's
+    **still needed** (for example delivery city), and their other chats.
+- **Answers** (`GET /operations/answers?q=`): a read-only search of FayFort International's knowledge and approved
+  FAQs (drafts and other accounts are left out), for any staff member. Results show a snippet, open to the full text,
+  and have **Use in reply** (adds it to the reply box) and **Copy**. It sits in the customer card, and as a desk tool
+  card when no chat is open.
+- **Send to another desk** (`POST /operations/work-items/{id}/hand-off`): from a claimed chat, pick a desk and say
+  what's needed. It becomes its own work item there ("Something sent from a chat", work type `chat_handoff`) with the
+  note, who sent it, the chat it came from, the customer card and, for members, their FayFort team chat to message
+  them. The chat stays with Conversations, and its history says "Sent to Sourcing: …". It has its own guide in the
+  Guide tab.
+- **Not in R3:** a "Handed back today" stage on the strip. Customer chats that only the AI is handling are still listed
+  in the Control Center's Conversations page, not on the desk.
+- Tests: `tests/test_conversation_desk.py`, `CustomerPane.test.tsx`, e2e `ops-conversations.spec.ts` at phone, iPad,
+  laptop and wide sizes.

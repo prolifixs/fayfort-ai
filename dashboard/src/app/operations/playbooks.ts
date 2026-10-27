@@ -359,6 +359,15 @@ function invoiceFailedSteps(input: PlaybookInput): Step[] {
   ];
 }
 
+function chatHandoffSteps(input: PlaybookInput): Step[] {
+  return [
+    claimStep(input),
+    { id: "read", title: "Read the note and the chat", how: "Conversations sent this with a note. The chat it came from is below, and the customer card shows who it is and what they asked for.", done: FINISHED.includes(input.item.status), target: "ops-flow" },
+    { id: "do", title: "Do what it needs", how: "Take it from there in your desk's usual way. For a member you can message them in their FayFort team chat below.", done: FINISHED.includes(input.item.status), target: "ops-flow" },
+    finishStep(input, "Mark it completed once it's done. The chat itself stays with Conversations."),
+  ];
+}
+
 // ---------------------------------------------------------------------------------------------
 // Store team (docs/CATALOG_MERCHANDISING_PLAN.md)
 // ---------------------------------------------------------------------------------------------
@@ -543,6 +552,8 @@ export function playbookSteps(input: PlaybookInput): Step[] {
       return invoiceVoidSteps(input);
     case "refund_after_cancel":
       return refundSteps(input);
+    case "chat_handoff":
+      return chatHandoffSteps(input);
     case "list_store_product":
     case "list_sourcing_item":
       return listingSteps(input);
@@ -837,6 +848,16 @@ Object.assign(GUIDES, {
       ...COMMON_SCREEN,
     ],
     finishes: "When an administrator publishes the listing. The find goes into the next Monday drop with room and stays out of Browse until a week after release.",
+  },
+  chat_handoff: {
+    title: "Something sent from a chat",
+    department: "sourcing",
+    what: "Whoever was answering a chat on the Conversations desk sent part of it to your desk: a product to source, a refund, a dispute.",
+    why: "The person in the chat shouldn't have to explain twice, and the chat keeps going while you handle your part.",
+    appears: "When someone on Conversations presses Send to another desk in a chat and writes what's needed.",
+    steps: sample(chatHandoffSteps, { work_type: "chat_handoff", department: "sourcing" }),
+    screen: COMMON_SCREEN,
+    finishes: "When you mark it completed. The chat itself stays with Conversations.",
   },
   fill_finds_drop: {
     title: "Filling a Finds drop",
