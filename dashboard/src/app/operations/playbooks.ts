@@ -995,7 +995,7 @@ export const DEPARTMENT_GUIDES: Record<Department, string> = {
   fulfillment: "Everything paid that has to be packed and shipped: sourced requests and shop orders.",
   disputes: "Problems after purchase: damage, wrong items, delays, refunds.",
   member_support: "Consultations and China tours, photo reviews, giveaways, failed payments and invoices.",
-  store_team: "The shop itself: listing products, choosing categories, store sections, retiring old listings and preparing campaigns.",
+  store_team: "The shop itself: listing products, the weekly FayFort Finds drop, categories, store sections, retiring old listings and campaigns.",
 };
 
 export const GLOSSARY: { term: string; meaning: string }[] = [

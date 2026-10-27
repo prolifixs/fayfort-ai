@@ -107,3 +107,10 @@
 .ops-pool-form input, .ops-pool-form select { min-width: 0; max-width: 100%; }
 .ops-trends li { grid-template-columns: minmax(0, 1fr); }
 .ops-pool-form { grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); }
+
+/* Store team cards (R6). */
+.ops-store-counts { display: grid; gap: 4px; margin: 0; }
+.ops-store-counts div { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--text-sm); }
+.ops-store-counts dt { color: var(--color-muted); }
+.ops-store-counts dd { margin: 0; font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; }
+.ops-store-counts .is-warn dt, .ops-store-counts .is-warn dd { color: var(--color-warning, #a15c00); }

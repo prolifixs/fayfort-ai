@@ -48,6 +48,7 @@ import { SchedulePanel } from "./operations/SchedulePanel";
 import { CustomerPane, AnswersSearch, isChatItem } from "./operations/CustomerPane";
 import { MemberChatsPanel } from "./workspace/MemberChatsPanel";
 import { BookingsTodayCard, CaseFile, GiveawaysCard, InvoicesCard, isDisputeItem, useSupportOverview } from "./operations/SupportTools";
+import { ComingUpCard, ListingsCard, NextDropCard, useStoreOverview } from "./operations/StoreTools";
 import { CatalogCard, DepositsCard, OrdersCard, TrendsCard, useSourcingOverview } from "./operations/SourcingTools";
 import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
 import type { Department } from "./operations/types";
@@ -217,6 +218,7 @@ export function OperationsCenterPage() {
   }, [view, deskDepartment]);
   const sourcingOverview = useSourcingOverview(token, deskDepartment === "sourcing", items);
   const supportOverview = useSupportOverview(token, deskDepartment === "member_support", items);
+  const storeOverview = useStoreOverview(token, deskDepartment === "store_team", items);
   function deskTools(department: Department) {
     const summary = deskSummary(department);
     const stageCount = (key: string) => summary?.stages.find((stage) => stage.key === key)?.count ?? 0;
@@ -240,8 +242,10 @@ export function OperationsCenterPage() {
     if (department === "store_team")
       return (
         <>
+          <NextDropCard data={storeOverview} onOpen={() => openOperationsHref("/operations?view=products&tab=finds")} />
+          <ListingsCard data={storeOverview} onOpen={() => openOperationsHref("/operations?view=products&tab=listings")} />
+          <ComingUpCard data={storeOverview} onOpen={() => openRail("schedule")} />
           {storeTeam && <ToolCard title="Products" line="The store, sourcing items, listings in progress, Finds and sections." onOpen={() => openRail("products")} openLabel="Open Products" />}
-          <ToolCard title="Schedule" line="Finds drops, campaigns and sections coming up." onOpen={() => openRail("schedule")} openLabel="Open the schedule" />
         </>
       );
     if (department === "member_support")

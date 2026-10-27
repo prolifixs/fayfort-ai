@@ -337,3 +337,19 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
     Stripe ↗".
   - The chat shows once the case is claimed, like any member chat.
 - Tests: `tests/test_support_desk.py`, `SupportTools.test.tsx`, e2e `ops-support.spec.ts` at phone, iPad and desktop.
+
+## 10. R6 build notes (Store team desk)
+
+- **Store team tool cards** (`GET /operations/store/overview`, for the Store team and administrators):
+  - **Next Finds drop:** the next drop that hasn't reached the catalog yet, when Pro and Standard see it (China
+    time shown in the viewer's clock), a bar of how full it is ("6 of 10 finds", "4 more to fill it") and how many
+    finds are in research (scouted, checked in China, with an administrator). "Open Finds" goes straight to the
+    Finds tab of Products.
+  - **Listings:** changes asked for and listings that didn't publish (both in amber when there are any), drafts,
+    waiting for an administrator, Shopify products with no category, and how many went live this week. "Open
+    listings" goes to the Listings tab.
+  - **Coming up:** sales, giveaways, store sections, launches and Finds drops in the next two weeks, from the Schedule,
+    with "Open the schedule".
+  - **Products:** the full Products workspace (Store, Sourcing, In progress, Finds, Sections), as before.
+- The desk line now mentions the weekly FayFort Finds drop.
+- Tests: `tests/test_store_desk.py`, e2e `ops-store.spec.ts` at phone, iPad and desktop.

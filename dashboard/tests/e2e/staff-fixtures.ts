@@ -80,6 +80,19 @@ const desks = {
   ],
 };
 
+// Store team desk (R6).
+const storeOverview = {
+  next_drop: { id: "d1", title: "Finds · 2 Nov", early_at: iso(-60 * 24 * 4), release_at: iso(-60 * 24 * 6), catalog_at: iso(-60 * 24 * 13), target_count: 10, count: 6, state: "planned" },
+  finds_in_research: { scouted: 4, checked: 2, in_review: 1 },
+  listings: { draft: 3, in_review: 2, changes_requested: 1, failed: 0, published_this_week: 5 },
+  unmapped_products: 2,
+  coming_up: [
+    { id: "sale:s1", type: "sale", title: "Weekend wig sale starts", at: iso(-60 * 24 * 2), status: "scheduled" },
+    { id: "drop:d1", type: "drop", title: "Finds · 2 Nov opens for Pro", at: iso(-60 * 24 * 4), status: "planned" },
+    { id: "giveaway:g2", type: "giveaway", title: "Bonnet drop ends", at: iso(-60 * 24 * 6), status: "open" },
+  ],
+};
+
 // Member support and Disputes desks (R5).
 const supportOverview = {
   unpaid_days: 3,
@@ -152,6 +165,7 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path.endsWith("/take-over")) return { taken_over: true, idle_minutes: 30 };
   if (path.endsWith("/hand-back")) return { taken_over: false };
   if (path.startsWith("/operations/bookings") || path.startsWith("/operations/availability/") || path === "/platform/staff/candidates") return bookingFixture(path, search);
+  if (path === "/operations/store/overview") return storeOverview;
   if (path.startsWith("/operations/store/") || path === "/operations/schedule") return storeFixture(path, search);
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/desks") return desks;

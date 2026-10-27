@@ -513,6 +513,36 @@ def create_store_team_router(trusted_fayfort_staff: Callable[[str | None], dict 
         return {"section_id": str(section_id), "status": "archived"}
 
     # ---- schedule ------------------------------------------------------------------------------
+    @router.get("/operations/store/overview")
+    def store_overview(authorization: str | None = Header(default=None)):
+        """The Store team desk's cards (docs/OPERATIONS_RESTRUCTURE_PLAN.md, R6): the next Finds drop and how full it is,
+        listings by state, products waiting for a category, and campaigns, sections and drops in the next two weeks."""
+        staff = store_staff(authorization)
+        try:
+            from app.finds import service as finds
+            now = datetime.now(timezone.utc)
+            drops = [d for d in finds.staff_drops() if d.get("state") in ("planned", "early", "released")]
+            next_drop = drops[0] if drops else None
+            find_rows = rows(db().table("finds").select("status").in_("status", list(finds.OPEN)).limit(2000).execute())
+            listing_rows = rows(db().table("store_listings").select("status,updated_at")
+                                .in_("status", ["draft", "in_review", "changes_requested", "published", "failed"])
+                                .limit(2000).execute())
+            week_ago = (now - timedelta(days=7)).isoformat()
+            listings = {state: sum(1 for row in listing_rows if row.get("status") == state)
+                        for state in ("draft", "in_review", "changes_requested", "failed")}
+            listings["published_this_week"] = sum(1 for row in listing_rows if row.get("status") == "published"
+                                                  and str(row.get("updated_at") or "") >= week_ago)
+            unmapped = len(rows(db().table("directory_products").select("id").eq("category_needs_mapping", True)
+                                .eq("active", True).limit(1000).execute()))
+            coming = build_schedule(start=now, end=now + timedelta(days=14), admin=is_admin(staff), user_id=staff["user_id"],
+                                    departments=["store_team"], types={"giveaway", "sale", "section", "drop", "launch"})
+            return {"next_drop": next_drop,
+                    "finds_in_research": {state: sum(1 for row in find_rows if row.get("status") == state) for state in finds.OPEN},
+                    "listings": listings, "unmapped_products": unmapped,
+                    "coming_up": sorted(coming, key=lambda entry: str(entry.get("at") or ""))[:8]}
+        except Exception as exc:
+            raise failure(exc, "The Store team desk's cards could not be loaded.") from exc
+
     @router.get("/operations/schedule")
     def schedule(start: datetime, end: datetime, types: str = Query(default="", max_length=200),
                  department: str | None = Query(default=None, max_length=40),
