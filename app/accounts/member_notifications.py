@@ -188,7 +188,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
             body = stage_label
             if event.get("member_note"):
                 body += f" — {event['member_note']}"
-            href = f"/member/products#request-{event['request_id']}"
+            href = f"/member/orders#request-{event['request_id']}"
             source_id = event["request_id"]
         elif kind == "worker_reply":
             message = message_by_id.get(row.get("worker_message_id"))
@@ -220,7 +220,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
             title = "How was your order?"
             body = (f"Thanks for reviewing {invite['title']}." if invite.get("reviewed_at")
                     else f"{invite['title']} is on its way. Tell other buyers how FayFort did; it takes a minute.")
-            href = f"/member/products#review-{invite['id']}"
+            href = f"/member/orders#review-{invite['id']}"
             source_id = invite["id"]
         elif kind == "worker_rating":
             prompt = prompt_by_id.get(row.get("worker_rating_prompt_id"))
@@ -231,7 +231,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
             body = ("Thanks for rating it." if prompt.get("rated_at")
                     else f"Rate your {'chat' if prompt.get('conversation_id') else 'order'} \"{prompt['title']}\". It takes a second.")
             href = (f"/member/chat?conversation={prompt['conversation_id']}#rate" if prompt.get("conversation_id")
-                    else f"/member/products#rate-{prompt['id']}")
+                    else f"/member/orders#rate-{prompt['id']}")
             source_id = prompt["id"]
         elif kind == "recurring_schedule_update":
             event = schedule_event_by_id.get(row.get("schedule_event_id"))
@@ -252,7 +252,7 @@ def _project_notifications(rows: list[dict], member_id: str) -> list[dict]:
                 "completed": "Your recurring request schedule is complete.",
                 "schedule_edited": "The quantity or date for a future recurring request was updated.",
             }.get(event["event_type"], "Your recurring request schedule was updated.") + occurrence
-            href = "/member/products"
+            href = "/member/orders#recurring"
             source_id = schedule["id"]
         else:
             continue

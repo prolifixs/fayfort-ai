@@ -37,14 +37,16 @@ import { CHAT_TOOLS, chatToolLabelsVisible, type ChatToolKey } from "./chatTools
 import { ToolsPanel, toolFromUrl, type ToolKey } from "./ToolsPanel";
 import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, type ProductRef } from "./productChat";
 import { VisitorPopups } from "../consent/VisitorPopups";
+import { NotificationInbox } from "../MemberNotifications";
+import { MembershipPanel, NotFoundPanel, SettingsSection } from "./AccountPanels";
+import { MEMBER_NAV, MEMBER_ACCOUNT_NAV, MEMBER_TABS, NavIcon } from "./memberNav";
+import { canonicalHref, panelFor, panelHref, type MemberPanel } from "./memberRoutes";
 
-type MemberPanel = "chat" | "catalog" | "finds" | "saved" | "requests" | "product" | "tools";
-const memberPanels: MemberPanel[] = ["catalog", "finds", "saved", "requests", "product", "tools"];
+/** Sections about the member's account: no chat beside them. */
+const ACCOUNT_PANELS: MemberPanel[] = ["settings", "membership", "notifications", "notfound"];
+/** Which section the current address opens (memberRoutes.ts: /member/shop, /member/orders, old ?panel= links …). */
 function panelFromUrl(): MemberPanel {
-  const panel = new URLSearchParams(window.location.search).get("panel");
-  // The supplier directory moved into Tools (2026-10-20); old links still land on it.
-  if (panel === "directory") return "tools";
-  return panel && memberPanels.includes(panel as MemberPanel) ? (panel as MemberPanel) : "chat";
+  return panelFor(window.location.pathname, window.location.search, window.location.hash);
 }
 function initialTool(): ToolKey | null {
   return new URLSearchParams(window.location.search).get("panel") === "directory" ? "directory" : toolFromUrl();
@@ -166,26 +168,28 @@ export function MemberChatPage() {
   const [requestProgressBusy, setRequestProgressBusy] = useState(false);
   const [progressRequest, setProgressRequest] = useState<MemberOwnedRequest | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set());
-  const [activePanel, setActivePanel] = useState<MemberPanel>(() =>
-    panelFromUrl() === "product" && !new URLSearchParams(window.location.search).get("product") ? "chat" : panelFromUrl(),
-  );
+  const [activePanel, setActivePanel] = useState<MemberPanel>(panelFromUrl);
   const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
   function selectMemberPanel(panel: MemberPanel) {
     setActivePanel(panel);
     setSidebarOpen(false);
     setChatExpanded(false);
-    const url = panel === "chat" ? "/member/chat" : `/member/chat?panel=${panel}`;
-    window.history.pushState({ memberPanel: panel }, "", url);
+    window.history.pushState({ memberPanel: panel }, "", panelHref(panel));
   }
   /** Product pages open beside the chat, so the member can keep asking about the item. */
   function openProduct(card: ShopCard | { id: string }) {
     setProductId(card.id);
     setActivePanel("product");
     setChatExpanded(true);
-    window.history.pushState({ memberPanel: "product" }, "", `/member/chat?panel=product&product=${encodeURIComponent(card.id)}`);
+    window.history.pushState({ memberPanel: "product" }, "", panelHref("product", `?product=${encodeURIComponent(card.id)}`));
   }
   useEffect(() => {
     if (window.location.pathname === "/member/share") window.history.replaceState({}, "", "/member/chat");
+    else {
+      // Old-style addresses (/member/chat?panel=requests, /member/products) are tidied to the section's own path.
+      const tidy = canonicalHref(window.location.pathname, window.location.search, window.location.hash);
+      if (tidy) window.history.replaceState(window.history.state, "", tidy);
+    }
     const onPopState = () => {
       const panel = panelFromUrl();
       setProductId(new URLSearchParams(window.location.search).get("product") || "");
@@ -897,14 +901,20 @@ export function MemberChatPage() {
     typeof profile?.display_name === "string" && profile.display_name.trim() ? profile.display_name.trim() : "Member";
   const panelTitles: Record<MemberPanel, string> = {
     chat: activeChat?.title || "New chat",
-    catalog: "Browse",
+    catalog: "Shop",
     finds: "Finds",
-    saved: "Saved products",
+    saved: "Saved",
     requests: "Orders & requests",
     product: "Product",
-    tools: "Tools",
+    tools: "Bookings & tools",
+    settings: "Settings",
+    membership: "Membership",
+    notifications: "Notifications",
+    notfound: "Page not found",
   };
-  const split = activePanel !== "chat" && chatExpanded && isDesktop;
+  const split = activePanel !== "chat" && chatExpanded && isDesktop && !ACCOUNT_PANELS.includes(activePanel);
+  // Phones get a tab bar on every section except the conversation itself and a product page.
+  const showTabs = !isDesktop && activePanel !== "chat" && activePanel !== "product";
   const showChat = activePanel === "chat" || split;
   // A worker reply in the chat already on screen doesn't need a pop-up (MemberNotificationsBar checks this).
   const visibleChatId = showChat ? activeChat?.id || null : null;
@@ -917,13 +927,6 @@ export function MemberChatPage() {
     if (authLoading || token) return;
     if (/[?&](tool|slot)=/.test(window.location.search)) rememberReturn(window.location.pathname + window.location.search);
   }, [authLoading, token]);
-  const navItems: { panel: MemberPanel; label: string; icon: string }[] = [
-    { panel: "catalog", label: "Browse", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
-    { panel: "finds", label: "Finds", icon: "M12 3l2.2 5.6L20 9.3l-4.4 3.8L17 19l-5-3.1L7 19l1.4-5.9L4 9.3l5.8-.7z" },
-    { panel: "saved", label: "Saved products", icon: "M6 4h12v16l-6-4-6 4z" },
-    { panel: "requests", label: "Orders & requests", icon: "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" },
-    { panel: "tools", label: "Tools", icon: "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" },
-  ];
   if (!dashboardAuthConfigured) return <SetupScreen />;
   if (authLoading || !token || !verified) {
     return (
@@ -936,9 +939,16 @@ export function MemberChatPage() {
           <FayfortLoader label="Checking your member sign-in…" />
         ) : !token ? (
           <div className="member-chat-empty">
-            <h1>Sign in to start a chat</h1>
-            <p>Chat helps you explore active catalog products. You can browse the catalog without using AI chat.</p>
-            <a className="primary-button" href="/member/account">
+            <h1>Sign in to your FayFort account</h1>
+            <p>Your chats, orders, saved products and Finds are all in your member account.</p>
+            <a
+              className="primary-button"
+              href="/member/account"
+              onClick={() => {
+                // Come back to the page the member was trying to open (for example /member/orders from an email).
+                if (window.location.pathname !== "/member/chat") rememberReturn(window.location.pathname + window.location.search + window.location.hash);
+              }}
+            >
               Member sign in
             </a>
           </div>
@@ -952,7 +962,7 @@ export function MemberChatPage() {
   const listedChats = chats.filter((chat) => !unwrittenIds.includes(chat.id));
   return (
     <AdsProvider accessToken={verified ? token : null} planKey={memberPlan?.tier} onUpgrade={openPlans}>
-    <div className={sidebarOpen && !isDesktop ? "mapp sidebar-open" : "mapp"}>
+    <div className={["mapp", sidebarOpen && !isDesktop ? "sidebar-open" : "", showTabs ? "has-tabbar" : ""].filter(Boolean).join(" ")}>
       <aside
         id="member-sidebar"
         className="mapp-sidebar"
@@ -975,25 +985,44 @@ export function MemberChatPage() {
         </div>
         <button type="button" className="mapp-new-chat" data-tour="new-chat" onClick={() => void createChat()} disabled={busy}>
           <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            <path d="M12 5v14M5 12h14" />
           </svg>
-          <span>New chat</span>
+          <span>Ask FayFort</span>
         </button>
         <nav className="mapp-nav" aria-label="Member navigation">
-          {navItems.map((item) => (
-            <button
+          {MEMBER_NAV.map((item) => (
+            <a
               key={item.panel}
-              type="button"
+              href={panelHref(item.panel)}
               className={activePanel === item.panel ? "active" : ""}
-              data-tour={item.panel === "catalog" ? "browse" : item.panel}
+              data-tour={item.tour}
               aria-current={activePanel === item.panel ? "page" : undefined}
-              onClick={() => selectMemberPanel(item.panel)}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                selectMemberPanel(item.panel);
+              }}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d={item.icon} />
-              </svg>
+              <NavIcon d={item.icon} />
               <span>{item.label}</span>
-            </button>
+            </a>
+          ))}
+          <p className="mapp-nav-group">Account</p>
+          {MEMBER_ACCOUNT_NAV.map((item) => (
+            <a
+              key={item.panel}
+              href={panelHref(item.panel)}
+              className={activePanel === item.panel ? "active" : ""}
+              aria-current={activePanel === item.panel ? "page" : undefined}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                selectMemberPanel(item.panel);
+              }}
+            >
+              <NavIcon d={item.icon} />
+              <span>{item.label}</span>
+            </a>
           ))}
         </nav>
         <section className="mapp-history" aria-label={archiveOpen ? "Archived chats" : "Your chats"} data-tour="chats">
@@ -1124,7 +1153,14 @@ export function MemberChatPage() {
               <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
                 Account details
               </button>
-              <button type="button" role="menuitem" onClick={() => openAccountDialog("settings")}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAccountOpen(false);
+                  selectMemberPanel("settings");
+                }}
+              >
                 Settings
               </button>
               <button
@@ -1326,6 +1362,22 @@ export function MemberChatPage() {
               {activePanel === "finds" && <FindsPanel accessToken={token} onOpenProduct={(id) => openProduct({ id })} onUpgrade={openPlans} />}
               {activePanel === "tools" && <ToolsPanel accessToken={token} initial={initialTool()} />}
               {activePanel === "saved" && <SavedPanel accessToken={token} onOpen={openProduct} onBrowse={() => selectMemberPanel("catalog")} />}
+              {activePanel === "settings" && (
+                <SettingsSection>
+                  <MemberSettingsPanel
+                    onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
+                    onCompletionChange={setCompletion}
+                    onPlanChange={reloadPlan}
+                  />
+                </SettingsSection>
+              )}
+              {activePanel === "membership" && <MembershipPanel accessToken={token} profile={profile} />}
+              {activePanel === "notifications" && (
+                <section className="member-workspace-panel member-account-section">
+                  <NotificationInbox accessToken={token} />
+                </section>
+              )}
+              {activePanel === "notfound" && <NotFoundPanel onGo={(panel) => selectMemberPanel(panel)} />}
               {activePanel === "product" && productId && (
                 <ProductPanel
                   accessToken={token}
@@ -1403,10 +1455,10 @@ export function MemberChatPage() {
                                 rails={home.rails}
                                 tiles={home.category_tiles || []}
                                 onOpen={openProduct}
-                                browseHref="/member/chat?panel=catalog"
+                                browseHref={panelHref("catalog")}
                               />
                             ) : (
-                              <a href="/member/chat?panel=catalog">Browse products directly</a>
+                              <a href={panelHref("catalog")}>Browse products directly</a>
                             )}
                             {home && home.giveaways.length > 0 && (
                               <HotRails
@@ -1916,7 +1968,7 @@ export function MemberChatPage() {
                   )}
                 </section>
               )}
-              {activePanel !== "chat" && !split && (
+              {activePanel !== "chat" && !split && (isDesktop ? !ACCOUNT_PANELS.includes(activePanel) : activePanel === "product") && (
                 <button
                   type="button"
                   className="member-chat-restore"
@@ -1931,6 +1983,37 @@ export function MemberChatPage() {
                 </button>
               )}
         </div>
+        {showTabs && (
+          <nav className="mapp-tabbar" aria-label="Sections">
+            {MEMBER_TABS.map((item) =>
+              item.panel === "more" ? (
+                <button
+                  key="more"
+                  type="button"
+                  aria-controls="member-sidebar"
+                  aria-expanded={sidebarOpen}
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <NavIcon d={item.icon} />
+                  <span>{item.label}</span>
+                </button>
+              ) : (
+                <a
+                  key={item.panel}
+                  href={panelHref(item.panel)}
+                  aria-current={activePanel === item.panel ? "page" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    selectMemberPanel(item.panel);
+                  }}
+                >
+                  <NavIcon d={item.icon} />
+                  <span>{"short" in item && item.short ? item.short : item.label}</span>
+                </a>
+              ),
+            )}
+          </nav>
+        )}
       </div>
     </div>
     </AdsProvider>

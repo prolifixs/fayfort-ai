@@ -764,7 +764,7 @@ def niche_request(member_id: str, text: str) -> dict:
 # ---------------------------------------------------------------------------------------------
 # Alerts and the weekly release
 # ---------------------------------------------------------------------------------------------
-def _email(member_id: str, title: str, body: str, href: str = "/member/chat?panel=finds") -> None:
+def _email(member_id: str, title: str, body: str, href: str = "/member/finds") -> None:
     from app.commerce import service as commerce
     commerce.queue_email(member_id, category="notifications", template="commerce_finds", title=title, body=body, href=href)
 
@@ -778,7 +778,7 @@ def _alert_watchers(find: dict, key: str, title: str, body: str) -> int:
         member_id = str(watch_row["member_id"])
         try:
             if access_for(member_id)["alerts"]:
-                _email(member_id, title, body, f"/member/chat?panel=finds&find={find['id']}")
+                _email(member_id, title, body, f"/member/finds?find={find['id']}")
                 count += 1
         except Exception:
             logger.exception("Could not alert a member watching a find")

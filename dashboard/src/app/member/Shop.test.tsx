@@ -108,9 +108,9 @@ describe("shop inside the chat shell", () => {
     expect(within(picks).queryByText("Viral wig")).not.toBeInTheDocument(); // links are not products
     expect(within(picks).getByRole("link", { name: "Furniture from China" })).toHaveAttribute(
       "href",
-      "/member/chat?panel=catalog&top=Home%2C%20Furniture%20%26%20Interior",
+      "/member/shop?top=Home%2C%20Furniture%20%26%20Interior",
     );
-    expect(within(picks).getByRole("link", { name: "Browse all products" })).toHaveAttribute("href", "/member/chat?panel=catalog");
+    expect(within(picks).getByRole("link", { name: "Browse all products" })).toHaveAttribute("href", "/member/shop");
     fireEvent.click(within(screen.getByRole("region", { name: "Giveaways" })).getByRole("button", { name: "Enter" }));
     expect(await screen.findByText("You're entered. Good luck!")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "You're in" })).toBeDisabled();
@@ -214,7 +214,7 @@ describe("shop inside the chat shell", () => {
       expect(within(tour).getByRole("heading", { name: title })).toBeInTheDocument();
     }
     fireEvent.click(within(tour).getByRole("button", { name: "Next" }));
-    expect(within(tour).getByText("Browse")).toBeInTheDocument();
+    expect(within(tour).getByText("Shop")).toBeInTheDocument();
     fireEvent.click(within(tour).getByRole("button", { name: "Skip tour" }));
     await waitFor(() => expect(tourDone).toBe(true));
     expect(screen.queryByRole("dialog", { name: "Dashboard tour" })).not.toBeInTheDocument();
@@ -276,5 +276,40 @@ describe("Control Center shop", () => {
     expect(await screen.findByText("Pool is open.")).toBeInTheDocument();
     const put = fetchMock.mock.calls.find(([url, init]) => String(url).includes("/trends/t1") && init?.method === "PUT");
     expect(JSON.parse(String(put?.[1]?.body))).toEqual({ status: "pooling", pool_target: 10, pool_price: "55.00", pool_currency: "USD" });
+  });
+});
+
+describe("member shell addresses and menu (facelift phase 2)", () => {
+  it("opens each section at its own address, in the approved menu order", async () => {
+    window.history.replaceState({}, "", "/member/orders");
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Member navigation" });
+    const labels = within(nav).getAllByRole("link").map((link) => link.textContent);
+    expect(labels).toEqual(["Chats", "Shop", "Finds", "Orders & requests", "Saved", "Bookings & tools", "Membership", "Settings", "Notifications"]);
+    expect(within(nav).getByRole("link", { name: "Orders & requests" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: "Orders & requests", level: 1 })).toBeInTheDocument();
+    fireEvent.click(within(nav).getByRole("link", { name: "Shop" }));
+    expect(window.location.pathname).toBe("/member/shop");
+    expect(screen.getByRole("button", { name: "Ask FayFort" })).toBeInTheDocument();
+  });
+
+  it("tidies old links and keeps the deep-link details", async () => {
+    window.history.replaceState({}, "", "/member/chat?panel=requests#request-r9");
+    render(<App />);
+    await screen.findByRole("navigation", { name: "Member navigation" });
+    expect(window.location.pathname + window.location.hash).toBe("/member/orders#request-r9");
+  });
+
+  it("shows Settings and Membership inside the shell, and a friendly page for unknown addresses", async () => {
+    window.history.replaceState({}, "", "/member/settings");
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Settings", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Chats and navigation" })).toBeInTheDocument();
+    cleanup();
+    window.history.replaceState({}, "", "/member/browse");
+    render(<App />);
+    const missing = await screen.findByRole("region", { name: "This page isn’t here" });
+    fireEvent.click(within(missing).getByRole("link", { name: "Shop" }));
+    expect(window.location.pathname).toBe("/member/shop");
   });
 });

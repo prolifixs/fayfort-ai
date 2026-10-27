@@ -1,4 +1,5 @@
 import { cleanup,fireEvent,render,screen,waitFor,within } from "@testing-library/react";
+import { MemberRequestsPanel } from "./member/MemberRequestsPanel";
 import { afterEach,beforeEach,describe,expect,it,vi } from "vitest";
 import { MemberPhotoReviewQueue } from "./staff/MemberPhotoReview";
 import { App,DashboardWorkspace,WorkerInvitationAcceptancePage,WorkerPasswordResetPage,WorkerProvisioningPage } from "./App";
@@ -267,46 +268,6 @@ describe("authenticated dashboard workspace",()=>{
   expect(JSON.parse(String(hold?.[1]?.body))).toEqual({request_id:"request-2"});
  });
 
- it("browses active member products and saves/removes them through the member API",async()=>{
-  let isSaved=false;
-  const product={id:"product-1",name:"Sample widget",category_ref:"cat-1",description:"Catalog item",availability_status:"available",media_url:"https://cdn.example.test/widget.jpg",media_type:"image",media_source:"url"};
-  fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
-   const url=String(input);
-   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
-   if(url.includes("/members/products/")){
-    if(init?.method==="POST")isSaved=true;
-    if(init?.method==="DELETE")isSaved=false;
-    return {ok:true,status:200,json:async()=>({product_id:"product-1",saved:isSaved}),headers:new Headers()} as Response;
-   }
-   if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[product],saved_product_ids:isSaved?["product-1"]:[],categories:[{source_ref:"cat-1",category:"Tools",product_type:"Widget"}]}),headers:new Headers()} as Response;
-   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-  });
-  window.history.replaceState({},"","/member/products");
-  render(<App/>);
-  expect(await screen.findByRole("region",{name:"Available products"})).toBeInTheDocument();
-  expect(screen.getByRole("heading",{name:"Sample widget"})).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button",{name:"Save product"}));
-  expect(await screen.findByRole("button",{name:"Remove saved product"})).toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([input,init])=>String(input).includes("/members/products/product-1/saved")&&init?.method==="POST")).toBe(true);
-  fireEvent.click(screen.getByRole("button",{name:"Remove saved product"}));
-  expect(await screen.findByRole("button",{name:"Save product"})).toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([input,init])=>String(input).includes("/members/products/product-1/saved")&&init?.method==="DELETE")).toBe(true);
- });
-
- it("keeps automated photo matching out of the product catalog",async()=>{
-  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
-   const url=String(input);
-   if(url.endsWith("/members/me"))return {ok:true,status:200,json:async()=>({profile:{user_id:"member-1"}}),headers:new Headers()} as Response;
-   if(url.includes("/members/products"))return {ok:true,status:200,json:async()=>({products:[],saved_product_ids:[],categories:[]}),headers:new Headers()} as Response;
-   return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
-  });
-  window.history.replaceState({},"","/member/products");render(<App/>);
-  expect(await screen.findByRole("heading",{name:"Products"})).toBeInTheDocument();
-  expect(screen.queryByRole("region",{name:/photo/i})).not.toBeInTheDocument();
-  expect(screen.queryByLabelText(/product photo/i)).not.toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([input])=>String(input).includes("product-image-search"))).toBe(false);
- });
-
  it("submits a member sourcing request and displays its persisted timeline",async()=>{
   let created=false;
   let submittedBody:Record<string,unknown>|null=null;
@@ -319,7 +280,7 @@ describe("authenticated dashboard workspace",()=>{
    if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:created?[{id:"request-1",request_title:"Source a widget",request_description:"Two units",events:[{id:"event-1",sequence_no:1,stage:"submitted",member_note:null,created_at:"2026-10-10T00:00:00Z"}]}]:[]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/member/products");render(<App/>);
+  render(<MemberRequestsPanel accessToken="worker-recovery-token"/>);
   fireEvent.change(await screen.findByRole("textbox",{name:"Request title"}),{target:{value:"Source a widget"}});
   fireEvent.click(screen.getByRole("radio",{name:"Site catalog"}));
   fireEvent.change(await screen.findByRole("combobox",{name:"Catalog product"}),{target:{value:"site-product"}});
@@ -341,7 +302,7 @@ describe("authenticated dashboard workspace",()=>{
    if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source a wig",request_description:null,events:answered?[...asked,{id:"e3",sequence_no:3,stage:"sourcing",member_note:"Member answered: 22 inch",created_at:"2026-10-10T00:09:00Z"}]:asked}]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/member/products");render(<App/>);
+  render(<MemberRequestsPanel accessToken="worker-recovery-token"/>);
   const form=await screen.findByRole("form",{name:"Answer FayFort about Source a wig"});
   expect(within(form).getByText(/Which length would you like/)).toBeInTheDocument();
   fireEvent.change(within(form).getByRole("textbox",{name:"Your answer"}),{target:{value:"22 inch"}});
@@ -361,7 +322,7 @@ describe("authenticated dashboard workspace",()=>{
    if(url.endsWith("/members/requests"))return {ok:true,status:200,json:async()=>({requests:[{id:"request-1",request_title:"Source a wig",request_description:null,eta_at:"2026-10-24T18:00:00Z",eta_reason:"Supplier restocks Friday",events:cancelled?[...events,{id:"e3",sequence_no:3,stage:"cancelled",member_note:"You cancelled this request.",created_at:"2026-10-10T00:09:00Z"}]:events}]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/member/products");render(<App/>);
+  render(<MemberRequestsPanel accessToken="worker-recovery-token"/>);
   const eta=await screen.findByLabelText("Estimated delivery for Source a wig");
   expect(within(eta).getByText(/Supplier restocks Friday/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"Cancel request"}));
@@ -385,7 +346,7 @@ describe("authenticated dashboard workspace",()=>{
    if(url.includes("/members/recurring-schedules"))return {ok:true,status:200,json:async()=>({schedules:[]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/member/products");render(<App/>);
+  render(<MemberRequestsPanel accessToken="worker-recovery-token"/>);
   fireEvent.change(await screen.findByRole("textbox",{name:"Request title"}),{target:{value:"Monthly tea supply"}});
   fireEvent.click(screen.getByRole("checkbox",{name:"Make this a recurring purchase"}));
   fireEvent.change(screen.getByRole("combobox",{name:"Repeat interval"}),{target:{value:"custom"}});
@@ -453,7 +414,7 @@ describe("authenticated dashboard workspace",()=>{
    ]}]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  window.history.replaceState({},"","/member/products");render(<App/>);
+  render(<MemberRequestsPanel accessToken="worker-recovery-token"/>);
   expect(await screen.findByText("Purchase confirmed · paid")).toBeInTheDocument();
   expect(screen.getByText("We received your request and saved the details.")).toBeInTheDocument();
   expect(screen.getByText("The item has arrived at FayFort. A team member may add inspection photos or video.")).toBeInTheDocument();

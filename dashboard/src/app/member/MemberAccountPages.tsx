@@ -1,35 +1,23 @@
 import { AuthPage } from "../auth/AuthPage";
 import { landingFor } from "../auth/landing";
-import { MemberNotificationsBar, MemberNotificationsPage } from "../MemberNotifications";
+import { MemberNotificationsBar } from "../MemberNotifications";
 import { dashboardAuthConfigured, supabaseClient } from "../../lib/supabase";
 import { apiRequest } from "../../lib/api";
 import { FormEvent, useEffect, useState } from "react";
-import { MemberProductsPage } from "./MemberProductsPage";
 import { MemberChatPage } from "./MemberChatPage";
+import { isShellPath } from "./memberRoutes";
 import { SetupScreen } from "../SetupScreen";
 import { authCallbackUrl, forgotPasswordPath, friendlyAuthError } from "../auth/authLinks";
 import { PasswordFields, passwordPairError, type PasswordPair } from "../auth/PasswordFields";
 import { RequestLinkForm } from "../auth/RequestLinkForm";
 import { useCaptcha } from "../auth/Turnstile";
-import { formatMemberTier } from "./memberShared";
-import { MemberSettingsPanel } from "./MemberSettingsPanel";
-import { MemberPlanComparison } from "./MemberAccountDialogs";
-import { PlanBilling } from "./PlanBilling";
-import { BrandMark, FayfortLoader } from "../brand/FayfortLogo";
+import { BrandMark } from "../brand/FayfortLogo";
 import { rememberSiteChatCode } from "./siteChatCarryOver";
 import { takeReturn } from "../../lib/returnTo";
 
 export function MemberRoutePage() {
-  if (window.location.pathname === "/member/notifications") return <MemberNotificationsPage />;
-  if (window.location.pathname === "/member/products") return <MemberProductsPage />;
-  if (window.location.pathname === "/member/chat" || window.location.pathname === "/member/share") return <MemberChatPage />;
-  if (window.location.pathname === "/member/settings") return <MemberSettingsPage />;
-  if (window.location.pathname === "/member/membership") return <MemberMembershipPage />;
-  // Points and tier are pop-ups in the chat header now; old links land in the chat.
-  if (window.location.pathname === "/member/rewards") {
-    window.location.replace("/member/chat");
-    return null;
-  }
+  // Every member address opens the one shell (memberRoutes.ts); only sign-in and sign-up have their own page.
+  if (isShellPath(window.location.pathname)) return <MemberChatPage />;
   return <MemberAccountPage />;
 }
 
@@ -298,8 +286,8 @@ export function MemberAccountPage() {
             <a className="primary-button member-products-link" href="/member/chat">
               Chat with FayFort
             </a>
-            <a className="secondary-button member-products-link" href="/member/products">
-              Browse products
+            <a className="secondary-button member-products-link" href="/member/shop">
+              Shop products
             </a>
             <button className="primary-button" onClick={() => void signOut()}>
               Sign out
@@ -325,90 +313,5 @@ export function MemberAccountPage() {
         )}
       </section>
     </AuthPage>
-  );
-}
-
-export function MemberSettingsPage() {
-  if (!dashboardAuthConfigured) return <SetupScreen />;
-  return (
-    <div className="auth-page member-settings-page">
-      <section className="auth-card member-settings-card">
-        <BrandMark />
-        <label>FAYFORT MEMBER</label>
-        <h1>Settings</h1>
-        <p>Manage your sign-in methods, profile appearance, and membership options.</p>
-        <MemberSettingsPanel />
-        <a href="/member/chat">Back to chat</a>
-      </section>
-    </div>
-  );
-}
-
-export function MemberMembershipPage() {
-  const [token, setToken] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    let mounted = true;
-    if (!supabaseClient) {
-      setLoading(false);
-      return;
-    }
-    supabaseClient.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      const accessToken = data.session?.access_token || null;
-      setToken(accessToken);
-      if (accessToken) {
-        try {
-          const result = await apiRequest<{ profile: Record<string, unknown> }>("/members/me", accessToken);
-          if (mounted) setProfile(result.profile);
-        } catch (reason) {
-          if (mounted) setError(reason instanceof Error ? reason.message : "Membership details could not be loaded.");
-        }
-      }
-      setLoading(false);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-  if (!dashboardAuthConfigured) return <SetupScreen />;
-  const currentTier = formatMemberTier(profile?.member_tier);
-  return (
-    <div className="auth-page member-settings-page">
-      <section className="auth-card member-membership-card">
-        <BrandMark />
-        <label>FAYFORT MEMBER</label>
-        <h1>Member plans</h1>
-        <p>Plans belong to your member account. The internal Client account tools are for FayFort staff only.</p>
-        {loading ? (
-          <FayfortLoader label="Loading member plan…" />
-        ) : !token ? (
-          <p role="status">
-            Sign in to view your member plan. <a href="/member/account">Member sign in</a>
-          </p>
-        ) : (
-          <>
-            {error && (
-              <p role="alert" className="form-error">
-                {error}
-              </p>
-            )}
-            {profile && (
-              <>
-                <p className="member-current-plan" role="status">
-                  Your current plan: <strong>{currentTier}</strong>
-                </p>
-                <MemberPlanComparison currentTier={currentTier} />
-                {token && <PlanBilling accessToken={token} />}
-              </>
-            )}
-          </>
-        )}
-        <a href="/member/settings">Back to settings</a>
-        <a href="/member/chat">Back to chat</a>
-      </section>
-    </div>
   );
 }

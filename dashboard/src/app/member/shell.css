@@ -1,0 +1,183 @@
+/* Member shell, UI facelift phase 2 (docs/UI_FACELIFT_PLAN.md). Option A, "Navy Glass": the theme's frame colour
+   holds the menu, and the content sits on a light sheet. Glass (blur) is used only where something scrolls behind it:
+   the phone tab bar and the phone menu drawer. Loaded after member.css.
+
+   The frame comes from the theme: its text colour for light themes (FayFort Navy for the base theme, plum for
+   Girl Boss), a deepened page colour for dark themes. Text on the frame is white or a white tint, all >= 6:1. */
+
+.member-theme-runtime {
+  --frame: var(--color-text);
+  --frame-ink: #ffffff;
+  --frame-muted: color-mix(in srgb, #ffffff 76%, var(--frame));
+  --frame-faint: color-mix(in srgb, #ffffff 58%, var(--frame));
+  --frame-hover: rgb(255 255 255 / 8%);
+  --frame-active: rgb(255 255 255 / 14%);
+  --frame-line: rgb(255 255 255 / 12%);
+  --frame-dot: var(--color-accent);
+  --sheet-radius: 24px;
+}
+.member-theme-runtime[data-theme-id="base"] { --frame-dot: #f20789; }
+.member-theme-runtime[data-theme-tone="dark"] { --frame: color-mix(in srgb, var(--color-bg) 70%, black); }
+
+/* ---------- Frame ---------- */
+.mapp {
+  background:
+    radial-gradient(90% 60% at 0% 100%, color-mix(in srgb, var(--color-accent) 30%, transparent), transparent 70%),
+    var(--frame);
+}
+.mapp-sidebar {
+  --ff-logo-shell: #ffffff;
+  border-right: 0;
+  background: transparent;
+  color: var(--frame-ink);
+}
+.mapp-sidebar .mapp-brand { color: var(--frame-ink); }
+.mapp-sidebar .icon-button { color: var(--frame-ink); }
+.mapp-sidebar .icon-button:hover { background: var(--frame-hover); }
+
+/* Ask FayFort: the one filled button in the menu. */
+.mapp-sidebar .mapp-new-chat {
+  justify-content: center; width: auto; margin: var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-accent-text);
+  transition: background var(--duration-fast) var(--ease);
+}
+.mapp-sidebar .mapp-new-chat:hover:not(:disabled) { background: var(--color-accent-hover); }
+.mapp-sidebar .mapp-new-chat svg { color: currentColor; }
+
+.mapp-nav { border-bottom-color: var(--frame-line); }
+.mapp-nav a {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%;
+  min-height: var(--tap); padding: 0 var(--space-3);
+  border-radius: var(--radius-sm); color: var(--frame-muted);
+  font-size: var(--text-md); text-decoration: none;
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.mapp-nav a:hover { background: var(--frame-hover); color: var(--frame-ink); }
+.mapp-nav a.active { background: var(--frame-active); box-shadow: inset 0 0 0 1px var(--frame-line); color: var(--frame-ink); font-weight: var(--weight-strong); }
+.mapp-nav a svg { width: 20px; height: 20px; flex: none; stroke-width: 1.75; }
+.mapp-nav a:focus-visible, .mapp-tabbar a:focus-visible, .mapp-tabbar button:focus-visible { outline: 2px solid var(--frame-ink); outline-offset: -2px; }
+.mapp-nav-group {
+  margin: var(--space-3) var(--space-3) var(--space-1); color: var(--frame-faint);
+  font-size: var(--text-2xs); font-weight: var(--weight-strong); letter-spacing: .12em; text-transform: uppercase;
+}
+
+/* Chat history on the frame */
+.mapp-sidebar .mapp-history h2,
+.mapp-sidebar .mapp-history-empty,
+.mapp-sidebar .mapp-history-note { color: var(--frame-faint); }
+.mapp-sidebar .mapp-history-head .link-button { color: var(--frame-ink); }
+.mapp-sidebar .member-chat-row:hover { background: var(--frame-hover); }
+.mapp-sidebar .member-chat-row.active { background: var(--frame-active); }
+.mapp-sidebar .member-chat-list-item { color: var(--frame-ink); }
+.mapp-sidebar .member-chat-list-item small { color: var(--frame-faint); }
+.mapp-sidebar .member-chat-options-trigger { color: var(--frame-muted); }
+.mapp-sidebar .member-chat-options-trigger:hover,
+.mapp-sidebar .member-chat-options-trigger[aria-expanded="true"] { background: var(--frame-active); color: var(--frame-ink); }
+.mapp-sidebar .mapp-archive-link { color: var(--frame-muted); }
+.mapp-sidebar .mapp-archive-link:hover { background: var(--frame-hover); color: var(--frame-ink); }
+.mapp-sidebar .mapp-archive-notice { background: var(--frame-hover); color: var(--frame-ink); }
+
+/* Account button at the foot of the menu */
+.mapp-sidebar .mapp-account { border-top-color: var(--frame-line); }
+.mapp-sidebar .mapp-account-button { color: var(--frame-ink); }
+.mapp-sidebar .mapp-account-button:hover,
+.mapp-sidebar .mapp-account-button[aria-expanded="true"] { background: var(--frame-hover); }
+.mapp-sidebar .mapp-account-text small,
+.mapp-sidebar .mapp-account-meter small { color: var(--frame-faint); }
+.mapp-sidebar .member-account-icon { background: var(--frame-active); color: var(--frame-ink); }
+
+/* ---------- The light sheet ---------- */
+.mapp-main { background: var(--color-bg); }
+.mapp-title { font-family: var(--font-display); font-size: 1.375rem; font-weight: 500; letter-spacing: -0.015em; }
+@media (min-width: 1024px) {
+  .mapp-main {
+    margin: 10px 10px 10px 0; overflow: hidden;
+    border-radius: var(--sheet-radius);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 24px 60px rgb(0 0 0 / 22%);
+  }
+  .mapp-topbar { padding-left: var(--space-6); }
+}
+
+/* Every section rises in when it opens (transform and opacity only; off when the device asks for less motion). */
+.mapp-content > .member-workspace-panel,
+.mapp-content > section:not(.member-chat-conversation) { animation: mapp-section-in var(--duration-slow) var(--ease-out); }
+@keyframes mapp-section-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- Phones and tablets ---------- */
+@media (max-width: 1023px) {
+  .mapp-main { background: transparent; }
+  .mapp-topbar { border-bottom: 0; background: transparent; color: var(--frame-ink); }
+  .mapp-topbar > .icon-button, .mapp-info > .icon-button { color: var(--frame-ink); }
+  .mapp-topbar > .icon-button:hover, .mapp-info > .icon-button:hover { background: var(--frame-hover); }
+  .mapp-topbar .member-notification-area-header .member-notification-bell,
+  .mapp-topbar .shop-cart-button { color: var(--frame-ink); }
+  .mapp-topbar .member-notification-area-header .member-notification-bell:hover,
+  .mapp-topbar .member-notification-area-header .member-notification-bell[aria-expanded="true"],
+  .mapp-topbar .shop-cart-button:hover, .mapp-topbar .shop-cart-button[aria-expanded="true"] { background: var(--frame-hover); }
+  .mapp-content { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; background: var(--color-bg); }
+  /* The menu drawer is frosted frame colour over the page. */
+  .mapp-sidebar {
+    background: color-mix(in srgb, var(--frame) 90%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+}
+
+/* Phone tab bar: four sections and More. Frosted, floating above the sheet. */
+.mapp-tabbar {
+  position: fixed; left: 10px; right: 10px; bottom: calc(10px + var(--safe-bottom)); z-index: var(--z-sticky);
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  height: 64px; border: 1px solid var(--frame-line); border-radius: 20px;
+  background: color-mix(in srgb, var(--frame) 84%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 28%);
+}
+.mapp .mapp-tabbar a, .mapp-tabbar button {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-width: 0; min-height: var(--tap); padding: 0 2px;
+  border: 0; border-radius: 16px; background: transparent; color: var(--frame-muted);
+  font: inherit; font-size: var(--text-2xs); font-weight: var(--weight-medium); text-decoration: none; cursor: pointer;
+}
+.mapp-tabbar svg { width: 22px; height: 22px; stroke-width: 1.75; }
+.mapp-tabbar span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapp .mapp-tabbar [aria-current="page"] { color: var(--frame-ink); font-weight: var(--weight-strong); }
+.mapp-tabbar [aria-current="page"]::after {
+  content: ""; position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--frame-dot);
+}
+.mapp.has-tabbar .mapp-content > .member-workspace-panel { padding-bottom: calc(96px + var(--safe-bottom)); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .mapp-tabbar, .mapp-sidebar { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--frame); }
+}
+
+/* ---------- Account sections inside the shell ---------- */
+.member-account-section > * { max-width: 880px; margin-inline: auto; }
+.member-account-section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-5); }
+.member-account-section-head h2 { margin: 0; font-family: var(--font-display); font-size: 1.75rem; font-weight: 500; letter-spacing: -0.02em; }
+.member-account-section-head p { margin: 0; color: var(--color-muted); }
+
+/* ---------- Not found ---------- */
+.member-not-found { display: grid; align-content: center; justify-items: center; gap: var(--space-3); text-align: center; }
+.member-not-found h2 { margin: 0; font-family: var(--font-display); font-size: 1.75rem; font-weight: 500; }
+.member-not-found p { max-width: 36ch; margin: 0; color: var(--color-muted); }
+.member-not-found-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); margin-top: var(--space-2); }
+.member-empty-art { width: 120px; height: 80px; fill: none; stroke: var(--color-text); stroke-width: 1.75; stroke-dasharray: 3 6; stroke-linecap: round; }
+.member-empty-art circle { fill: var(--color-text); stroke: none; }
+.member-empty-art circle.is-accent { fill: var(--frame-dot); }
+
+/* ---------- Menu height: the whole menu scrolls as one, so the chat list is never squeezed out ---------- */
+.mapp-sidebar { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--frame-line) transparent; }
+.mapp-sidebar .mapp-history { flex: 1 0 auto; min-height: auto; overflow: visible; }
+.mapp-sidebar { padding-bottom: 0; }
+.mapp-sidebar .mapp-account {
+  position: sticky; bottom: 0; z-index: 1;
+  margin-inline: calc(-1 * var(--space-2)); padding: var(--space-2) var(--space-2) calc(var(--space-2) + var(--safe-bottom));
+  background: var(--frame);
+}
+.mapp-sidebar .mapp-history h2 {
+  font-family: var(--font-sans); font-size: var(--text-2xs); letter-spacing: .12em; text-transform: uppercase;
+}
+@media (min-width: 1024px) {
+  .mapp-nav a { min-height: 40px; }
+}

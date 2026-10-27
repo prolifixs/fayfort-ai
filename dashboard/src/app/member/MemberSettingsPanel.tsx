@@ -68,7 +68,7 @@ export function MemberSettingsPanel({
       if (!mounted) return;
       const accessToken = data.session?.access_token || null;
       setToken(accessToken);
-      setAccountEmail(data.session?.user.email || "");
+      setAccountEmail(data.session?.user?.email || "");
       if (accessToken) {
         try {
           const member = await apiRequest<{ profile: Record<string, unknown>; completion?: ProfileCompletion }>("/members/me", accessToken);
@@ -187,7 +187,7 @@ export function MemberSettingsPanel({
         <PlanBilling accessToken={token} onChange={planChanged} />
         <p className="member-settings-moved">
           Consultations, the tour guide, the supplier directory and supplier contacts are in{" "}
-          <a href="/member/chat?panel=tools">Tools</a>.
+          <a href="/member/tools">Tools</a>.
         </p>
       </section>
       <section className="member-settings-section" aria-labelledby="member-settings-privacy">

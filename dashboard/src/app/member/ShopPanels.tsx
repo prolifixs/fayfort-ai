@@ -480,10 +480,10 @@ export function OrdersPanel({
   const [notice, setNotice] = useState("");
   const [addressVersion, setAddressVersion] = useState(0);
   const book = useAddresses(accessToken, addressVersion);
-  const [tab, setTab] = useState<"active" | "completed" | "recurring">("active");
+  const [tab, setTab] = useState<"active" | "completed" | "recurring">(() => (window.location.hash === "#recurring" ? "recurring" : "active"));
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  // Links like /member/chat?panel=requests#request-<id> open that request.
+  // Links like /member/orders#request-<id> open that request.
   const [openId, setOpenId] = useState(() =>
     window.location.hash.startsWith("#request-") ? decodeURIComponent(window.location.hash.slice("#request-".length)) : "",
   );
@@ -916,7 +916,7 @@ export function BrowsePanel({
     <section className="member-workspace-panel shop-browse">
       <header>
         <small>FAYFORT STORE</small>
-        <h2>Browse</h2>
+        <h2>Shop</h2>
         <p>What's moving right now, then everything by category.</p>
       </header>
       <CategoryBar items={home?.category_bar || []} group={group} category={category} onGroup={chooseGroup} onCategory={chooseCategory} />
@@ -1138,7 +1138,7 @@ export function SavedPanel({
     <section className="member-workspace-panel" aria-label="Saved products panel">
       <header>
         <small>YOUR ACCOUNT</small>
-        <h2>Saved products</h2>
+        <h2>Saved</h2>
         <p>Products you saved with the heart. Tap the heart again to remove one.</p>
       </header>
       {error && (

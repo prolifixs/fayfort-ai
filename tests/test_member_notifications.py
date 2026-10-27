@@ -49,7 +49,7 @@ class MemberNotificationTests(unittest.TestCase):
         item = response.json()["notifications"][0]
         self.assertEqual(item["title"], "Source a lamp")
         self.assertEqual(item["body"], "Item shipped — On its way.")
-        self.assertEqual(item["href"], f"/member/products#request-{REQUEST}")
+        self.assertEqual(item["href"], f"/member/orders#request-{REQUEST}")
         self.assertIsNone(item["read_at"])
         self.assertEqual(requests.select.return_value.eq.call_args.args, ("member_id", MEMBER))
 
@@ -123,7 +123,7 @@ class MemberNotificationTests(unittest.TestCase):
         self.assertEqual(len(projected), 1)
         self.assertEqual(projected[0]["title"], "Find a blue jacket")
         self.assertEqual(projected[0]["body"], "A new sourcing request was created for this schedule. · cycle 2")
-        self.assertEqual(projected[0]["href"], "/member/products")
+        self.assertEqual(projected[0]["href"], "/member/orders#recurring")
         self.assertEqual(schedule_query.select.return_value.eq.call_args.args, ("member_id", MEMBER))
 
 

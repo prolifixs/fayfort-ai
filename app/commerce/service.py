@@ -989,7 +989,7 @@ def draw_giveaway(giveaway_id: str, actor_id: str | None) -> dict:
         queue_email(member_id, category="notifications", template="commerce_giveaway_results",
                     title=f"Giveaway results: {giveaway['title']}",
                     body=(f"Thanks for entering. The winner{'s were' if len(winners) != 1 else ' was'} drawn and contacted. "
-                          "Watch Browse for the next giveaway."), href="/member/chat?panel=catalog")
+                          "Watch Browse for the next giveaway."), href="/member/shop")
     try:
         from app.accounts import operations_flow
         operations_flow.after_giveaway_draw(giveaway, results)

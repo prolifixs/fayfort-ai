@@ -63,9 +63,9 @@ export const GO_LINKS = {
   giveaway: CHAT_URL,
   shop: BROWSE_URL,
   shopCategory: (key: string) => `${BROWSE_URL}&top=${encodeURIComponent(key)}`,
-  consultation: `${APP_URL}/member/chat?panel=tools&tool=consultation`,
-  tour: `${APP_URL}/member/chat?panel=tools&tool=tour`,
-  finds: `${APP_URL}/member/chat?panel=finds`,
+  consultation: `${APP_URL}/member/tools?tool=consultation`,
+  tour: `${APP_URL}/member/tools?tool=tour`,
+  finds: `${APP_URL}/member/finds`,
   request: REQUESTS_URL,
   chat: CHAT_URL,
 }

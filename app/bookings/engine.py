@@ -578,7 +578,7 @@ def _email(booking: dict, key: str, title: str, body: str) -> None:
     if not booking.get("member_id"):
         return
     commerce.queue_email(str(booking["member_id"]), category="notifications", template=f"commerce_booking_{key}",
-                         title=title, body=body, href="/member/chat?panel=tools&tool=consultation")
+                         title=title, body=body, href="/member/tools?tool=consultation")
 
 
 def _notify_staff(booking: dict, title: str, body: str, key: str) -> None:

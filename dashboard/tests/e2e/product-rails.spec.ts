@@ -83,7 +83,7 @@ for (const size of [{ name: "phone", width: 390, height: 844 }, { name: "laptop"
     await shop(page);
     await page.goto("/member/chat");
     if (size.width < 1024) await page.getByRole("button", { name: "Open menu" }).click();
-    await page.getByRole("button", { name: "New chat" }).first().click();
+    await page.getByRole("button", { name: "Ask FayFort" }).first().click();
     const picks = page.getByRole("region", { name: "Popular picks" });
     await expect(picks).toBeVisible();
     await expect(picks.getByRole("button", { name: /^Open / })).toHaveCount(8);

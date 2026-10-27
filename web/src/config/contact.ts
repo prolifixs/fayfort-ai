@@ -16,9 +16,9 @@ export const SIGN_IN_URL = `${APP_URL}/member/account`
 export const CHAT_URL = `${APP_URL}/member/chat`
 // Where the website's "My dashboard" button goes for members (the member Home once it exists, docs/UI_FACELIFT_PLAN.md).
 export const MEMBER_HOME_URL = CHAT_URL
-export const BROWSE_URL = `${APP_URL}/member/chat?panel=catalog`
-export const DIRECTORY_URL = `${APP_URL}/member/chat?panel=tools&tool=directory`
-export const REQUESTS_URL = `${APP_URL}/member/chat?panel=requests`
+export const BROWSE_URL = `${APP_URL}/member/shop`
+export const DIRECTORY_URL = `${APP_URL}/member/tools?tool=directory`
+export const REQUESTS_URL = `${APP_URL}/member/orders`
 
 // Working hours (the same as the chat assistant tells customers).
 export const SUPPORT_HOURS = 'Monday to Saturday, 9:30 to 18:30 China time'

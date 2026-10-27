@@ -501,7 +501,7 @@ def effective_plan(row: dict, now: datetime | None = None) -> str | None:
     return None
 
 
-def notify(member_id: str, row: dict, key: str, *, title: str, body: str, href: str = "/member/chat?panel=settings") -> None:
+def notify(member_id: str, row: dict, key: str, *, title: str, body: str, href: str = "/member/settings") -> None:
     """Email the member once per key (kept in member_subscriptions.notified)."""
     notified = dict(row.get("notified") or {})
     if key in notified:

@@ -97,7 +97,7 @@ def withdraw(invoice_id: str, *, actor_id: str, reason: str) -> dict:
                              title=f"We withdrew your {what}",
                              body=f"{invoice.get('title') or 'Your invoice'}: the payment link no longer works."
                                   + (f" Reason: {reason.strip()}." if reason.strip() else "") + " We'll send a new one if needed.",
-                             href="/member/chat?panel=requests")
+                             href="/member/orders")
     item = _live_item(invoice)
     if item:
         from app.accounts import operations_flow

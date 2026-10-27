@@ -510,10 +510,10 @@ export const MEMBER_TOUR: TourStep[] = [
   toolStep("photo"),
   toolStep("request"),
   toolStep("attach"),
-  { target: "browse", title: "Browse", body: "Shop FayFort products, trending items and group buys. Tap the heart to save one." },
-  { target: "saved", title: "Saved products", body: "Everything you've saved, in one place." },
+  { target: "browse", title: "Shop", body: "FayFort products, trending items and group buys. Tap the heart to save one." },
+  { target: "saved", title: "Saved", body: "Everything you've saved, in one place." },
   { target: "requests", title: "Orders & requests", body: "Invoices to pay, your orders and every sourcing request with its delivery estimate." },
-  { target: "directory", title: "Supplier directory", body: "Verified suppliers you can contact." },
+  { target: "directory", title: "Bookings & tools", body: "Book a video consultation or a tour guide in China, and find verified suppliers to contact." },
   {
     target: "chats",
     title: "Your chats",

@@ -19,6 +19,7 @@ import { SetupScreen } from "./SetupScreen";
 import { DashboardWorkspace } from "./workspace/DashboardWorkspace";
 // Member app styles (tokens are loaded first in main.tsx).
 import "./member/member.css";
+import "./member/shell.css";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ConsentLayer } from "./consent/ConsentLayer";
 

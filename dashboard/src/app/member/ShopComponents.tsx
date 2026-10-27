@@ -503,7 +503,7 @@ export function ChatPicks({
       {tiles.length > 0 && (
         <nav className="shop-chat-cats" aria-label="Shop by category">
           {tiles.slice(0, 5).map((tile) => (
-            <a key={tile.key} href={`${browseHref}&top=${encodeURIComponent(tile.key)}`}>
+            <a key={tile.key} href={`${browseHref}${browseHref.includes("?") ? "&" : "?"}top=${encodeURIComponent(tile.key)}`}>
               {tile.label}
             </a>
           ))}

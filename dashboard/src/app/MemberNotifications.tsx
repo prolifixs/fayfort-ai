@@ -187,74 +187,72 @@ export function MemberNotificationsBar({ accessToken, header = false }: { access
   </div>;
 }
 
-export function MemberNotificationsPage() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+/** The member's notification inbox. Lives in the member shell at /member/notifications (memberRoutes.ts). */
+export function NotificationInbox({ accessToken }: { accessToken: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<NotificationResponse>({ notifications: [], unread_count: 0 });
   const [busy, setBusy] = useState(false);
-  const load = useCallback(async (token: string) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      await apiRequest("/members/me", token);
-      setAccessToken(token);
-      setData(normalizeNotifications(await apiRequest<NotificationResponse>("/members/notifications?limit=100", token)));
+      setData(normalizeNotifications(await apiRequest<NotificationResponse>("/members/notifications?limit=100", accessToken)));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Notifications could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, []);
-  useEffect(() => {
-    if (!supabaseClient) { setLoading(false); return; }
-    let mounted = true;
-    supabaseClient.auth.getSession().then(({ data: sessionData }) => {
-      if (mounted && sessionData.session) void load(sessionData.session.access_token);
-      else if (mounted) setLoading(false);
-    });
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      if (session) void load(session.access_token);
-      else { setAccessToken(null); setData({ notifications: [], unread_count: 0 }); setLoading(false); }
-    });
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, [load]);
-
+  }, [accessToken]);
+  useEffect(() => { void load(); }, [load]);
   async function open(item: MemberNotification) {
-    if (!accessToken) return;
     try { await apiRequest(`/members/notifications/${item.id}/read`, accessToken, { method: "POST" }); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Notification state could not be updated."); }
     window.location.assign(item.href);
   }
   async function markRead(item: MemberNotification) {
-    if (!accessToken) return;
     setBusy(true);
     try {
       await apiRequest(`/members/notifications/${item.id}/read`, accessToken, { method: "POST" });
-      await load(accessToken);
+      await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Notification could not be marked read."); }
     finally { setBusy(false); }
   }
   async function markAllRead() {
-    if (!accessToken) return;
     setBusy(true);
     try {
       await apiRequest("/members/notifications/read-all", accessToken, { method: "POST" });
-      await load(accessToken);
+      await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Notifications could not be marked read."); }
     finally { setBusy(false); }
   }
+  return <section className="member-notification-inbox" aria-label="Your notifications">
+    <div className="member-notification-heading"><div><h2>Your activity</h2><p>{data.unread_count ? `${data.unread_count} unread` : "You’re all caught up."}</p></div><button type="button" disabled={busy || loading || data.unread_count === 0} onClick={() => void markAllRead()}>Mark all read</button></div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {loading ? <FayfortLoader label="Loading notifications…" /> : data.notifications.length === 0 ? <p className="member-chat-empty">No notifications yet. Request milestones and worker replies will appear here.</p> : <NoticeGroups items={data.notifications} render={item => <MemberNoticeItem key={item.id} item={item} busy={busy} onOpen={(event, row) => { event.preventDefault(); void open(row); }} onRead={row => void markRead(row)} />} />}
+  </section>;
+}
+
+/** Standalone inbox (kept for direct use); the member shell renders NotificationInbox itself. */
+export function MemberNotificationsPage() {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!supabaseClient) { setLoading(false); return; }
+    let mounted = true;
+    supabaseClient.auth.getSession().then(({ data: sessionData }) => {
+      if (!mounted) return;
+      setAccessToken(sessionData.session?.access_token || null);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (mounted) setAccessToken(session?.access_token || null);
+    });
+    return () => { mounted = false; subscription.unsubscribe(); };
+  }, []);
   if (!dashboardAuthConfigured) return <main className="auth-page"><section className="auth-card"><h1>Member sign-in is not configured</h1><p>Set up the member authentication environment before viewing notifications.</p></section></main>;
   return <main className="auth-page member-chat-page"><section className="member-chat-shell member-notifications-page">
-    <header className="member-chat-header"><BrandMark href="/member/account" label="Member account" /><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/products">Back to dashboard</a></header>
-    {!accessToken && !loading ? <div className="member-chat-empty"><h2>Sign in to view notifications</h2><a className="primary-button" href="/member/account">Member sign in</a></div> : <>
-      <MemberNotificationsBar accessToken={accessToken} />
-      <section className="member-notification-inbox" aria-label="Your notifications">
-        <div className="member-notification-heading"><div><h2>Your activity</h2><p>{data.unread_count ? `${data.unread_count} unread` : "You’re all caught up."}</p></div><button type="button" disabled={busy || loading || data.unread_count === 0} onClick={() => void markAllRead()}>Mark all read</button></div>
-        {error && <p className="form-error" role="alert">{error}</p>}
-        {loading ? <FayfortLoader label="Loading notifications…" /> : data.notifications.length === 0 ? <p className="member-chat-empty">No notifications yet. Request milestones and worker replies will appear here.</p> : <NoticeGroups items={data.notifications} render={item => <MemberNoticeItem key={item.id} item={item} busy={busy} onOpen={(event, row) => { event.preventDefault(); void open(row); }} onRead={row => void markRead(row)} />} />}
-      </section>
-    </>}
+    <header className="member-chat-header"><BrandMark href="/member/chat" label="Member chat" /><div><small>FAYFORT MEMBER</small><h1>Notifications</h1></div><a className="secondary-button" href="/member/chat">Back to chat</a></header>
+    {loading ? <FayfortLoader label="Loading notifications…" /> : !accessToken ? <div className="member-chat-empty"><h2>Sign in to view notifications</h2><a className="primary-button" href="/member/account">Member sign in</a></div> : <NotificationInbox accessToken={accessToken} />}
   </section></main>;
 }
