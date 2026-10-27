@@ -315,3 +315,25 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
   search covers "do we already have it?".
 - Tests: `tests/test_sourcing_desk.py`, `SourcingTools.test.tsx`, e2e `ops-sourcing.spec.ts` at phone, iPad and
   desktop.
+
+## 9. R5 build notes (Member support and Disputes desks)
+
+- **Member support tool cards:**
+  - **Bookings today** (from `/operations/bookings?view=today`): time, member, consultation or China tour, host, and
+    "not confirmed yet" for held slots. "Open bookings and tours" opens the full Bookings page under Member support
+    (the rail item from R2).
+  - **Invoices** (`GET /operations/member-support/overview`): invoices that failed to send, with Shopify's reason and a
+    link to their work item, and invoices still unpaid after 3 days (a nudge in the chat helps).
+  - **Giveaways:** ended giveaways still to draw (entries, winners to draw, a Draw button to the draw item) and the ones
+    still running.
+  - The desk line now reads "Consultations and China tours, photo reviews, giveaways, failed payments and invoices."
+- **Dispute case file** (`GET /operations/work-items/{id}/case-file`, `app/accounts/support_desk.py`): shown at the top
+  of every Disputes item, with three side-by-side panels that stack on phones:
+  - **Order disputes:** the member and their plan, the order (title, stage, ETA, the option they chose, the last steps
+    of its timeline), every payment on it (deposit and order, paid or not), the member's chat about it, and "Open the
+    payment in Shopify ↗" for paid ones.
+  - **Card disputes** (Stripe disputes on membership payments): amount, the bank's reason, status and the deadline to
+    answer, the member's membership payments with the disputed one marked, their latest chat, and "Answer it in
+    Stripe ↗".
+  - The chat shows once the case is claimed, like any member chat.
+- Tests: `tests/test_support_desk.py`, `SupportTools.test.tsx`, e2e `ops-support.spec.ts` at phone, iPad and desktop.

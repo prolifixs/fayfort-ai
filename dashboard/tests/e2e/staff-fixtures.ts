@@ -43,6 +43,7 @@ const workItems = [
   { id: "w2", department: "conversation_intake", work_type: "business_handoff", status: "claimed", priority: "normal", summary: "Instagram customer wants split payment on a $412 order", next_action: "Confirm payment plan", waiting_on: null, waiting_reason: null, due_at: iso(-1431), assigned_worker_id: "staff-1", assigned_automation_key: null, claimed_until: iso(-20), version: 1, member_request_id: null, member_conversation_id: null, business_id: businessId, business_conversation_id: "bc1", handoff_id: "h1", created_at: iso(9) },
   { id: "w4", department: "fulfillment", work_type: "store_order", status: "open", priority: "high", summary: "Pack and ship #1042 · 3 items", next_action: "Pick and pack the items, then mark the order fulfilled in Shopify with the tracking number.", waiting_on: null, waiting_reason: null, due_at: iso(-60), assigned_worker_id: null, assigned_automation_key: null, claimed_until: null, version: 1, member_request_id: null, member_conversation_id: null, business_id: null, business_conversation_id: null, handoff_id: null, created_at: iso(40), metadata: { source_kind: "shopify_order", source_id: "gid://shopify/Order/5001", order_name: "#1042", admin_url: "https://fayfort.myshopify.com/admin/orders/5001" } },
   { id: "w3", department: "sourcing", work_type: "member_request", status: "open", priority: "normal", summary: "Source Ankara fabric, 6 yards, wedding colours", next_action: "Find three suppliers", waiting_on: null, waiting_reason: null, due_at: iso(640), assigned_worker_id: null, assigned_automation_key: null, claimed_until: null, version: 1, member_request_id: "mr1", member_conversation_id: null, business_id: null, business_conversation_id: null, handoff_id: null, created_at: iso(2080) },
+  { id: "w9", department: "disputes", work_type: "dispute_case", status: "claimed", priority: "high", summary: "Wig arrived with a damaged lace", next_action: "Check the photos and agree a fix with the member", waiting_on: null, waiting_reason: null, due_at: iso(-600), assigned_worker_id: "staff-1", assigned_automation_key: null, claimed_until: iso(-15), version: 2, member_request_id: null, member_conversation_id: null, business_id: null, business_conversation_id: null, handoff_id: null, dispute_case_id: "dc1", created_at: iso(300) },
 ];
 const archivedItems = [
   { ...workItems[0], id: "a1", status: "completed", summary: "Packed and shipped #1031 · 2 items", work_type: "store_order", department: "fulfillment", completed_at: iso(600), assigned_worker_id: null, claimed_until: null, member_conversation_id: null, metadata: { source_kind: "shopify_order", source_id: "gid://shopify/Order/4990", order_name: "#1031" } },
@@ -77,6 +78,27 @@ const desks = {
     { department: "disputes", total: 1, available: 1, mine: 0, waiting: 0, overdue: 0, stages: [stage("new", "New", 1), stage("working", "Being worked on", 0), stage("waiting", "Waiting", 0), stage("blocked", "Stuck", 0)] },
     { department: "store_team", total: 4, available: 2, mine: 0, waiting: 0, overdue: 0, stages: [stage("listings", "Listings", 2), stage("finds", "Finds", 1), stage("sections", "Sections", 1), stage("campaigns", "Campaigns", 0)] },
   ],
+};
+
+// Member support and Disputes desks (R5).
+const supportOverview = {
+  unpaid_days: 3,
+  failed_invoices: [{ id: "i2", member_name: "Amaka Obi", title: "Satin bonnet x3", amount: 21, currency: "USD", status: "failed", kind: "order", error: "The member's email bounced", sent_at: iso(60 * 5), work_item_id: "w1" }],
+  unpaid_invoices: [{ id: "i3", member_name: "Tunde Bello", title: "Bone straight bundles, 30 inch", amount: 240, currency: "USD", status: "sent", kind: "order", sent_at: iso(60 * 24 * 5), work_item_id: null }],
+  giveaways_to_draw: [{ id: "g1", title: "Wig week giveaway", prize: "A 22 inch body wave wig", ends_at: iso(60 * 20), winners: 1, entries: 214, work_item_id: "w1" }],
+  giveaways_running: [{ id: "g2", title: "Bonnet drop", prize: "Satin bonnets", ends_at: iso(-60 * 24 * 6), winners: 3, entries: 57, work_item_id: null }],
+};
+const caseFile = {
+  kind: "order_dispute",
+  member: { name: "Amaka Obi", profile: { member_tier: "pro" } },
+  order: { title: "Body wave wig 22 inch", description: "Natural black, 180% density", stage: "delivered", eta_at: iso(60 * 24 * 3), requested_at: iso(60 * 24 * 30),
+    chosen: { product_name: "Body wave lace front wig 22 inch", price_amount: 180, currency: "USD" },
+    timeline: [{ stage: "purchase_confirmed", note: "Payment received.", at: iso(60 * 24 * 20) }, { stage: "in_transit", note: "Shipped by air, DHL 1234.", at: iso(60 * 24 * 8) }, { stage: "delivered", note: null, at: iso(60 * 24 * 2) }] },
+  dispute: null,
+  payments: [{ title: "Deposit", kind: "deposit", amount: 45, currency: "USD", status: "paid", paid_at: iso(60 * 24 * 25) }, { title: "Body wave wig 22 inch", kind: "order", amount: 135, currency: "USD", status: "paid", paid_at: iso(60 * 24 * 20) }],
+  links: [{ label: "Open the order payment in Shopify", url: "https://admin.shopify.com/store/fayfort/orders/5009" }],
+  chat: { id: "mc9", title: "Wig delivery", messages: [{ id: "m1", sender_type: "member", content: "The lace is torn at the front, see photos.", created_at: iso(60 * 30) }, { id: "m2", sender_type: "assistant", content: "I'm sorry. I've passed this to the team with your photos.", created_at: iso(60 * 29) }] },
+  chat_locked: false,
 };
 
 // Sourcing and Fulfillment desks (R4).
@@ -134,6 +156,9 @@ function fixture(path: string, search: URLSearchParams): unknown {
   if (path === "/operations/me/departments") return { user_id: "staff-1", departments: ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"], can_manage: true };
   if (path === "/operations/desks") return desks;
   if (path === "/operations/sourcing/overview") return sourcingOverview;
+  if (path === "/operations/member-support/overview") return supportOverview;
+  if (path === "/operations/work-items/w9/case-file") return { case_file: caseFile };
+  if (path === "/operations/work-items/w9/source-context") return { source_type: "dispute_case", dispute_case: { id: "dc1", member_request_id: "r9", category: "damaged_item", summary: "The lace arrived torn at the front.", status: "investigating", resolution: null, version: 2, opened_by: "staff-1", created_at: iso(300), updated_at: iso(200), resolved_at: null, closed_at: null, events: [{ id: "de1", sequence_no: 1, actor_id: "staff-1", previous_status: null, next_status: "open", note: "Opened from the member's chat.", created_at: iso(300) }] }, request: { id: "r9", product_name_snapshot: null, request_title: "Body wave wig 22 inch", request_description: "Natural black", source_type: "description", source_url: null, created_at: iso(60 * 24 * 30), updated_at: iso(60), eta_at: iso(60 * 24 * 3), eta_reason: null, eta_updated_at: null, eta_changes: [], source_media: [], recurring_schedule: null, events: [{ id: "e1", sequence_no: 1, stage: "submitted", member_note: null, details: {}, media: [], created_at: iso(60 * 24 * 30) }] } };
   if (path === "/operations/fulfillment/orders") return fulfillmentOrders;
   if (path === "/operations/catalog") return { products: [{ id: "p1", name: "Body wave lace wig 22 inch", where: "Store", price_min: 120, currency: "USD", in_stock: true }, { id: "p2", name: "Lace front glue", where: "Sourcing catalog", price_min: 2.1, price_max: 2.8, currency: "USD", min_order: 50, lead_time_min_days: 7, lead_time_max_days: 12 }] };
   if (path.endsWith("/customer") && path.startsWith("/operations/work-items/")) return customerCard(path);

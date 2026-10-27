@@ -47,6 +47,7 @@ import { BookingsPanel } from "./operations/BookingsPanel";
 import { SchedulePanel } from "./operations/SchedulePanel";
 import { CustomerPane, AnswersSearch, isChatItem } from "./operations/CustomerPane";
 import { MemberChatsPanel } from "./workspace/MemberChatsPanel";
+import { BookingsTodayCard, CaseFile, GiveawaysCard, InvoicesCard, isDisputeItem, useSupportOverview } from "./operations/SupportTools";
 import { CatalogCard, DepositsCard, OrdersCard, TrendsCard, useSourcingOverview } from "./operations/SourcingTools";
 import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
 import type { Department } from "./operations/types";
@@ -215,6 +216,7 @@ export function OperationsCenterPage() {
     if (url.toString() !== window.location.href) window.history.replaceState(null, "", url.toString());
   }, [view, deskDepartment]);
   const sourcingOverview = useSourcingOverview(token, deskDepartment === "sourcing", items);
+  const supportOverview = useSupportOverview(token, deskDepartment === "member_support", items);
   function deskTools(department: Department) {
     const summary = deskSummary(department);
     const stageCount = (key: string) => summary?.stages.find((stage) => stage.key === key)?.count ?? 0;
@@ -243,9 +245,13 @@ export function OperationsCenterPage() {
         </>
       );
     if (department === "member_support")
-      return (
-        <ToolCard title="Bookings and tours" line="Today's consultations, the CEO's hours and tour guides." count={stageCount("bookings")} countLabel="to handle" onOpen={() => openRail("bookings")} openLabel="Open bookings" />
-      );
+      return token ? (
+        <>
+          <BookingsTodayCard token={token} enabled={deskDepartment === "member_support"} reloadKey={items} onOpen={() => openRail("bookings")} />
+          <InvoicesCard data={supportOverview} onOpen={openWorkItem} />
+          <GiveawaysCard data={supportOverview} onOpen={openWorkItem} />
+        </>
+      ) : null;
     if (department === "sourcing")
       return (
         <>
@@ -542,6 +548,7 @@ export function OperationsCenterPage() {
                           {canManage ? "Workers record fulfillment milestones after claiming." : "Claim this work to record milestones."}
                         </p>
                       )}
+                      {token && isDisputeItem(selected) && <CaseFile token={token} item={selected} />}
                       {disputeCase && (
                         <div id="ops-dispute">
                           <DisputeCasePanel ops={ops} selected={selected} disputeCase={disputeCase} />

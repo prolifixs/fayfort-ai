@@ -17,7 +17,7 @@ from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
-from app.accounts import conversation_desk, sourcing_desk
+from app.accounts import conversation_desk, sourcing_desk, support_desk
 from app.accounts.desks import desk_stage, desk_summaries, latest_request_stages, my_due_counts
 
 logger = logging.getLogger(__name__)
@@ -604,6 +604,31 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         except Exception as exc:
             logger.exception("Could not load shop orders")
             raise HTTPException(status_code=503, detail="Shop orders could not be loaded.") from exc
+
+    @router.get("/operations/member-support/overview")
+    def member_support_overview(authorization: str | None = Header(default=None)):
+        """The Member support desk's cards (R5): invoices that failed or sit unpaid, giveaways running or to draw."""
+        desk_staff(authorization, "member_support")
+        try:
+            return support_desk.support_overview(supabase)
+        except Exception as exc:
+            logger.exception("Could not load the member support overview")
+            raise HTTPException(status_code=503, detail="The Member support desk's cards could not be loaded.") from exc
+
+    @router.get("/operations/work-items/{work_item_id}/case-file")
+    def dispute_case_file(work_item_id: UUID, authorization: str | None = Header(default=None)):
+        """A dispute's case file (R5): the member, the order, the payments, the chat and the outside links together.
+        The member's chat shows once the case is claimed, like any member chat."""
+        staff = staff_identity(authorization)
+        item = load_accessible_item(work_item_id, staff)
+        if item.get("department") != "disputes" and item.get("work_type") not in ("dispute_case", "membership_dispute"):
+            raise HTTPException(status_code=409, detail="Only disputes have a case file.")
+        can_see_chat = staff.get("role") == "platform_admin" or item.get("assigned_worker_id") == staff["user_id"]
+        try:
+            return {"case_file": support_desk.case_file(supabase, item, can_see_chat=can_see_chat)}
+        except Exception as exc:
+            logger.exception("Could not load the case file")
+            raise HTTPException(status_code=503, detail="The case file could not be loaded.") from exc
 
     @router.get("/operations/desks")
     def operations_desks(authorization: str | None = Header(default=None)):

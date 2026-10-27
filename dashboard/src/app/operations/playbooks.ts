@@ -994,7 +994,7 @@ export const DEPARTMENT_GUIDES: Record<Department, string> = {
   sourcing: "Finding what members asked for, getting their choice and their payment. Group buys too.",
   fulfillment: "Everything paid that has to be packed and shipped: sourced requests and shop orders.",
   disputes: "Problems after purchase: damage, wrong items, delays, refunds.",
-  member_support: "Photo reviews, giveaways, failed payments and invoices.",
+  member_support: "Consultations and China tours, photo reviews, giveaways, failed payments and invoices.",
   store_team: "The shop itself: listing products, choosing categories, store sections, retiring old listings and preparing campaigns.",
 };
 

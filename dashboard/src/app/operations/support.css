@@ -1,0 +1,19 @@
+/* Member support cards and the dispute case file (R5). */
+.ops-tool-warn { color: var(--color-warning, #a15c00) !important; }
+.ops-case-file { display: grid; gap: var(--space-3); }
+.ops-case-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.ops-case-head h3 { margin: 0; }
+.ops-case-head p { margin: 2px 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.ops-case-links { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ops-case-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: var(--space-3); align-items: start; }
+.ops-case-grid > section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); align-content: start; min-width: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.ops-case-grid h4 { margin: 0; font-size: var(--text-sm); }
+.ops-case-title { margin: 0; font-weight: var(--weight-strong); }
+.ops-case-facts { display: grid; gap: 6px; margin: 0; }
+.ops-case-facts div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--space-2); font-size: var(--text-sm); }
+.ops-case-facts dt { color: var(--color-muted); }
+.ops-case-facts dd { margin: 0; overflow-wrap: anywhere; }
+.ops-case-timeline { display: grid; gap: 6px; margin: 0; padding-left: 1.1rem; font-size: var(--text-sm); }
+.ops-case-timeline small { color: var(--color-muted); }
+.ops-case-timeline p { margin: 2px 0 0; color: var(--color-muted); }
+.ops-case-grid ul.ops-tool-list { padding-left: 0; }
