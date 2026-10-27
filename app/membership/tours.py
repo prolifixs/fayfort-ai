@@ -40,6 +40,8 @@ NEEDS = {
 FIELDS = ("id,member_id,city,city_other,arrival_date,days,people,needs,hotel_area,whatsapp,notes,status,quote_amount,"
           "currency,invoice_id,conversation_id,work_item_id,guide_name,cancel_reason,created_at,updated_at")
 OPEN = ("requested", "quoted", "confirmed")
+HOLDS_DATES = ("quoted", "confirmed")      # a quote keeps the dates while it's open
+NOTICE_DAYS = 2                             # a guide needs two days to prepare
 RECEIVED_REPLY = ("Thanks, we've got your tour guide request. Our team will check the dates and send you a quote in "
                   "this chat. Once it's paid, we confirm your guide here.")
 
@@ -176,6 +178,8 @@ def request_tour(member_id: str, payload: TourRequest) -> dict:
     waiting = [b for b in list_for_member(member_id) if b["status"] == "requested"]
     if len(waiting) >= 3:
         raise TourError("You already have 3 tour requests waiting for a quote. We'll reply in their chats soon.")
+    if payload.arrival_date < plans.now_utc().date() + timedelta(days=NOTICE_DAYS):
+        raise TourError(f"Choose an arrival date at least {NOTICE_DAYS} days from today, so a guide can get ready.")
     values = payload.model_dump()
     values["arrival_date"] = payload.arrival_date.isoformat()
     booking = one(db().table("member_tour_bookings").insert({"member_id": member_id, "status": "requested", "currency": "USD", **values}).execute())
@@ -304,6 +308,47 @@ def list_for_staff(status: str | None = None) -> list[dict]:
     return [{**b, "member_name": (members.get(str(b["member_id"])) or {}).get("display_name") or "Member"} for b in _with_invoices(found)]
 
 
+def guide_count() -> int:
+    """Guides are the member support team (they run tours today)."""
+    try:
+        data = db().rpc("department_worker_ids", {"p_department": "member_support"}).execute().data or []
+    except Exception:
+        logger.warning("Guides could not be counted", exc_info=True)
+        data = []
+    return max(1, len(data if isinstance(data, list) else [data]))
+
+
+def calendar(start: date, days: int) -> dict:
+    """Which arrival days a member can pick: from NOTICE_DAYS ahead, and not when every guide is already out on a
+    quoted or confirmed tour that day."""
+    today = plans.now_utc().date()
+    first = max(start, today)
+    last = first + timedelta(days=days - 1)
+    earliest = today + timedelta(days=NOTICE_DAYS)
+    guides = guide_count()
+    busy: dict[date, int] = {}
+    window = rows(db().table("member_tour_bookings").select("arrival_date,days,status").in_("status", list(HOLDS_DATES))
+                  .lte("arrival_date", last.isoformat()).gte("arrival_date", (first - timedelta(days=31)).isoformat())
+                  .limit(1000).execute())
+    for tour in window:
+        arrival = date.fromisoformat(str(tour["arrival_date"])[:10])
+        for offset in range(int(tour.get("days") or 1)):
+            day = arrival + timedelta(days=offset)
+            busy[day] = busy.get(day, 0) + 1
+    out = []
+    day = first
+    while day <= last:
+        if day < earliest:
+            state = "too_soon"
+        elif busy.get(day, 0) >= guides:
+            state = "full"
+        else:
+            state = "open"
+        out.append({"date": day.isoformat(), "state": state})
+        day += timedelta(days=1)
+    return {"days": out, "earliest": earliest.isoformat(), "notice_days": NOTICE_DAYS}
+
+
 # ---------------------------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------------------------
@@ -332,10 +377,18 @@ def create_tours_router(require_verified_member: Callable[[str | None], str],
     def member_tours(authorization: str | None = Header(default=None)):
         member_id = require_verified_member(authorization)
         try:
-            return {"tours": list_for_member(member_id), "cities": CITIES, "needs": NEEDS,
-                    "pending": "Choosing a date from a live calendar is coming. For now our team confirms your dates in the chat."}
+            return {"tours": list_for_member(member_id), "cities": CITIES, "needs": NEEDS}
         except Exception as exc:
             raise _fail(exc, "Your tour bookings could not be loaded.") from exc
+
+    @router.get("/members/tours/calendar")
+    def member_calendar(start: date | None = Query(default=None, alias="from"), days: int = Query(default=62, ge=7, le=120),
+                        authorization: str | None = Header(default=None)):
+        require_verified_member(authorization)
+        try:
+            return calendar(start or plans.now_utc().date(), days)
+        except Exception as exc:
+            raise _fail(exc, "The tour calendar could not be loaded.") from exc
 
     @router.post("/members/tours", status_code=201)
     def member_request(payload: TourRequest, authorization: str | None = Header(default=None)):

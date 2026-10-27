@@ -118,4 +118,24 @@ describe("Operations bookings", () => {
     }));
     expect(screen.queryByRole("tab", { name: "Tours" })).toBeNull();
   });
+
+  it("says normal working hours apply when none are saved, and starts the editor from them", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).includes(`/operations/availability/${CEO}`) && (init?.method || "GET") === "GET")
+        return reply({ time_zone: "Asia/Shanghai", can_edit: true, weekly: [], time_off: [],
+          normal_hours: { weekdays: [0, 1, 2, 3, 4], start_time: "09:00", end_time: "18:00", time_zone: "Asia/Shanghai", in_use: true } });
+      return original(input, init);
+    });
+    render(<BookingsPanel token="t" tourTeam={false} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "CEO's hours" }));
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent("Monday to Friday, 09:00–18:00 China time");
+    expect(screen.getAllByText("09:00–18:00 (normal hours)")).toHaveLength(5);
+    fireEvent.click(within(note).getByRole("button", { name: "Change these hours" }));
+    expect(screen.getByLabelText("Monday from")).toHaveValue("09:00");
+    expect(screen.getByLabelText("Friday to")).toHaveValue("18:00");
+    expect(screen.queryByRole("note")).toBeNull();
+  });
 });

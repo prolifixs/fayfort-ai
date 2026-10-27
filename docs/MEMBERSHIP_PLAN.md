@@ -213,3 +213,22 @@ to the current price at their next renewal; `app/knowledge/plan_facts.py` writes
 
 **Unchanged:** contact packs, the 14-day comeback window, pausing 1–3 months, Free at rank 4 getting Standard prices (not
 the allowance), LANDED owners' addresses, everything paid through Shopify.
+
+## 13. Monthly or yearly (owner request, 2026-10-26)
+
+Both plans can also be paid **once a year at 12 times the monthly price, with no discount**: Standard **$71.88** and
+Pro **$179.88** a year.
+
+- **Stripe:** setup creates a yearly price for each plan next to the monthly one (lookup keys `fayfort_<plan>_yearly_usd_<cents>`,
+  stored as `price_<plan>_year`). The customer portal offers both prices per plan, so members switch between monthly and
+  yearly there: to yearly at once (charged, prorated), to monthly at the end of the paid year.
+- **Checkout:** the plan box has a Monthly / Yearly switch (`POST /members/subscription/checkout` takes `interval`).
+- **A yearly payment counts as 12 paid months** (`member_subscription_payments.months`), so full plan perks start
+  straight away (no first-month step down); a partly refunded year counts only the months kept.
+- **Allowances still renew monthly** (Pro 3 contacts, Standard 1), counted from the start of the paid year.
+- **Rank points** for a yearly plan arrive month by month, like a monthly payer's, so the 90-day rank window treats them
+  the same.
+- Pausing is still allowed; on a yearly plan the pause starts when the paid year ends.
+- `member_subscriptions.billing_interval` (month / year); Control Center → Shop → Member plans shows both prices and how
+  many members pay yearly. The AI's plan facts (`plan_facts.refresh()`) mention yearly.
+- Migration `20261029100000_yearly_billing.sql`. MRR on the Revenue tab is unchanged (a year is exactly 12 months).

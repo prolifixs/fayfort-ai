@@ -34,8 +34,8 @@ const features = [
 
 const plans: [string, string, string[]][] = [
   ['Free', 'Everything you need to start.', ['Send sourcing requests', 'Shop, group buys and giveaways', 'Supplier directory', 'Chat with the FayFort team']],
-  ['Standard', 'For regular buyers. $5.99 a month.', ['Lower sourcing deposits', 'Cheaper consultations', '1 supplier contact every month', 'No ads and premium themes']],
-  ['Pro', 'For businesses buying every month. $14.99 a month.', ['No deposit once you buy with us', 'Consultations at half price', '3 supplier contacts every month', 'Everything in Standard']],
+  ['Standard', 'For regular buyers. $5.99 a month or $71.88 a year.', ['Lower sourcing deposits', 'Cheaper consultations', '1 supplier contact every month', 'No ads and premium themes']],
+  ['Pro', 'For businesses buying every month. $14.99 a month or $179.88 a year.', ['No deposit once you buy with us', 'Consultations at half price', '3 supplier contacts every month', 'Everything in Standard']],
 ]
 
 const business: [string, string, string][] = [

@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ['/go/consultation', 0.6],
     ['/go/tour-guide', 0.6],
     ['/go/request', 0.6],
+    ['/go/finds', 0.7],
     ['/go/giveaway', 0.5],
     ['/how-it-works', 0.85],
     ['/services', 0.8],

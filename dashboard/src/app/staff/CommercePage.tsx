@@ -1067,7 +1067,9 @@ interface BillingStatus {
   configured: boolean;
   mode: "test" | "live" | "not_configured";
   ready: boolean;
-  prices: Record<"standard" | "pro", { id: string | null; monthly: number; currency: string }>;
+  prices: Record<"standard" | "pro", { id: string | null; monthly: number; currency: string; yearly?: number; yearly_id?: string | null }>;
+  yearly_ready?: boolean;
+  yearly_subscribers?: Record<"standard" | "pro", number>;
   webhook: { url: string | null; ready: boolean; managed_by: "env" | "fayfort" };
   problem: string | null;
   checked_at: string | null;
@@ -1120,7 +1122,8 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
       <div className="panel-heading">
         <h2>Member plans (Stripe)</h2>
         <p>
-          Standard ($5.99) and Pro ($14.99) are monthly Stripe subscriptions with no trial. Once the Stripe key is connected
+          Standard ($5.99) and Pro ($14.99) are Stripe subscriptions with no trial, paid monthly or yearly (12 months at the same
+          price, full perks from the start). Once the Stripe key is connected
           (Infrastructure → Connections), FayFort creates the products, prices, customer portal and webhook by itself and keeps every
           member's plan in sync. Upgrades are charged at once; downgrades and pauses wait for the end of the paid month. A failed
           payment keeps the plan for a week; a card dispute ends it and opens a task in Operations → Disputes.
@@ -1147,8 +1150,8 @@ function BillingPanel({ accessToken }: { accessToken: string }) {
         <>
           <dl className="billing-status">
             <div><dt>Status</dt><dd>{data.ready ? "Ready" : "Needs attention"} · {data.mode === "live" ? "Live mode" : "Test mode"}</dd></div>
-            <div><dt>Standard</dt><dd>{money(data.prices.standard.monthly, data.prices.standard.currency.toUpperCase())}/month · {data.subscribers.standard} active</dd></div>
-            <div><dt>Pro</dt><dd>{money(data.prices.pro.monthly, data.prices.pro.currency.toUpperCase())}/month · {data.subscribers.pro} active</dd></div>
+            <div><dt>Standard</dt><dd>{money(data.prices.standard.monthly, data.prices.standard.currency.toUpperCase())}/month{data.prices.standard.yearly ? ` or ${money(data.prices.standard.yearly, data.prices.standard.currency.toUpperCase())}/year${data.yearly_ready ? "" : " (being set up)"}` : ""} · {data.subscribers.standard} active{data.yearly_subscribers?.standard ? ` (${data.yearly_subscribers.standard} yearly)` : ""}</dd></div>
+            <div><dt>Pro</dt><dd>{money(data.prices.pro.monthly, data.prices.pro.currency.toUpperCase())}/month{data.prices.pro.yearly ? ` or ${money(data.prices.pro.yearly, data.prices.pro.currency.toUpperCase())}/year${data.yearly_ready ? "" : " (being set up)"}` : ""} · {data.subscribers.pro} active{data.yearly_subscribers?.pro ? ` (${data.yearly_subscribers.pro} yearly)` : ""}</dd></div>
             <div><dt>Webhook</dt><dd>{data.webhook.ready ? "Connected" : "Not connected"}{data.webhook.url ? ` · ${data.webhook.url}` : ""}</dd></div>
             {data.checked_at && <div><dt>Last checked</dt><dd>{relativeTime(data.checked_at)}</dd></div>}
             <div><dt>Disputes</dt><dd>{data.open_disputes ? `${data.open_disputes} open (Operations → Disputes)` : "None open"}</dd></div>

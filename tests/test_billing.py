@@ -43,7 +43,8 @@ class FakeStripe:
         if path.startswith("/products/"):
             return {"id": path.split("/")[-1], "active": True}
         if path == "/prices" and method == "POST":
-            price = {"id": f"price_{self.count}", "lookup_key": data["lookup_key"], "product": data["product"]}
+            price = {"id": f"price_{self.count}", "lookup_key": data["lookup_key"], "product": data["product"],
+                     "recurring": data.get("recurring"), "metadata": data.get("metadata") or {}, "unit_amount": data.get("unit_amount")}
             self.prices[price["id"]] = price
             return price
         if path.startswith("/prices/") and method == "POST":
@@ -128,7 +129,11 @@ class SetupTests(BillingCase):
         self.assertTrue(result["ready"], result)
         self.assertEqual(result["mode"], "test")
         created = [(m, p) for m, p, _, _ in self.stripe.calls if m == "POST"]
-        self.assertEqual(sum(1 for c in created if c[1] == "/prices"), 2)
+        self.assertEqual(sum(1 for c in created if c[1] == "/prices"), 4)  # monthly and yearly for each plan
+        yearly = sorted((d["unit_amount"], d["lookup_key"]) for m, p, d, _ in self.stripe.calls
+                        if (m, p) == ("POST", "/prices") and d["recurring"] == {"interval": "year"})
+        self.assertEqual(yearly, [(7188, "fayfort_standard_yearly_usd_7188"), (17988, "fayfort_pro_yearly_usd_17988")])
+        self.assertTrue(result["yearly_ready"])
         self.assertIn(("POST", "/webhook_endpoints"), created)
         webhook = next(d for m, p, d, _ in self.stripe.calls if (m, p) == ("POST", "/webhook_endpoints"))
         self.assertEqual(webhook["url"], "https://api.fayfort.test/billing/stripe/webhook")
@@ -137,6 +142,7 @@ class SetupTests(BillingCase):
         self.assertEqual((price["unit_amount"], price["recurring"]), (599, {"interval": "month"}))
         portal = next(d for m, p, d, _ in self.stripe.calls if (m, p) == ("POST", "/billing_portal/configurations"))
         update = portal["features"]["subscription_update"]
+        self.assertEqual([len(p["prices"]) for p in update["products"]], [2, 2])  # switch monthly <-> yearly in the portal
         self.assertEqual(update["proration_behavior"], "always_invoice")  # upgrades charged at once
         self.assertIn({"type": "decreasing_item_amount"}, update["schedule_at_period_end"]["conditions"])  # downgrades wait
         webhook_events = next(d for m, p, d, _ in self.stripe.calls if (m, p) == ("POST", "/webhook_endpoints"))["enabled_events"]
@@ -314,6 +320,82 @@ class SubscriptionTests(BillingCase):
         self.assertEqual(moved["moved"], 1)
         update = [d for m, p, d, _ in self.stripe.calls if p == "/subscriptions/sub_1" and m == "POST"][-1]
         self.assertEqual((update["items"][0]["price"], update["proration_behavior"]), ("price_pro", "none"))
+
+
+class YearlyTests(BillingCase):
+    """Yearly plans (owner request 2026-10-26): 12 times the monthly price, no discount."""
+
+    def yearly_db(self, **extra):
+        db = self.with_prices(membership_db(**extra))
+        db.rows["billing_settings"] += [{"key": "price_standard_year", "value": "price_std_y"},
+                                        {"key": "price_pro_year", "value": "price_pro_y"}]
+        return db
+
+    def paid_year(self, invoice_id="in_y1", when=None, cents=17988):
+        service.record_invoice_paid({"id": invoice_id, "subscription": "sub_1", "customer": "cus_123", "amount_paid": cents,
+                                     "currency": "usd", "charge": "ch_y1",
+                                     "lines": {"data": [{"price": {"id": "price_pro_y", "recurring": {"interval": "year"}}}]},
+                                     "status_transitions": {"paid_at": int((when or NOW).timestamp())}})
+
+    def test_checkout_offers_the_yearly_price(self):
+        self.client(self.yearly_db())
+        app = FastAPI()
+        app.include_router(create_billing_router())
+        client = TestClient(app)
+        started = client.post("/members/subscription/checkout", json={"plan": "standard", "interval": "year"}, headers=AUTH)
+        self.assertEqual(started.status_code, 200, started.text)
+        session = next(d for m, p, d, _ in self.stripe.calls if p == "/checkout/sessions")
+        self.assertEqual(session["line_items"], [{"price": "price_std_y", "quantity": 1}])
+        self.assertEqual(session["metadata"]["fayfort_interval"], "year")
+        view = client.get("/members/subscription", headers=AUTH).json()
+        self.assertEqual((view["prices"]["standard"]["yearly"], view["prices"]["pro"]["yearly"]), (71.88, 179.88))
+        self.assertTrue(view["yearly_available"])
+
+    def test_yearly_closed_until_its_prices_exist(self):
+        self.use(self.with_prices(membership_db()))
+        with self.assertRaises(service.BillingError):
+            service.start_checkout(MEMBER, "pro", "year")
+
+    def test_a_yearly_payment_is_twelve_paid_months_with_monthly_allowances(self):
+        self.use(self.yearly_db())
+        start = NOW - timedelta(days=40)
+        service.sync_subscription(subscription(price="price_pro_y", start=start,
+                                               items={"data": [{"price": {"id": "price_pro_y", "recurring": {"interval": "year"}}}]},
+                                               current_period_start=int(start.timestamp())))
+        row = self.db.rows["member_subscriptions"][0]
+        self.assertEqual((row["plan"], row["billing_interval"]), ("pro", "year"))
+        welcome = [r["payload"]["body"] for r in self.db.rows["email_outbox"] if r["template"] == "commerce_billing"][-1]
+        self.assertIn("full Pro perks start now", welcome)
+        self.paid_year(when=start)
+        payment = self.db.rows["member_subscription_payments"][0]
+        self.assertEqual(payment["months"], 12)
+        self.assertEqual(plans.subscription_state(MEMBER)["paid_months"], 12)
+        self.assertNotEqual(plans.deposit_terms(MEMBER)["reason"], "pro_first_month")
+        self.assertFalse(service.member_view(MEMBER)["first_month"])
+        window = plans.allowance_window(MEMBER, NOW)
+        self.assertEqual(window["allowance"], 3)
+        self.assertEqual(window["since"], plans.add_months(start.replace(microsecond=0), 1).isoformat())  # month two of the year
+        # Rank points arrive month by month: 40 days in = months 1 and 2.
+        self.assertEqual(ranks.recompute(MEMBER)["score"], 80)
+
+    def test_a_partly_refunded_year_counts_only_the_months_kept(self):
+        self.use(self.yearly_db())
+        service.sync_subscription(subscription(price="price_pro_y"))
+        self.paid_year()
+        service.record_refund({"invoice": "in_y1", "amount_refunded": 8994})  # half back
+        self.assertEqual(plans.subscription_state(MEMBER)["paid_months"], 6)
+        service.record_refund({"invoice": "in_y1", "amount_refunded": 17988})
+        self.assertEqual(plans.subscription_state(MEMBER)["paid_months"], 0)
+
+    def test_yearly_subscribers_stay_yearly_when_prices_move(self):
+        self.use(self.yearly_db())
+        self.stripe.subscriptions["sub_1"] = subscription(price="price_old_y")
+        self.stripe.subscriptions["sub_1"]["items"] = {"data": [{"id": "si_1", "price": {
+            "id": "price_old_y", "recurring": {"interval": "year"}, "metadata": {"fayfort_plan": "pro"}}}]}
+        service.sync_subscription(self.stripe.subscriptions["sub_1"])
+        service.move_to_current_prices(dry_run=False)
+        update = [d for m, p, d, _ in self.stripe.calls if p == "/subscriptions/sub_1" and m == "POST"][-1]
+        self.assertEqual(update["items"][0]["price"], "price_pro_y")
 
 
 class WebhookTests(BillingCase):

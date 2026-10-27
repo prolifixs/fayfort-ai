@@ -1,4 +1,6 @@
 import { playMemberSound } from "../memberSound";
+import { FindsPanel } from "./FindsPanel";
+import { rememberReturn } from "../../lib/returnTo";
 import { WorkerRatingPrompts } from "./WorkerRatingPrompts";
 import { setOpenChat } from "./activeChat";
 import { MemberNotificationsBar } from "../MemberNotifications";
@@ -36,8 +38,8 @@ import { ToolsPanel, toolFromUrl, type ToolKey } from "./ToolsPanel";
 import { ProductAttachment, ProductChatSheet, ProductRefCard, useProductAskTip, type ProductRef } from "./productChat";
 import { VisitorPopups } from "../consent/VisitorPopups";
 
-type MemberPanel = "chat" | "catalog" | "saved" | "requests" | "product" | "tools";
-const memberPanels: MemberPanel[] = ["catalog", "saved", "requests", "product", "tools"];
+type MemberPanel = "chat" | "catalog" | "finds" | "saved" | "requests" | "product" | "tools";
+const memberPanels: MemberPanel[] = ["catalog", "finds", "saved", "requests", "product", "tools"];
 function panelFromUrl(): MemberPanel {
   const panel = new URLSearchParams(window.location.search).get("panel");
   // The supplier directory moved into Tools (2026-10-20); old links still land on it.
@@ -896,6 +898,7 @@ export function MemberChatPage() {
   const panelTitles: Record<MemberPanel, string> = {
     chat: activeChat?.title || "New chat",
     catalog: "Browse",
+    finds: "Finds",
     saved: "Saved products",
     requests: "Orders & requests",
     product: "Product",
@@ -909,8 +912,14 @@ export function MemberChatPage() {
     setOpenChat(visibleChatId);
     return () => setOpenChat(null);
   }, [visibleChatId]);
+  // A link from fayfort.com (a chosen consultation time, a tool) survives signing in or joining.
+  useEffect(() => {
+    if (authLoading || token) return;
+    if (/[?&](tool|slot)=/.test(window.location.search)) rememberReturn(window.location.pathname + window.location.search);
+  }, [authLoading, token]);
   const navItems: { panel: MemberPanel; label: string; icon: string }[] = [
     { panel: "catalog", label: "Browse", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+    { panel: "finds", label: "Finds", icon: "M12 3l2.2 5.6L20 9.3l-4.4 3.8L17 19l-5-3.1L7 19l1.4-5.9L4 9.3l5.8-.7z" },
     { panel: "saved", label: "Saved products", icon: "M6 4h12v16l-6-4-6 4z" },
     { panel: "requests", label: "Orders & requests", icon: "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" },
     { panel: "tools", label: "Tools", icon: "M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" },
@@ -1314,6 +1323,7 @@ export function MemberChatPage() {
               {activePanel === "requests" && (
                 <OrdersPanel accessToken={token} onAddressChange={refreshCompletion} onViewChat={(id) => void viewChat(id)} />
               )}
+              {activePanel === "finds" && <FindsPanel accessToken={token} onOpenProduct={(id) => openProduct({ id })} onUpgrade={openPlans} />}
               {activePanel === "tools" && <ToolsPanel accessToken={token} initial={initialTool()} />}
               {activePanel === "saved" && <SavedPanel accessToken={token} onOpen={openProduct} onBrowse={() => selectMemberPanel("catalog")} />}
               {activePanel === "product" && productId && (

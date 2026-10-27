@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class CheckoutInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     plan: Literal["standard", "pro"]
+    interval: Literal["month", "year"] = "month"
 
 
 class PauseInput(BaseModel):
@@ -63,7 +64,7 @@ def create_billing_router() -> APIRouter:
         member_id = verified_member(authorization)
         writes.check(member_id)
         require_billing()
-        return {"url": _member_call(lambda: service.start_checkout(member_id, payload.plan),
+        return {"url": _member_call(lambda: service.start_checkout(member_id, payload.plan, payload.interval),
                                     "Checkout could not be started.")}
 
     @router.post("/members/subscription/portal")

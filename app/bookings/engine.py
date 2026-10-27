@@ -1,6 +1,7 @@
 """The booking engine (docs/BOOKINGS_AND_EXECUTIVE_PLAN.md section 4).
 
-Availability: weekly hours per person (`staff_availability`, in their own time zone) minus blocked time
+Availability: weekly hours per person (`staff_availability`, in their own time zone; someone who hasn't saved any
+works normal hours, NORMAL_HOURS) minus blocked time
 (`staff_time_off`) minus live bookings (held or confirmed, including the gap after each). The database refuses two
 live bookings that overlap for one host, so a slot can't be taken twice even when two people press Book together.
 
@@ -36,6 +37,10 @@ DEFAULTS: dict[str, Any] = {
 FIELDS = ("id,host_id,kind,member_id,starts_at,ends_at,blocked_until,status,hold_expires_at,source_table,source_id,"
           "invoice_id,topic,brief,host_note,call_link,google_event_id,member_time_zone,reschedule_count,cancel_reason,"
           "cancelled_by,refund,reminders,work_item_id,created_at,updated_at")
+# Owner decision 2026-10-26: a host who hasn't saved weekly hours is available in normal working hours, unless the
+# time is blocked or booked.
+NORMAL_HOURS: dict[str, Any] = {"weekdays": [0, 1, 2, 3, 4], "start_time": "09:00", "end_time": "18:00",
+                                "time_zone": "Asia/Shanghai"}
 KIND_LABEL = {"consultation": "Consultation", "session": "Session", "tour": "Tour"}
 
 
@@ -114,6 +119,52 @@ def active_ceo() -> dict | None:
                .eq("status", "active").limit(1).execute())
 
 
+def _admin_ids() -> list[str]:
+    try:
+        data = db().rpc("platform_admin_ids", {}).execute().data or []
+    except Exception:
+        logger.warning("Administrators could not be listed", exc_info=True)
+        return []
+    found = []
+    for item in data if isinstance(data, list) else [data]:
+        value = item.get("platform_admin_ids") if isinstance(item, dict) else item
+        if value:
+            found.append(str(value))
+    return found
+
+
+def invited_ceo() -> dict | None:
+    return one(db().table("fayfort_workers").select("user_id,status,staff_role,job_title").eq("staff_role", "ceo")
+               .eq("status", "invited").limit(1).execute())
+
+
+def consultation_host(*, ensure: bool = False) -> dict | None:
+    """Who takes consultations (owner decisions 2026-10-26): the CEO, also while her invitation is still waiting to be
+    accepted (her calendar works from the day she's invited); only when there is no CEO at all, the only administrator.
+    With ensure=True the administrator gets a worker profile, which a booking needs."""
+    ceo = active_ceo() or invited_ceo()
+    if ceo:
+        return ceo
+    admins = _admin_ids()
+    if len(admins) != 1:
+        return None
+    admin_id = admins[0]
+    row = one(db().table("fayfort_workers").select("user_id,status,staff_role,job_title").eq("user_id", admin_id)
+              .limit(1).execute())
+    if row and row.get("status") == "inactive":
+        return None
+    if ensure and not row:
+        stamp = now_utc().isoformat()
+        db().table("fayfort_workers").insert({"user_id": admin_id, "status": "active", "provisioned_by": admin_id,
+                                              "invite_kind": "existing_account", "activated_at": stamp,
+                                              "invitation_sent_at": stamp, "job_title": "Administrator"}).execute()
+    elif ensure and row.get("status") != "active":
+        db().table("fayfort_workers").update({"status": "active", "activated_at": now_utc().isoformat()}) \
+            .eq("user_id", admin_id).execute()
+    return {"user_id": admin_id, "status": "active", "staff_role": None, "job_title": (row or {}).get("job_title"),
+            "acting": True}
+
+
 def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
     return a_start < b_end and b_start < a_end
 
@@ -124,6 +175,16 @@ def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datet
 def availability(host_id: str) -> list[dict]:
     return rows(db().table("staff_availability").select("id,weekday,start_time,end_time,time_zone,kinds")
                 .eq("worker_id", host_id).order("weekday").execute())
+
+
+def normal_hours() -> list[dict]:
+    return [{"id": None, "weekday": day, "start_time": NORMAL_HOURS["start_time"], "end_time": NORMAL_HOURS["end_time"],
+             "time_zone": NORMAL_HOURS["time_zone"], "kinds": ["consultation", "session"]} for day in NORMAL_HOURS["weekdays"]]
+
+
+def weekly_hours(host_id: str) -> list[dict]:
+    """Saved weekly hours, or normal working hours when none are saved."""
+    return availability(host_id) or normal_hours()
 
 
 def time_off(host_id: str, start: datetime | None = None, end: datetime | None = None) -> list[dict]:
@@ -160,7 +221,7 @@ def free_slots(host_id: str, kind: str, start: datetime, end: datetime, *, now: 
     latest = min(end, now + timedelta(days=int(rules["horizon_days"])))
     if earliest >= latest:
         return []
-    weekly = [r for r in availability(host_id) if kind in (r.get("kinds") or [])]
+    weekly = [r for r in weekly_hours(host_id) if kind in (r.get("kinds") or [])]
     if not weekly:
         return []
     blocked: list[tuple[datetime, datetime]] = []

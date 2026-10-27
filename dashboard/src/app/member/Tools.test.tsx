@@ -21,6 +21,14 @@ beforeEach(() => {
       return ok({ tour: { id: "t1", summary: "Guangzhou, from 1 Dec 2026 for 3 days, 2 people", city_label: "Guangzhou", status: "requested",
         quote_amount: null, currency: "USD", invoice_url: null, conversation_id: "c8", guide_name: null } }, 201);
     if (url.endsWith("/members/tours")) return ok({ tours });
+    if (url.includes("/members/tours/calendar")) {
+      const days = [];
+      for (let d = new Date("2026-11-25T12:00:00Z"); d <= new Date("2026-12-31T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1)) {
+        const date = d.toISOString().slice(0, 10);
+        days.push({ date, state: date < "2026-11-27" ? "too_soon" : date === "2026-12-04" ? "full" : "open" });
+      }
+      return ok({ days, earliest: "2026-11-27", notice_days: 2 });
+    }
     if (url.includes("/members/plan")) return ok({ tier: "free", consultation: { price: 100, currency: "USD", included: false, tier: "free" }, contacts: null });
     if (url.includes("/members/consultations")) return ok({ consultations: [] });
     return ok({});
@@ -40,7 +48,13 @@ describe("Tools", () => {
     fireEvent.click(within(grid).getByRole("button", { name: /Tour guide in China/ }));
     expect(await screen.findByRole("link", { name: "Pay $250" })).toHaveAttribute("href", "https://shop.example/inv/1");
     fireEvent.click(screen.getByRole("button", { name: "Request a tour guide" }));
-    fireEvent.change(screen.getByLabelText("Arrival date"), { target: { value: "2026-12-01" } });
+    expect(await screen.findByText("November 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nov 26, too soon/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(screen.getByRole("button", { name: /Dec 4, guides fully booked/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /Dec 1$/ }));
+    expect(screen.getByRole("button", { name: /Dec 1$/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Arriving Tue, Dec 1, guide until Thu, Dec 3/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("People"), { target: { value: "2" } });
     fireEvent.click(screen.getByLabelText("Canton Fair"));
     fireEvent.click(screen.getByRole("button", { name: "Request a guide" }));

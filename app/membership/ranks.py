@@ -118,14 +118,22 @@ def collect(member_id: str) -> list[dict]:
                                                                  .select("stripe_invoice_id,status").eq("member_id", member_id)
                                                                  .limit(200).execute()) if d.get("status") != "won"}
     for payment in rows(db().table("member_subscription_payments")
-                        .select("stripe_invoice_id,plan,paid_at,amount,refunded_amount,dispute_lost_amount")
+                        .select("stripe_invoice_id,plan,paid_at,amount,refunded_amount,dispute_lost_amount,months")
                         .eq("member_id", member_id).limit(200).execute()):
-        # A refunded or disputed month earns nothing.
-        lost = float(payment.get("refunded_amount") or 0) + float(payment.get("dispute_lost_amount") or 0)
-        kept = lost < float(payment.get("amount") or 0) and str(payment["stripe_invoice_id"]) not in disputed
-        events.append({"kind": "subscription", "source_key": str(payment["stripe_invoice_id"]),
-                       "points": SUBSCRIPTION_POINTS.get(str(payment.get("plan")), 0) if kept else 0,
-                       "occurred_at": _iso(payment.get("paid_at"))})
+        # A refunded or disputed month earns nothing. A yearly payment earns month by month, like monthly payers
+        # (a month's points arrive when that month starts, so the rank window treats both the same).
+        disputed_here = str(payment["stripe_invoice_id"]) in disputed
+        months = int(payment.get("months") or 1)
+        kept = 0 if disputed_here else plans.kept_months(payment)
+        paid_at = plans_parse(payment.get("paid_at"))
+        for index in range(months):
+            when = plans.add_months(paid_at, index) if paid_at else None
+            if index and (not when or when > plans.now_utc()):
+                break
+            events.append({"kind": "subscription",
+                           "source_key": str(payment["stripe_invoice_id"]) + (f":{index}" if index else ""),
+                           "points": SUBSCRIPTION_POINTS.get(str(payment.get("plan")), 0) if index < kept else 0,
+                           "occurred_at": _iso(when.isoformat() if when else payment.get("paid_at"))})
     events += _share_buyers(member_id)
     return [e for e in events if e["occurred_at"]]
 

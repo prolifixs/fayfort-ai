@@ -42,6 +42,10 @@ def list_consultations(member_id: str) -> list[dict]:
         view = {k: found_booking.get(k) for k in ("id", "starts_at", "ends_at", "status", "hold_expires_at",
                                                   "member_time_zone", "refund", "reschedule_count")}
         view["call_link"] = found_booking.get("call_link") if found_booking.get("status") == "confirmed" else None
+        from app.bookings import engine
+        allowed, why = engine.can_member_change(found_booking)
+        view["can_change"] = allowed
+        view["change_note"] = why or None
         return view
 
     return [{**c, "invoice_url": urls.get(str(c.get("invoice_id"))), "booking": booking_view(c)} for c in found]
@@ -57,7 +61,7 @@ def book_consultation(member_id: str, topic: str, starts_at: Any = None, time_zo
     starts = engine.parse(starts_at) if starts_at else None
     ceo = None
     if starts:
-        ceo = engine.active_ceo()
+        ceo = engine.consultation_host(ensure=True)
         if not ceo:
             raise MembershipError("Booking times aren't open yet. Book without a time and we'll agree one in the chat.")
     quote = plans.consultation_quote(member_id)

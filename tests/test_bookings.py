@@ -433,3 +433,80 @@ class ConsultationTests(BookingTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NormalHoursTests(BookingTestCase):
+    """Owner decision 2026-10-26: no saved hours means normal working hours (Mon-Fri 09:00-18:00 China), and with no
+    CEO the only administrator takes consultations."""
+
+    def test_no_saved_hours_means_normal_working_hours(self):
+        self.db.rows["staff_availability"] = []
+        slots = engine.free_slots(CEO, "consultation", NOW, NOW + timedelta(days=7))
+        starts = [s["starts_at"] for s in slots]
+        # Monday 2 Nov is inside the 24 h notice; Tuesday 3 Nov 09:00 China = 01:00 UTC, last 60 min start 17:00 China.
+        self.assertEqual(starts[0], "2026-11-03T01:00:00+00:00")
+        self.assertIn("2026-11-03T09:00:00+00:00", starts)
+        self.assertNotIn("2026-11-03T09:30:00+00:00", starts)
+        # Saturday 7 and Sunday 8 Nov China: nothing.
+        self.assertFalse([s for s in starts if s.startswith(("2026-11-07", "2026-11-08"))])
+        self.assertEqual(len(slots), 4 * 17)
+
+    def test_blocked_time_still_wins_over_normal_hours(self):
+        self.db.rows["staff_availability"] = []
+        self.db.rows["staff_time_off"].append({"id": "t", "worker_id": CEO, "starts_at": "2026-11-03T00:00:00+00:00",
+                                               "ends_at": "2026-11-04T00:00:00+00:00", "reason": "Fair"})
+        starts = [s["starts_at"] for s in engine.free_slots(CEO, "consultation", NOW, NOW + timedelta(days=3))]
+        self.assertFalse([s for s in starts if s.startswith("2026-11-03")])
+        self.assertTrue([s for s in starts if s.startswith("2026-11-04")])
+
+    def test_saved_hours_replace_normal_hours(self):
+        starts = [s["starts_at"] for s in engine.free_slots(CEO, "consultation", NOW, NOW + timedelta(days=7))]
+        self.assertFalse([s for s in starts if s.startswith("2026-11-03")])
+
+    def test_only_administrator_hosts_when_nobody_is_ceo(self):
+        self.db.rows["fayfort_workers"] = [w for w in self.db.rows["fayfort_workers"] if w["user_id"] != CEO]
+        self.db.rpc = lambda name, params: SimpleNamespace(execute=lambda: SimpleNamespace(
+            data=[ADMIN] if name == "platform_admin_ids" else []))
+        host = engine.consultation_host()
+        self.assertEqual((host["user_id"], host["acting"]), (ADMIN, True))
+        self.assertFalse([w for w in self.db.rows["fayfort_workers"] if w["user_id"] == ADMIN])
+        engine.consultation_host(ensure=True)
+        row = next(w for w in self.db.rows["fayfort_workers"] if w["user_id"] == ADMIN)
+        self.assertEqual((row["status"], row["job_title"]), ("active", "Administrator"))
+        booking = engine.hold(host_id=ADMIN, kind="consultation", member_id=MEMBER, starts=self.at("2026-11-03T02:00:00"))
+        self.assertEqual(booking["host_id"], ADMIN)
+
+    def test_no_host_when_several_administrators_and_no_ceo(self):
+        self.db.rows["fayfort_workers"] = [w for w in self.db.rows["fayfort_workers"] if w["user_id"] != CEO]
+        self.db.rpc = lambda name, params: SimpleNamespace(execute=lambda: SimpleNamespace(data=[ADMIN, STAFF]))
+        self.assertIsNone(engine.consultation_host())
+
+
+class PublicSlotsTests(BookingTestCase):
+    def test_public_slots_show_times_only(self):
+        app = FastAPI()
+        app.include_router(create_bookings_router(lambda h: MEMBER, lambda h: None, lambda h: None))
+        body = TestClient(app).get("/public/bookings/slots").json()
+        self.assertTrue(body["available"])
+        self.assertEqual(body["minutes"], 60)
+        self.assertEqual(body["slots"][0], {"starts_at": "2026-11-04T06:00:00+00:00"})
+        self.assertNotIn("host", body)
+
+    def test_consultation_list_says_if_the_member_can_still_change_it(self):
+        from app.membership import service as membership
+        booking = engine.hold(host_id=CEO, kind="consultation", member_id=MEMBER, starts=self.at("2026-11-04T07:00:00"))
+        self.db.rows["member_consultations"].append({"id": "c1", "member_id": MEMBER, "topic": "Wigs", "status": "awaiting_payment",
+                                                     "booking_id": booking["id"], "invoice_id": None, "created_at": "2026-11-02T00:00:00Z"})
+        with patch("app.membership.service.CONSULTATION_FIELDS", "*"):
+            found = membership.list_consultations(MEMBER)
+        self.assertTrue(found[0]["booking"]["can_change"])
+
+
+class InvitedCeoTests(BookingTestCase):
+    def test_an_invited_ceo_takes_consultations_before_accepting(self):
+        self.db.rows["fayfort_workers"][0]["status"] = "invited"
+        self.db.rpc = lambda name, params: SimpleNamespace(execute=lambda: SimpleNamespace(data=[ADMIN]))
+        self.assertEqual(engine.consultation_host()["user_id"], CEO)
+        booking = engine.hold(host_id=CEO, kind="consultation", member_id=MEMBER, starts=self.at("2026-11-04T07:00:00"))
+        self.assertEqual(booking["host_id"], CEO)
+        self.assertFalse([w for w in self.db.rows["fayfort_workers"] if w["user_id"] == ADMIN])

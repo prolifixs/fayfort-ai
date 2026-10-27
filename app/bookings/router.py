@@ -119,7 +119,7 @@ def staff_role_of(user_id: str) -> str | None:
 def actor_for(staff: dict) -> dict:
     admin = staff.get("role") == "platform_admin"
     role = "admin" if admin else (staff_role_of(staff["user_id"]) or "staff")
-    ceo = engine.active_ceo()
+    ceo = engine.consultation_host()
     return {"user_id": staff["user_id"], "admin": admin, "staff_role": role,
             "ceo_id": str(ceo["user_id"]) if ceo else None, "sees_all": admin or role == "assistant"}
 
@@ -135,8 +135,11 @@ def can_see(actor: dict, booking: dict) -> bool:
 
 def managed_hosts(actor: dict) -> list[str]:
     if actor["admin"]:
-        return [str(r["user_id"]) for r in rows(db().table("fayfort_workers").select("user_id").eq("status", "active")
-                                                .limit(500).execute())]
+        found = [str(r["user_id"]) for r in rows(db().table("fayfort_workers").select("user_id").eq("status", "active")
+                                                 .limit(500).execute())]
+        if actor["ceo_id"] and actor["ceo_id"] not in found:
+            found.insert(0, actor["ceo_id"])
+        return found
     found = [actor["user_id"]]
     if actor["staff_role"] == "assistant" and actor["ceo_id"] and actor["ceo_id"] not in found:
         found.insert(0, actor["ceo_id"])
@@ -317,7 +320,7 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
             people, roles = _people(ids), _roles(ids)
             hosts = [{"user_id": i, "name": (people.get(i) or {}).get("name") or "FayFort team",
                       "photo_url": (people.get(i) or {}).get("photo_url"),
-                      "staff_role": (roles.get(i) or {}).get("staff_role") or "staff",
+                      "staff_role": "ceo" if i == actor["ceo_id"] else (roles.get(i) or {}).get("staff_role") or "staff",
                       "job_title": (roles.get(i) or {}).get("job_title"), "is_self": i == actor["user_id"]} for i in ids]
             hosts.sort(key=lambda h: (h["staff_role"] != "ceo", not h["is_self"], h["name"]))
             return {"user_id": actor["user_id"], "staff_role": actor["staff_role"], "sees_all": actor["sees_all"],
@@ -435,11 +438,13 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
         try:
             weekly = engine.availability(str(host_id))
             now = engine.now_utc()
+            normal = {**engine.NORMAL_HOURS, "in_use": not weekly}
             return {"host": {"user_id": str(host_id), **host_card(str(host_id))},
                     "can_edit": can_manage_host(actor, str(host_id)),
                     "time_zone": (weekly[0].get("time_zone") if weekly else None) or "Asia/Shanghai",
                     "weekly": [{**r, "start_time": str(r["start_time"])[:5], "end_time": str(r["end_time"])[:5]} for r in weekly],
-                    "time_off": engine.time_off(str(host_id), now - timedelta(days=1), now + timedelta(days=365))}
+                    "time_off": engine.time_off(str(host_id), now - timedelta(days=1), now + timedelta(days=365)),
+                    "normal_hours": normal}
         except Exception as exc:
             raise _fail(exc, "The calendar could not be loaded.") from exc
 
@@ -449,6 +454,8 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
         try:
             if not can_manage_host(actor, str(host_id)):
                 raise PermissionError("You can't change this calendar.")
+            if actor["ceo_id"] == str(host_id):
+                engine.consultation_host(ensure=True)
             weekly = engine.save_availability(str(host_id), actor["user_id"], [b.model_dump() for b in payload.weekly],
                                               payload.time_zone)
             return {"weekly": [{**r, "start_time": str(r["start_time"])[:5], "end_time": str(r["end_time"])[:5]} for r in weekly]}
@@ -461,6 +468,8 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
         try:
             if not can_manage_host(actor, str(host_id)):
                 raise PermissionError("You can't change this calendar.")
+            if actor["ceo_id"] == str(host_id):
+                engine.consultation_host(ensure=True)
             return {"time_off": engine.add_time_off(str(host_id), actor["user_id"], aware(payload.starts_at),
                                                     aware(payload.ends_at), payload.reason)}
         except Exception as exc:
@@ -504,7 +513,7 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
                      days: int = Query(default=14, ge=1, le=62), authorization: str | None = Header(default=None)):
         require_verified_member(authorization)
         try:
-            ceo = engine.active_ceo()
+            ceo = engine.consultation_host()
             rules = engine.settings_row()
             summary = {"minutes": engine.minutes_for(kind, rules), "cancel_cutoff_hours": rules["cancel_cutoff_hours"],
                        "hold_hours": rules["hold_hours"], "horizon_days": rules["horizon_days"]}
@@ -516,6 +525,27 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
             slots = engine.free_slots(str(ceo["user_id"]), kind, begin, begin + timedelta(days=days, hours=28), rules=rules)
             return {"available": True, "slots": slots, "host": host_card(str(ceo["user_id"])), "rules": summary,
                     "message": None if slots else "No free times in these days. Try later dates."}
+        except Exception as exc:
+            raise _fail(exc, "Free times could not be loaded.") from exc
+
+    public_cache: dict[str, Any] = {"at": None, "body": None}
+
+    @router.get("/public/bookings/slots")
+    def public_slots():
+        """fayfort.com /go/consultation: the next free consultation times, times only (no names). Cached a minute."""
+        now = engine.now_utc()
+        if public_cache["at"] and now - public_cache["at"] < timedelta(seconds=60):
+            return public_cache["body"]
+        try:
+            host = engine.consultation_host()
+            rules = engine.settings_row()
+            body: dict[str, Any] = {"available": bool(host), "minutes": engine.minutes_for("consultation", rules),
+                                    "cancel_cutoff_hours": rules["cancel_cutoff_hours"], "slots": []}
+            if host:
+                slots = engine.free_slots(str(host["user_id"]), "consultation", now, now + timedelta(days=21), rules=rules)
+                body["slots"] = [{"starts_at": slot["starts_at"]} for slot in slots[:60]]
+            public_cache.update(at=now, body=body)
+            return body
         except Exception as exc:
             raise _fail(exc, "Free times could not be loaded.") from exc
 

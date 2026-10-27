@@ -7,7 +7,7 @@ import type { NextRequest } from 'next/server'
 export const PUBLIC_SITE_PATHS = ['/', '/how-it-works', '/services', '/about-us', '/terms', '/terms-ebooks', '/ebook/landed', '/go', '/cookies', '/newsletter']
 
 // Link-in-bio pages (fayfort.com/go and its sub-pages).
-export const GO_PAGES = ['/go/giveaway', '/go/shop', '/go/consultation', '/go/tour-guide', '/go/request']
+export const GO_PAGES = ['/go/giveaway', '/go/shop', '/go/consultation', '/go/tour-guide', '/go/request', '/go/finds']
 
 export const isPublicSitePath = (pathname: string) =>
   PUBLIC_SITE_PATHS.includes(pathname) || GO_PAGES.includes(pathname) || pathname.startsWith('/ebook/landed/')

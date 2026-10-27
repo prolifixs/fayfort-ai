@@ -88,3 +88,38 @@ class ToursTests(unittest.TestCase):
         self.assertEqual(client.get("/operations/tours", headers={"Authorization": "Bearer m"}).status_code, 403)
         staff = client.get("/operations/tours", headers={"Authorization": "Bearer s"}).json()
         self.assertEqual(staff["tours"][0]["member_name"], "Jordan Mensah")
+
+
+class TourCalendarTests(unittest.TestCase):
+    """Phase C: members pick the arrival day on a calendar; too-soon days and days every guide is out are closed."""
+
+    def setUp(self):
+        self.db = Db({})
+        self.previous = commerce_db.client
+        commerce_db.client = self.db
+        self.today = date(2026, 11, 2)
+        self.clock = patch.object(tours.plans, "now_utc", return_value=__import__("datetime").datetime(2026, 11, 2, 9, 0,
+                                  tzinfo=__import__("datetime").timezone.utc))
+        self.clock.start()
+
+    def tearDown(self):
+        self.clock.stop()
+        commerce_db.client = self.previous
+
+    def test_calendar_marks_too_soon_and_full_days(self):
+        self.db.rows["member_tour_bookings"] = [
+            {"id": "t1", "arrival_date": "2026-11-10", "days": 2, "status": "confirmed"},
+            {"id": "t2", "arrival_date": "2026-11-20", "days": 1, "status": "requested"},
+        ]
+        with patch.object(tours, "guide_count", return_value=1):
+            found = {d["date"]: d["state"] for d in tours.calendar(self.today, 30)["days"]}
+        self.assertEqual((found["2026-11-02"], found["2026-11-03"], found["2026-11-04"]), ("too_soon", "too_soon", "open"))
+        self.assertEqual((found["2026-11-10"], found["2026-11-11"], found["2026-11-12"]), ("full", "full", "open"))
+        self.assertEqual(found["2026-11-20"], "open")  # a request without a quote doesn't hold the dates
+        with patch.object(tours, "guide_count", return_value=2):
+            found = {d["date"]: d["state"] for d in tours.calendar(self.today, 30)["days"]}
+        self.assertEqual(found["2026-11-10"], "open")
+
+    def test_request_refuses_a_too_soon_arrival(self):
+        with self.assertRaises(tours.TourError):
+            tours.request_tour(MEMBER, tours.TourRequest(city="yiwu", arrival_date=self.today + timedelta(days=1), days=1, people=1))

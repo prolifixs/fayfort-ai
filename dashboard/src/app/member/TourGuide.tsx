@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { TourDatePicker } from "./TourDatePicker";
 import { apiRequest } from "../../lib/api";
 import { formatMoney } from "./membershipApi";
 
@@ -46,12 +47,6 @@ const NEEDS: [string, string][] = [
   ["interpreting", "Interpreting"],
   ["airport_pickup", "Airport pickup"],
 ];
-
-function today() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-}
 
 export function TourGuideCard({ accessToken, startOpen = false }: { accessToken: string; startOpen?: boolean }) {
   const [items, setItems] = useState<MemberTour[]>([]);
@@ -163,10 +158,6 @@ export function TourGuideCard({ accessToken, startOpen = false }: { accessToken:
               </label>
             )}
             <label>
-              Arrival date
-              <input type="date" min={today()} required value={arrival} onChange={(event) => setArrival(event.target.value)} />
-            </label>
-            <label>
               Days with a guide
               <input type="number" min={1} max={30} required value={days} onChange={(event) => setDays(event.target.value)} />
             </label>
@@ -174,6 +165,10 @@ export function TourGuideCard({ accessToken, startOpen = false }: { accessToken:
               People
               <input type="number" min={1} max={50} required value={people} onChange={(event) => setPeople(event.target.value)} />
             </label>
+          </div>
+          <div className="member-tour-dates">
+            <span className="member-tour-dates-label">Arrival date</span>
+            <TourDatePicker accessToken={accessToken} value={arrival} stayDays={Number(days) || 1} onChange={setArrival} />
           </div>
           <fieldset className="member-tour-needs">
             <legend>What do you need?</legend>
@@ -203,7 +198,7 @@ export function TourGuideCard({ accessToken, startOpen = false }: { accessToken:
             <textarea rows={3} maxLength={2000} value={notes} placeholder="What you're buying, budget, languages…" onChange={(event) => setNotes(event.target.value)} />
           </label>
           <p className="member-tour-pending">
-            Picking a date from our calendar is coming soon. For now, our team confirms your dates in the chat before sending the quote.
+            We hold your dates once we send the quote, and keep them while it's open.
           </p>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="member-perk-actions">

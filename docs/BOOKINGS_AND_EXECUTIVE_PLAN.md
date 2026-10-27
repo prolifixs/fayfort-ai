@@ -105,7 +105,10 @@ Taken 2026-10-25:
 Still open (defaults used unless you say otherwise):
 5. **Staff session price**: free for members, or a price per worker? Default: $25 for 30 minutes, Pro first-month rules as for consultations.
 6. **Who can book sessions**: every member, or Standard and Pro only? Default: every member.
-7. **CEO's weekly hours to start with**: default Mon–Fri 14:00–18:00 China time, which the assistant changes.
+7. **Hours when none are saved** (owner, 2026-10-26): anyone who hasn't saved weekly hours is bookable in normal
+   working hours, Monday to Friday 09:00–18:00 China time, except blocked or booked times. Saved hours replace this.
+   The CEO takes consultations from the day she is invited (before she accepts); only when there is no CEO at all does
+   the only administrator take them. The CEO is the skinnyfayfay account (owner, 2026-10-26).
 8. **Morning summary email to the CEO**: default on, at 08:30 China time.
 
 ## 10. Batches
@@ -156,5 +159,24 @@ Each batch comes with tests (API, dashboard, website, end-to-end), screenshots a
   details, slots), availability and time off, `/platform/bookings/settings`, member slots / list / move / cancel.
 - Operations → **Bookings** replaces Tour bookings: Bookings (Needs action, Today, Upcoming, Past), Calendar (week, China
   time), Hours & time off ("CEO's hours" for the assistant), Tours. Bookings also show on the Schedule.
-- Not yet: the member date picker and fayfort.com slots (batch 3), the CEO Today page (4), staff sessions (5), Google
-  Calendar (6). Until batch 3, members still book consultations without a time.
+- Not yet at the time: the member date picker and fayfort.com slots (batch 3, below), the CEO Today page (4), staff
+  sessions (5), Google Calendar (6).
+
+### Batch 3: member and website capture (2026-10-26)
+- **Normal hours by default** (`engine.NORMAL_HOURS`, `weekly_hours`): no saved hours means Mon–Fri 09:00–18:00 China
+  time. Operations → Bookings → Hours says "Normal working hours apply" with **Change these hours** to start from them.
+- **Consultation host** (`engine.consultation_host`): the CEO (active, or invited and not yet accepted), or with no CEO at all the only administrator
+  (they get a worker profile when the first booking or calendar change needs one). Several administrators and no CEO:
+  times stay closed and members book without a time, as before.
+- **Member app → Tools → Virtual consultation**: topic, then a day and time from the live calendar in the member's time
+  zone with China time alongside; the time is held 24 hours while they pay. Booked consultations show the time, Join call
+  (once confirmed and a link is set), **Change time** and **Cancel** (free up to 24 hours before; inside that the reason
+  is shown instead). `list_consultations` returns `can_change` and `change_note`.
+- **Tour guide**: the arrival date is picked on a month calendar (`GET /members/tours/calendar`): days within 2 days are
+  closed, days when every guide (member support team) is on a quoted or confirmed tour show "Guides booked", and the
+  stay is shaded. The server refuses arrivals sooner than 2 days.
+- **fayfort.com /go/consultation**: "Next free times" live from `GET /public/bookings/slots` (times only, cached a
+  minute), in the visitor's time zone. A time opens the app with `?slot=`; signed-out visitors keep it through joining
+  or signing in (`rememberReturn` on member links with a tool or slot), and the booking form opens with it chosen.
+- Tests: `tests/test_bookings.py` (normal hours, administrator host, public slots, can_change), `tests/test_tours.py`
+  (calendar), `Membership.test.tsx`, `Tools.test.tsx`, `BookingsPanel.test.tsx`, `dashboard/tests/e2e/phase-c.spec.ts`.

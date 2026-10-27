@@ -65,6 +65,7 @@ export const GO_LINKS = {
   shopCategory: (key: string) => `${BROWSE_URL}&top=${encodeURIComponent(key)}`,
   consultation: `${APP_URL}/member/chat?panel=tools&tool=consultation`,
   tour: `${APP_URL}/member/chat?panel=tools&tool=tour`,
+  finds: `${APP_URL}/member/chat?panel=finds`,
   request: REQUESTS_URL,
   chat: CHAT_URL,
 }
@@ -81,4 +82,29 @@ export function money(value: number | null, currency: string | null) {
 export function priceLine(pick: GoPick) {
   if (pick.price === null) return 'Ask for a price'
   return pick.price_guide ? `From ${money(pick.price, pick.currency)}` : money(pick.price, pick.currency)
+}
+
+// FayFort Finds (docs/FINDS_PLAN.md): GET /public/finds/teaser, cached 5 minutes.
+export type FindsTeaser = {
+  process: { title: string; body: string }[]
+  last_drop: { title: string; release_at: string; stats: { scouted: number; checked: number; made_it: number } } | null
+  next_release_at: string | null
+  items: { name: string; lane: 'trending' | 'rare'; image_url: string }[]
+}
+const FINDS_FALLBACK: FindsTeaser = { process: [], last_drop: null, next_release_at: null, items: [] }
+
+export async function getFindsTeaser(): Promise<FindsTeaser> {
+  try {
+    const response = await fetch(`${API}/public/finds/teaser`, { next: { revalidate: 300 }, signal: AbortSignal.timeout(4000) })
+    if (!response.ok) return FINDS_FALLBACK
+    const body = (await response.json()) as Partial<FindsTeaser>
+    return {
+      ...FINDS_FALLBACK,
+      ...body,
+      process: Array.isArray(body.process) ? body.process : [],
+      items: (body.items || []).filter((item) => item?.name && allowedImage(item.image_url)),
+    }
+  } catch {
+    return FINDS_FALLBACK
+  }
 }

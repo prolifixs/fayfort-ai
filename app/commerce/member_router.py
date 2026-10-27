@@ -168,6 +168,11 @@ def create_member_commerce_router() -> APIRouter:
         try:
             found = service.load_products(ids=[str(product_id)])
             if not found:
+                # A FayFort Find before it joins the catalog, for members whose drop is open (docs/FINDS_PLAN.md).
+                from app.finds import service as finds
+                early = finds.visible_product(member_id, str(product_id))
+                found = [early] if early else []
+            if not found:
                 raise HTTPException(status_code=404, detail="This product isn't available.")
             product = found[0]
             card = service.cards([product], saved=service.saved_ids(member_id), member_id=member_id)[0]
@@ -179,6 +184,9 @@ def create_member_commerce_router() -> APIRouter:
             media = service.media_for([str(product_id)]).get(str(product_id)) or (
                 [{"media_type": product.get("media_type"), "url": product.get("media_url"), "preview_url": None,
                   "alt": product.get("name")}] if product.get("media_url") else [])
+            from app.finds import service as finds
+            find = finds.for_product(str(product_id))
+            card["find"] = {"id": find["id"], "lane": find["lane"]} if find and find.get("status") in finds.LIVE else None
             return {"product": {**card, "description": product.get("description") or "", "vendor": product.get("vendor")},
                     "variants": variants, "media": media,
                     "pairs_with": service.pairs_with([str(product_id)], exclude=set())}

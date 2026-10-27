@@ -349,6 +349,8 @@ def create_accounts_router() -> APIRouter:
     router.include_router(create_member_identity_router(require_verified_member))
     from app.membership.tours import create_tours_router
     router.include_router(create_tours_router(require_verified_member, trusted_fayfort_staff))
+    from app.finds.router import create_finds_router
+    router.include_router(create_finds_router(require_verified_member, trusted_fayfort_staff))
     from app.bookings.router import create_bookings_router
     router.include_router(create_bookings_router(require_verified_member, trusted_fayfort_staff, trusted_platform_admin))
     router.include_router(create_member_theme_admin_router(trusted_platform_admin))

@@ -9,6 +9,10 @@ Readjusted with the owner on 2026-10-25 (Standard $5.99, Pro $14.99 a month thro
 | Supplier contacts | $15 each, 5 for $50 | 1 included per paid month, then credits | 3 included per paid month |
 | Hotels and restaurants | free | free | free |
 
+Yearly (owner request 2026-10-26): the same plans paid once a year at 12 times the monthly price. A yearly payment
+counts as 12 paid months, so full perks start at once; included allowances still renew monthly, counted from the
+start of the paid year.
+
 Perks grow with loyalty: in the first paid month of a continuous run a member gets the plan one level below
 (Pro -> Standard, Standard -> Free); full plan perks from the second paid month. Allowances count from the start of the
 member's paid month (Stripe's current period), not the calendar month, and stop while a payment is overdue. A Free
@@ -85,22 +89,59 @@ def good_standing(member_id: str, now: datetime | None = None) -> dict[str, Any]
 
 def subscription_state(member_id: str) -> dict[str, Any]:
     """The member's Stripe subscription as the plan rules see it. No row = a plan set by staff (full perks)."""
-    found = rows(db().table("member_subscriptions").select("continuous_since,status,current_period_start,past_due_since")
+    found = rows(db().table("member_subscriptions").select("continuous_since,status,current_period_start,past_due_since,billing_interval")
                  .eq("member_id", member_id).limit(1).execute())
     if not found:
-        return {"subscribed": False, "paid_months": None, "period_start": None, "overdue": False}
+        return {"subscribed": False, "paid_months": None, "period_start": None, "overdue": False, "interval": None}
     row = found[0]
     since = _parse(row.get("continuous_since"))
     paid = 0
     if since:
         # A payment a few seconds before the run's start date still belongs to it.
-        payments = rows(db().table("member_subscription_payments").select("amount,refunded_amount,dispute_lost_amount,paid_at")
+        payments = rows(db().table("member_subscription_payments").select("amount,refunded_amount,dispute_lost_amount,paid_at,months")
                         .eq("member_id", member_id).gte("paid_at", (since - timedelta(days=1)).isoformat())
                         .limit(500).execute())
-        paid = sum(1 for p in payments if float(p.get("refunded_amount") or 0) + float(p.get("dispute_lost_amount") or 0)
-                   < float(p.get("amount") or 0))
+        paid = sum(kept_months(p) for p in payments)
     return {"subscribed": True, "paid_months": paid, "period_start": row.get("current_period_start"),
-            "overdue": row.get("status") == "past_due" or bool(row.get("past_due_since"))}
+            "overdue": row.get("status") == "past_due" or bool(row.get("past_due_since")),
+            "interval": row.get("billing_interval") or "month"}
+
+
+def kept_months(payment: dict) -> int:
+    """The paid months a payment still counts for: 1 monthly, 12 yearly, fewer when part of it was refunded or lost
+    in a dispute (a fully refunded payment counts for none)."""
+    months = int(payment.get("months") or 1)
+    amount = float(payment.get("amount") or 0)
+    lost = float(payment.get("refunded_amount") or 0) + float(payment.get("dispute_lost_amount") or 0)
+    if amount <= 0 or lost >= amount:
+        return 0
+    if lost <= 0:
+        return months
+    return max(1, int(months * (amount - lost) / amount + 1e-9)) if months > 1 else 1
+
+
+def add_months(moment: datetime, months: int) -> datetime:
+    """The same day and time `months` later (the last day of a shorter month)."""
+    year, month = divmod(moment.month - 1 + months, 12)
+    year += moment.year
+    month += 1
+    for day in (moment.day, 30, 29, 28):
+        try:
+            return moment.replace(year=year, month=month, day=day)
+        except ValueError:
+            continue
+    return moment
+
+
+def monthly_window_start(period_start: datetime, now: datetime) -> datetime:
+    """For a yearly plan: the start of the current month of the year (allowances renew monthly)."""
+    start = period_start
+    for months in range(1, 37):
+        following = add_months(period_start, months)
+        if following > now:
+            break
+        start = following
+    return start
 
 
 def _parse(value: Any) -> datetime | None:
@@ -182,6 +223,10 @@ def allowance_window(member_id: str, now: datetime | None = None) -> dict[str, A
         return {"allowance": 0, "since": None}
     plan = BELOW[tier] if int(state["paid_months"] or 0) < FULL_PERKS_FROM_PAID_MONTH else tier
     since = state["period_start"] or month_start(now).isoformat()
+    if state.get("interval") == "year" and state["period_start"]:
+        started = _parse(state["period_start"])
+        if started:
+            since = monthly_window_start(started, now or now_utc()).isoformat()
     return {"allowance": CONTACT_ALLOWANCE[plan], "since": since}
 
 

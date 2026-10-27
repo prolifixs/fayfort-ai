@@ -129,6 +129,11 @@ describe("member plan perks", () => {
         booked.push(JSON.parse(String(init.body)));
         return ok({ consultation: { id: "c1" } }, 201);
       }
+      if (url.includes("/members/bookings/slots"))
+        return ok({ available: true, host: { name: "Fay", job_title: "CEO" }, message: null,
+          rules: { minutes: 60, cancel_cutoff_hours: 24, hold_hours: 24 },
+          slots: [{ starts_at: "2026-11-04T06:00:00+00:00", ends_at: "2026-11-04T07:00:00+00:00" },
+                  { starts_at: "2026-11-05T06:00:00+00:00", ends_at: "2026-11-05T07:00:00+00:00" }] });
       if (url.endsWith("/members/consultations"))
         return ok({
           consultations: booked.length
@@ -142,10 +147,61 @@ describe("member plan perks", () => {
     expect(screen.getByText("$100")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Book a consultation" }));
     fireEvent.change(screen.getByLabelText("What would you like to discuss?"), { target: { value: "Wig suppliers" } });
-    fireEvent.click(screen.getByRole("button", { name: "Book · $100" }));
+    const book = screen.getByRole("button", { name: "Book · $100" });
+    expect(book).toBeDisabled();
+    const times = await screen.findByLabelText("Time");
+    fireEvent.click(within(times).getAllByRole("button")[0]);
+    expect(book).toBeEnabled();
+    expect(screen.getByText(/We hold this time for 24 hours/)).toBeInTheDocument();
+    fireEvent.click(book);
     expect(await screen.findByRole("link", { name: "Pay $100" })).toHaveAttribute("href", "https://shop.example/i/2");
-    expect(booked).toEqual([{ topic: "Wig suppliers" }]);
+    expect(booked).toEqual([{ topic: "Wig suppliers", starts_at: "2026-11-04T06:00:00+00:00", time_zone: expect.any(String) }]);
     await waitFor(() => expect(onChange).toHaveBeenCalled());
+  });
+
+  it("books without a time while booking times aren't open, and moves a booked time", async () => {
+    const posted: { url: string; body: unknown }[] = [];
+    const booking = { id: "b1", starts_at: "2026-11-04T06:00:00+00:00", ends_at: "2026-11-04T07:00:00+00:00", status: "confirmed",
+      hold_expires_at: null, call_link: null, refund: null, reschedule_count: 0, can_change: true, change_note: null };
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posted.push({ url, body: JSON.parse(String(init.body)) });
+        return ok({ consultation: { id: "c2" }, booking }, 201);
+      }
+      if (url.includes("/members/bookings/slots"))
+        return ok({ available: true, host: null, message: null, rules: { minutes: 60, cancel_cutoff_hours: 24, hold_hours: 24 },
+          slots: [{ starts_at: "2026-11-06T06:00:00+00:00", ends_at: "2026-11-06T07:00:00+00:00" }] });
+      if (url.endsWith("/members/consultations"))
+        return ok({ consultations: [{ id: "c1", topic: "Wigs", status: "scheduled", price: 100, currency: "USD", conversation_id: "k1", booking }] });
+      return ok({});
+    });
+    render(<ConsultationCard accessToken="t" plan={plan} onChange={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change time" }));
+    const times = await screen.findByLabelText("Time");
+    fireEvent.click(within(times).getAllByRole("button")[0]);
+    fireEvent.click(screen.getByRole("button", { name: /^Move to/ }));
+    await waitFor(() => expect(posted[0]).toEqual({ url: expect.stringContaining("/members/bookings/b1/move"), body: { starts_at: "2026-11-06T06:00:00+00:00" } }));
+    expect(await screen.findByText(/was moved/)).toBeInTheDocument();
+    cleanup();
+
+    posted.length = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posted.push({ url, body: JSON.parse(String(init.body)) });
+        return ok({ consultation: { id: "c3" } }, 201);
+      }
+      if (url.includes("/members/bookings/slots"))
+        return ok({ available: false, host: null, slots: [], message: "Booking times open soon.", rules: { minutes: 60, cancel_cutoff_hours: 24, hold_hours: 24 } });
+      return ok({ consultations: [] });
+    });
+    render(<ConsultationCard accessToken="t" plan={plan} onChange={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Book a consultation" }));
+    fireEvent.change(screen.getByLabelText("What would you like to discuss?"), { target: { value: "Shipping" } });
+    expect(await screen.findByText("Booking times open soon.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Book · $100" }));
+    await waitFor(() => expect(posted[0]?.body).toEqual({ topic: "Shipping" }));
   });
 
   it("shows rank progress and spends points on a contact credit", async () => {
@@ -198,7 +254,7 @@ describe("member plan perks", () => {
     const first = render(<PlanBilling accessToken="t" />);
     fireEvent.click(await screen.findByRole("button", { name: "Get Pro · $49/month" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_1"));
-    expect(posted[0]).toContain('{"plan":"pro"}');
+    expect(posted[0]).toContain('{"plan":"pro","interval":"month"}');
     first.unmount();
     current = { ...view, plan: "pro", status: "active", current_period_end: "2026-11-15T00:00:00Z", months: 2, has_customer: true };
     render(<PlanBilling accessToken="t" />);
@@ -206,5 +262,37 @@ describe("member plan perks", () => {
     expect(screen.getByRole("button", { name: "Manage subscription" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pause instead of cancelling" }));
     expect(await screen.findByRole("button", { name: "Resume my plan" })).toBeInTheDocument();
+  });
+
+  it("offers yearly at twelve times the monthly price", async () => {
+    const view = {
+      available: true, yearly_available: true, plan: null, status: "none", paused: false, current_period_end: null,
+      cancel_at_period_end: false, continuous_since: null, months: 0, has_customer: false, max_pause_months: 3,
+      prices: { standard: { monthly: 5.99, yearly: 71.88, currency: "usd" }, pro: { monthly: 14.99, yearly: 179.88, currency: "usd" } },
+    };
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const posted: string[] = [];
+    let current: Record<string, unknown> = view;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") posted.push(String(init.body || ""));
+      if (url.endsWith("/members/subscription/checkout")) return ok({ url: "https://checkout.stripe.com/c/pay/cs_2" });
+      if (url.endsWith("/members/subscription")) return ok(current);
+      return ok({});
+    });
+    const first = render(<PlanBilling accessToken="t" />);
+    expect(await screen.findByRole("button", { name: "Get Standard · $5.99/month" })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Yearly"));
+    expect(screen.getByText(/12 months paid at once at the same price/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Get Standard · $71.88/year" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_2"));
+    expect(posted[0]).toBe('{"plan":"standard","interval":"year"}');
+    first.unmount();
+    current = { ...view, plan: "pro", status: "active", interval: "year", current_period_end: "2027-10-26T00:00:00Z", months: 1, has_customer: true, first_month: true };
+    render(<PlanBilling accessToken="t" />);
+    expect(await screen.findByText("$179.88/year")).toBeInTheDocument();
+    expect(screen.queryByText(/First paid month/)).toBeNull();
+    expect(screen.getByText(/renew every month of your year/)).toBeInTheDocument();
   });
 });

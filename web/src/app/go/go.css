@@ -202,3 +202,19 @@
 }
 /* The page colour behind the column, so short pages and overscroll stay navy. */
 html:has(.go), body:has(.go) { background: #02144e; }
+
+/* Live consultation times (bookings batch 3) */
+.go-slots-loading { color: var(--go-muted); font-size: 14px; margin: 0; text-align: center; }
+.go-slot-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.go-slot-days button { background: transparent; border: 1px solid color-mix(in srgb, var(--go-ink) 18%, transparent); border-radius: 999px; color: var(--go-ink); cursor: pointer; flex: 0 0 auto; font: inherit; font-size: 14px; font-weight: 700; min-height: 40px; padding: 0 14px; }
+.go-slot-days button.is-on { background: var(--go-navy); border-color: var(--go-navy); color: #fff; }
+.go-slot-times { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.go-slot-times a { align-items: center; border: 1px solid color-mix(in srgb, var(--go-pink) 45%, transparent); border-radius: 12px; color: var(--go-ink); display: flex; font-size: 15px; font-weight: 800; justify-content: center; min-height: 46px; text-decoration: none; }
+.go-slot-times a:hover { background: var(--go-pink); border-color: var(--go-pink); color: #fff; }
+.go-panel p.go-slots-note { font-size: 13px; }
+
+/* FayFort Finds */
+.go-finds-effort dl { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.go-finds-effort dl div { background: color-mix(in srgb, var(--go-navy) 6%, transparent); border-radius: 14px; display: grid; gap: 2px; padding: 12px 10px; text-align: center; }
+.go-finds-effort dt { color: var(--go-muted); font-size: 12px; font-weight: 700; order: 2; }
+.go-finds-effort dd { font-family: var(--serif); font-size: 30px; line-height: 1; margin: 0; order: 1; }

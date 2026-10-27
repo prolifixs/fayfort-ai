@@ -44,6 +44,7 @@ export type StoreListing = {
   missing?: string[];
   steps?: { details: boolean; media: boolean; price: boolean };
   channels_published?: boolean;
+  find?: { id: string; lane: "trending" | "rare"; status: string } | null;
 };
 
 export type CatalogProduct = {
@@ -137,7 +138,7 @@ export type Category = { source_ref: string; category: string; group_name?: stri
 
 export type ScheduleEntry = {
   id: string;
-  type: "giveaway" | "sale" | "section" | "launch" | "deadline" | "recurring" | "booking";
+  type: "giveaway" | "sale" | "section" | "launch" | "deadline" | "recurring" | "booking" | "drop";
   title: string;
   at: string;
   status: "planned" | "scheduled" | "done" | "overdue" | "waiting" | "live";

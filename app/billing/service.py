@@ -15,6 +15,10 @@ subscription (effective_plan):
 - an open or lost card dispute ends the plan at once;
 - anything else is Free.
 
+Yearly (owner request 2026-10-26): each plan also has a yearly price of exactly 12 months (no discount). A yearly
+payment counts as 12 paid months (perks, allowances in monthly windows, rank points month by month); the member can
+switch between monthly and yearly in the customer portal (to yearly at once, to monthly at the end of the year).
+
 Readjusted 2026-10-25 (docs/MEMBERSHIP_PLAN.md section 12): Standard $5.99, Pro $14.99, no trials. Upgrades are
 charged at once (prorated); downgrades take effect at the end of the paid month. Old prices are archived when the
 price changes (existing subscribers keep theirs until moved with move_to_current_prices). Members are told when a plan
@@ -35,6 +39,8 @@ from app.config.settings import settings
 logger = logging.getLogger(__name__)
 
 PLANS = ("standard", "pro")
+INTERVALS = ("month", "year")
+MONTHS_IN = {"month": 1, "year": 12}
 PLAN_NAMES = {"standard": "FayFort Standard", "pro": "FayFort Pro"}
 KEEPS_PLAN = ("active", "trialing", "past_due")
 WEBHOOK_PATH = "/billing/stripe/webhook"
@@ -44,7 +50,7 @@ WEBHOOK_EVENTS = [
     "invoice.paid", "invoice.payment_failed", "charge.refunded",
     "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed",
 ]
-PORTAL_VERSION = "v2"  # bump to rebuild the customer portal configuration (v2: downgrades at period end)
+PORTAL_VERSION = "v3"  # bump to rebuild the customer portal configuration (v2: downgrades at period end; v3: yearly)
 # Points per paid month live in app/membership/ranks.py (SUBSCRIPTION_POINTS).
 
 
@@ -87,20 +93,51 @@ def monthly_amount(plan: str) -> float:
     return float(settings.MEMBER_PRO_MONTHLY_PRICE if plan == "pro" else settings.MEMBER_STANDARD_MONTHLY_PRICE)
 
 
-def lookup_key(plan: str) -> str:
-    cents = int(round(monthly_amount(plan) * 100))
-    return f"fayfort_{plan}_monthly_{settings.BILLING_CURRENCY.lower()}_{cents}"
+def yearly_amount(plan: str) -> float:
+    """12 months, no discount (owner request 2026-10-26)."""
+    return round(monthly_amount(plan) * 12, 2)
 
 
-def price_ids() -> dict[str, str]:
-    """plan -> Stripe price id (env override, else the one FayFort created)."""
+def amount_for(plan: str, interval: str = "month") -> float:
+    return yearly_amount(plan) if interval == "year" else monthly_amount(plan)
+
+
+def lookup_key(plan: str, interval: str = "month") -> str:
+    cents = int(round(amount_for(plan, interval) * 100))
+    word = "yearly" if interval == "year" else "monthly"
+    return f"fayfort_{plan}_{word}_{settings.BILLING_CURRENCY.lower()}_{cents}"
+
+
+def _setting_key(plan: str, interval: str) -> str:
+    return f"price_{plan}" if interval == "month" else f"price_{plan}_year"
+
+
+def price_ids(interval: str = "month") -> dict[str, str]:
+    """plan -> Stripe price id for an interval (monthly: env override, else the one FayFort created)."""
     out = {}
     for plan in PLANS:
-        override = (settings.STRIPE_PRICE_PRO if plan == "pro" else settings.STRIPE_PRICE_STANDARD).strip()
-        stored = get_setting(f"price_{plan}")
+        override = (settings.STRIPE_PRICE_PRO if plan == "pro" else settings.STRIPE_PRICE_STANDARD).strip() \
+            if interval == "month" else ""
+        stored = get_setting(_setting_key(plan, interval))
         if override or stored:
             out[plan] = override or stored
     return out
+
+
+def interval_for_price(price: dict | None) -> str:
+    """month or year, from the price's recurring interval (a known yearly price id counts too)."""
+    recurring = (price or {}).get("recurring") or {}
+    if recurring.get("interval") in INTERVALS:
+        return str(recurring["interval"])
+    if (price or {}).get("id") and (price or {}).get("id") in price_ids("year").values():
+        return "year"
+    return "month"
+
+
+def months_for_price(price: dict | None) -> int:
+    recurring = (price or {}).get("recurring") or {}
+    count = int(recurring.get("interval_count") or 1)
+    return max(1, min(36, MONTHS_IN.get(interval_for_price(price), 1) * count))
 
 
 _price_plans: dict[str, str | None] = {}
@@ -110,9 +147,10 @@ def plan_for_price(price_id: str | None, price: dict | None = None) -> str | Non
     """The plan a Stripe price belongs to: a current price, or an old one by its fayfort_plan metadata."""
     if not price_id:
         return None
-    for plan, pid in price_ids().items():
-        if pid == price_id:
-            return plan
+    for interval in INTERVALS:
+        for plan, pid in price_ids(interval).items():
+            if pid == price_id:
+                return plan
     meta = ((price or {}).get("metadata") or {}).get("fayfort_plan")
     if meta in PLANS:
         return meta
@@ -134,12 +172,13 @@ def webhook_secret() -> str:
     return settings.STRIPE_WEBHOOK_SECRET.strip() or (get_setting("webhook_secret") or "")
 
 
-def _ensure_price(plan: str) -> str:
-    override = (settings.STRIPE_PRICE_PRO if plan == "pro" else settings.STRIPE_PRICE_STANDARD).strip()
+def _ensure_price(plan: str, interval: str = "month") -> str:
+    override = (settings.STRIPE_PRICE_PRO if plan == "pro" else settings.STRIPE_PRICE_STANDARD).strip() \
+        if interval == "month" else ""
     if override:
-        set_setting(f"price_{plan}", override)
+        set_setting(_setting_key(plan, interval), override)
         return override
-    key = lookup_key(plan)
+    key = lookup_key(plan, interval)
     found = stripe_api.request("GET", "/prices", params={"lookup_keys": [key], "active": True, "limit": 1})
     if found.get("data"):
         price_id = found["data"][0]["id"]
@@ -155,16 +194,17 @@ def _ensure_price(plan: str) -> str:
         if not product_id:
             product = stripe_api.request("POST", "/products", {
                 "name": PLAN_NAMES[plan], "metadata": {"fayfort_plan": plan},
-                "description": "FayFort member plan, billed monthly."}, idempotency_key=f"fayfort-product-{plan}-{stripe_api.mode()}")
+                "description": "FayFort member plan, billed monthly or yearly."}, idempotency_key=f"fayfort-product-{plan}-{stripe_api.mode()}")
             product_id = product["id"]
             set_setting(f"product_{plan}", product_id)
         price = stripe_api.request("POST", "/prices", {
             "product": product_id, "currency": settings.BILLING_CURRENCY.lower(),
-            "unit_amount": int(round(monthly_amount(plan) * 100)), "recurring": {"interval": "month"},
-            "lookup_key": key, "transfer_lookup_key": True, "metadata": {"fayfort_plan": plan}})
+            "unit_amount": int(round(amount_for(plan, interval) * 100)), "recurring": {"interval": interval},
+            "lookup_key": key, "transfer_lookup_key": True,
+            "metadata": {"fayfort_plan": plan, "fayfort_interval": interval}})
         price_id = price["id"]
-    previous = get_setting(f"price_{plan}")
-    set_setting(f"price_{plan}", price_id)
+    previous = get_setting(_setting_key(plan, interval))
+    set_setting(_setting_key(plan, interval), price_id)
     if previous and previous != price_id:
         _archive_price(previous)
     return price_id
@@ -181,15 +221,17 @@ def _archive_price(price_id: str) -> None:
         logger.warning("Could not archive Stripe price %s", price_id)
 
 
-def _ensure_portal(prices: dict[str, str]) -> str:
-    signature = hashlib.sha256((PORTAL_VERSION + ",".join(f"{p}:{prices[p]}" for p in sorted(prices))).encode()).hexdigest()[:16]
+def _ensure_portal(prices: dict[str, str], yearly: dict[str, str] | None = None) -> str:
+    yearly = yearly or {}
+    signature = hashlib.sha256((PORTAL_VERSION + ",".join(f"{p}:{prices[p]}:{yearly.get(p, '')}" for p in sorted(prices)))
+                               .encode()).hexdigest()[:16]
     stored = get_setting("portal_configuration")
     if stored and get_setting("portal_signature") == signature:
         return stored
     products = []
     for plan, price_id in prices.items():
         price = stripe_api.request("GET", f"/prices/{price_id}")
-        products.append({"product": price["product"], "prices": [price_id]})
+        products.append({"product": price["product"], "prices": [price_id] + ([yearly[plan]] if yearly.get(plan) else [])})
     config = stripe_api.request("POST", "/billing_portal/configurations", {
         "business_profile": {"headline": "Manage your FayFort membership"},
         "default_return_url": settings.APP_PUBLIC_URL.rstrip("/") + "/member/chat",
@@ -253,7 +295,8 @@ def ensure_setup() -> dict[str, Any]:
     prices = {}
     try:
         prices = {plan: _ensure_price(plan) for plan in PLANS}
-        _ensure_portal(prices)
+        yearly = {plan: _ensure_price(plan, "year") for plan in PLANS}
+        _ensure_portal(prices, yearly)
     except (stripe_api.StripeError, BillingError) as exc:
         problems.append(f"Plans: {exc}")
     try:
@@ -270,13 +313,17 @@ def status() -> dict[str, Any]:
     configured = stripe_api.configured()
     problem = get_setting("setup_problem") if configured else None
     prices = price_ids() if configured else {}
-    subs = rows(db().table("member_subscriptions").select("plan,status").limit(10000).execute())
+    yearly = price_ids("year") if configured else {}
+    subs = rows(db().table("member_subscriptions").select("plan,status,billing_interval").limit(10000).execute())
     counts = {plan: sum(1 for s in subs if s.get("plan") == plan and s.get("status") in KEEPS_PLAN) for plan in PLANS}
+    yearly_counts = {plan: sum(1 for s in subs if s.get("plan") == plan and s.get("status") in KEEPS_PLAN
+                               and s.get("billing_interval") == "year") for plan in PLANS}
     return {
         "configured": configured, "mode": stripe_api.mode(),
         "ready": configured and len(prices) == 2 and bool(webhook_secret()) and problem in (None, "-"),
-        "prices": {plan: {"id": prices.get(plan), "monthly": monthly_amount(plan),
-                          "currency": settings.BILLING_CURRENCY.lower()} for plan in PLANS},
+        "prices": {plan: {"id": prices.get(plan), "monthly": monthly_amount(plan), "yearly_id": yearly.get(plan),
+                          "yearly": yearly_amount(plan), "currency": settings.BILLING_CURRENCY.lower()} for plan in PLANS},
+        "yearly_ready": len(yearly) == 2, "yearly_subscribers": yearly_counts,
         "webhook": {"url": webhook_url(), "ready": bool(webhook_secret()),
                     "managed_by": "env" if settings.STRIPE_WEBHOOK_SECRET.strip() else "fayfort"},
         "problem": None if problem in (None, "-") else problem,
@@ -311,7 +358,10 @@ def member_view(member_id: str) -> dict[str, Any]:
         "cancel_at_period_end": bool(row.get("cancel_at_period_end")),
         "continuous_since": row.get("continuous_since"), "months": months,
         "has_customer": bool(row.get("stripe_customer_id")),
-        "prices": {p: {"monthly": monthly_amount(p), "currency": settings.BILLING_CURRENCY.lower()} for p in PLANS},
+        "prices": {p: {"monthly": monthly_amount(p), "yearly": yearly_amount(p),
+                       "currency": settings.BILLING_CURRENCY.lower()} for p in PLANS},
+        "yearly_available": len(price_ids("year")) == 2,
+        "interval": row.get("billing_interval") or "month",
         "max_pause_months": settings.SUBSCRIPTION_MAX_PAUSE_MONTHS,
         "past_due": row.get("status") == "past_due",
         "grace_ends": ((_parse(row.get("past_due_since")) + timedelta(days=settings.BILLING_PAST_DUE_GRACE_DAYS)).isoformat()
@@ -344,12 +394,15 @@ def customer_for(member_id: str) -> str:
     return str(customer["id"])
 
 
-def start_checkout(member_id: str, plan: str) -> str:
+def start_checkout(member_id: str, plan: str, interval: str = "month") -> str:
     if plan not in PLANS:
         raise BillingError("Choose Standard or Pro.")
-    prices = price_ids()
+    if interval not in INTERVALS:
+        raise BillingError("Choose monthly or yearly.")
+    prices = price_ids(interval)
     if len(prices) < 2:
-        raise BillingError("Plan upgrades aren't open yet. Please try again later.")
+        raise BillingError("Yearly plans aren't open yet. Choose monthly for now." if interval == "year"
+                           else "Plan upgrades aren't open yet. Please try again later.")
     row = subscription_row(member_id) or {}
     if row.get("status") in KEEPS_PLAN + ("paused",) and row.get("stripe_subscription_id"):
         raise BillingError("You already have a plan. Use Manage subscription to switch or change it.")
@@ -357,8 +410,8 @@ def start_checkout(member_id: str, plan: str) -> str:
     session = stripe_api.request("POST", "/checkout/sessions", {
         "mode": "subscription", "customer": customer_for(member_id), "client_reference_id": member_id,
         "line_items": [{"price": prices[plan], "quantity": 1}],
-        "subscription_data": {"metadata": {"fayfort_member_id": member_id, "fayfort_plan": plan}},
-        "metadata": {"fayfort_member_id": member_id, "fayfort_plan": plan},
+        "subscription_data": {"metadata": {"fayfort_member_id": member_id, "fayfort_plan": plan, "fayfort_interval": interval}},
+        "metadata": {"fayfort_member_id": member_id, "fayfort_plan": plan, "fayfort_interval": interval},
         "allow_promotion_codes": True,
         "success_url": f"{app}/member/chat?billing=success",
         "cancel_url": f"{app}/member/chat?billing=cancelled",
@@ -470,10 +523,14 @@ def _apply_plan(member_id: str, row: dict, before: str | None) -> str | None:
     _set_tier(member_id, plan)
     sub_id = str(row.get("stripe_subscription_id") or "")
     if plan and not before:
-        notify(member_id, row, f"started:{sub_id}:{plan}", title=f"Welcome to FayFort {plan.title()}",
-               body=(f"Your {plan.title()} plan is active. Your first paid month runs on "
-                     f"{'Standard' if plan == 'pro' else 'Free'}-plan prices; your full {plan.title()} perks start with "
-                     "your second paid month."))
+        if row.get("billing_interval") == "year":
+            body = (f"Your yearly {plan.title()} plan is active. You've paid for 12 months, so your full {plan.title()} "
+                    "perks start now. Monthly allowances renew each month of your year.")
+        else:
+            body = (f"Your {plan.title()} plan is active. Your first paid month runs on "
+                    f"{'Standard' if plan == 'pro' else 'Free'}-plan prices; your full {plan.title()} perks start with "
+                    "your second paid month.")
+        notify(member_id, row, f"started:{sub_id}:{plan}", title=f"Welcome to FayFort {plan.title()}", body=body)
     elif before and not plan:
         reason = ("your card dispute" if row.get("disputed_at") else "your payment didn't go through"
                   if row.get("status") == "past_due" else "your pause started" if row.get("status") == "paused"
@@ -508,6 +565,7 @@ def sync_subscription(sub: dict) -> str | None:
     values: dict[str, Any] = {
         "member_id": member_id, "stripe_customer_id": customer_id, "stripe_subscription_id": sub.get("id"),
         "plan": plan, "status": status_value, "current_period_end": _ts(sub.get("current_period_end")),
+        "billing_interval": interval_for_price(price) if price else (row.get("billing_interval") or "month"),
         "current_period_start": _ts(sub.get("current_period_start")),
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")), "updated_at": now.isoformat(),
     }
@@ -565,7 +623,7 @@ def _charge_fee(charge_id: str | None) -> float:
 
 
 def record_invoice_paid(invoice: dict) -> str | None:
-    """A paid subscription invoice = one month subscribed (counts toward rank and the loyalty months)."""
+    """A paid subscription invoice = the months it covers (1, or 12 for yearly) toward rank and the loyalty months."""
     if not invoice.get("subscription") or not invoice.get("id") or float(invoice.get("amount_paid") or 0) <= 0:
         return None
     customer_id = invoice.get("customer")
@@ -586,7 +644,7 @@ def record_invoice_paid(invoice: dict) -> str | None:
                 db().table("member_subscription_payments").update({"fee": fee}).eq("stripe_invoice_id", invoice["id"]).execute()
         return member_id
     db().table("member_subscription_payments").upsert({
-        "stripe_invoice_id": invoice["id"], "member_id": member_id, "plan": plan,
+        "stripe_invoice_id": invoice["id"], "member_id": member_id, "plan": plan, "months": months_for_price(price),
         "amount": round(float(invoice.get("amount_paid") or 0) / 100, 2),
         "currency": invoice.get("currency") or settings.BILLING_CURRENCY, "paid_at": paid_at,
         "stripe_charge_id": charge_id, "fee": _charge_fee(charge_id)},
@@ -673,16 +731,21 @@ def record_dispute(dispute: dict) -> bool:
 
 
 def move_to_current_prices(*, dry_run: bool = True) -> dict[str, Any]:
-    """Move subscribers still on an old price to the current one from their next renewal (no proration)."""
-    prices = price_ids()
+    """Move subscribers still on an old price to the current one for the same interval, from their next renewal
+    (no proration). Yearly subscribers stay yearly."""
+    by_interval = {interval: price_ids(interval) for interval in INTERVALS}
     moved, waiting = 0, []
     for row in rows(db().table("member_subscriptions").select("member_id,stripe_subscription_id,plan,status")
                     .in_("status", list(KEEPS_PLAN) + ["paused"]).limit(2000).execute()):
-        if not row.get("stripe_subscription_id") or row.get("plan") not in prices:
+        if not row.get("stripe_subscription_id") or row.get("plan") not in PLANS:
             continue
         sub = stripe_api.request("GET", f"/subscriptions/{row['stripe_subscription_id']}")
         items = ((sub.get("items") or {}).get("data") or [])
-        if not items or (items[0].get("price") or {}).get("id") == prices[row["plan"]]:
+        if not items:
+            continue
+        current = items[0].get("price") or {}
+        prices = by_interval[interval_for_price(current)]
+        if row["plan"] not in prices or current.get("id") == prices[row["plan"]]:
             continue
         waiting.append(row["member_id"])
         if not dry_run:

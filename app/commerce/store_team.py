@@ -120,6 +120,12 @@ def missing_details(listing: dict) -> list[str]:
         if listing.get("compare_at_price") and listing.get("price") and float(listing["compare_at_price"]) <= float(listing["price"]):
             missing.append("a crossed-out price higher than the price (or none)")
     # A sourcing item may have no price: members then see "Contact our team for a price" (owner rule, 2026-10-20).
+    if listing.get("kind") == "sourcing_item" and listing.get("id"):
+        try:
+            from app.finds import service as finds
+            missing += finds.listing_missing(listing)
+        except Exception:
+            logger.exception("Could not check a find's research")
     return missing
 
 
@@ -138,6 +144,13 @@ def listing_view(listing: dict) -> dict:
     view["missing"] = missing_details(listing)
     view["steps"] = steps_done(listing)
     view["kind_label"] = KIND_LABEL.get(listing.get("kind"), "listing")
+    if listing.get("kind") == "sourcing_item" and listing.get("id"):
+        try:
+            from app.finds import service as finds
+            find = finds.for_listing(str(listing["id"]))
+            view["find"] = {"id": find["id"], "lane": find["lane"], "status": find["status"]} if find else None
+        except Exception:
+            view["find"] = None
     if listing.get("shopify_product_id"):
         try:
             view["shopify_admin_url"] = shopify.admin_product_url(listing["shopify_product_id"]) if shopify.shop_domain() else None
@@ -277,6 +290,7 @@ def submit(listing: dict, actor_id: str) -> dict:
             values["shopify_product_id"] = shopify.create_listing_product(draft)
     db().table("store_listings").update(values).eq("id", str(listing["id"])).execute()
     listing = {**listing, **values}
+    _find_hook("on_submit", listing)
     item = listing_item(str(listing["id"]))
     if item:
         reason = "Waiting for an administrator to review and publish."
@@ -298,6 +312,7 @@ def send_back(listing: dict, admin_id: str, note: str) -> dict:
     values = {"status": "changes_requested", "review_note": note.strip()[:1000], "reviewed_by": admin_id,
               "reviewed_at": iso(now()), "updated_at": iso(now())}
     db().table("store_listings").update(values).eq("id", str(listing["id"])).execute()
+    _find_hook("on_send_back", listing)
     item = listing_item(str(listing["id"]))
     if item:
         submitter = listing.get("submitted_by") or item.get("assigned_worker_id")
@@ -341,6 +356,11 @@ def publish(listing: dict, admin_id: str) -> dict:
         product_id = (found or {}).get("id") or product_id
     else:
         product_id = save_sourcing_product(listing, admin_id)
+        try:
+            from app.finds import service as finds
+            finds.on_publish(listing, str(product_id), admin_id)
+        except Exception:
+            logger.exception("Published, but the find could not be scheduled")
     values = {"status": "published", "product_id": str(product_id) if product_id else None, "reviewed_by": admin_id,
               "reviewed_at": iso(now()), "published_at": iso(now()), "updated_at": iso(now()), "review_note": None}
     db().table("store_listings").update(values).eq("id", str(listing["id"])).execute()
@@ -364,13 +384,28 @@ def publish(listing: dict, admin_id: str) -> dict:
     return {**listing, **values, **result}
 
 
+def _find_hook(name: str, listing: dict) -> None:
+    try:
+        from app.finds import service as finds
+        getattr(finds, name)(listing)
+    except Exception:
+        logger.exception("Could not update the find for a listing (%s)", name)
+
+
 def save_sourcing_product(listing: dict, actor_id: str) -> str:
     media = listing.get("media") or []
+    try:
+        from app.finds import service as finds
+        find_active = finds.publish_active(listing)
+    except Exception:
+        logger.exception("Could not check whether a listing is a find")
+        find_active = None
     first = media[0] if media else None
     values: dict[str, Any] = {
         "source": "fayfort", "name": str(listing["title"]).strip()[:160],
         "description": str(listing.get("description") or "")[:2000], "category_ref": listing["category_ref"],
-        "availability_status": listing.get("availability_status") or "sourcing", "active": True,
+        "availability_status": listing.get("availability_status") or "sourcing",
+        "active": True if find_active is None else find_active,  # a find stays out of the catalog until its drop
         "price_min": listing.get("price_guide_min"), "price_max": listing.get("price_guide_max") or listing.get("price_guide_min"),
         "currency": listing.get("currency") or "USD", "min_order": listing.get("min_order"),
         "lead_time_min_days": listing.get("lead_time_min_days"), "lead_time_max_days": listing.get("lead_time_max_days"),
@@ -381,8 +416,16 @@ def save_sourcing_product(listing: dict, actor_id: str) -> str:
         "source_url": listing.get("source_url"),
     }
     if listing.get("product_id"):
+        before = one(db().table("directory_products").select("availability_status").eq("id", str(listing["product_id"]))
+                     .limit(1).execute()) or {}
         db().table("directory_products").update(values).eq("id", str(listing["product_id"])).execute()
         product_id = str(listing["product_id"])
+        if find_active is not None and before.get("availability_status") != values["availability_status"]:
+            try:
+                from app.finds import service as finds
+                finds.availability_changed(product_id, values["availability_status"])
+            except Exception:
+                logger.exception("Could not alert members watching a find")
     else:
         created = one(db().table("directory_products").insert({**values, "created_by": actor_id}).execute())
         if not created:
@@ -511,6 +554,7 @@ def cancel(listing: dict, actor_id: str, reason: str) -> dict:
     if listing.get("shopify_product_id") and listing.get("action") == "create":
         note += " The Shopify draft stays in Shopify; delete it there if it isn't needed."
     flow.close_item("store_listing", str(listing["id"]), status="cancelled", reason=note)
+    _find_hook("on_cancel", listing)
     return {**listing, **values}
 
 

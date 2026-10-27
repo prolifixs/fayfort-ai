@@ -36,6 +36,19 @@ export type Consultation = {
   invoice_url?: string | null;
   created_at: string;
   existing?: boolean;
+  booking?: ConsultationBooking | null;
+};
+export type ConsultationBooking = {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  status: "held" | "confirmed" | "completed" | "no_show" | "cancelled";
+  hold_expires_at: string | null;
+  call_link: string | null;
+  refund: string | null;
+  reschedule_count: number;
+  can_change?: boolean;
+  change_note?: string | null;
 };
 export type DirectoryType = "market" | "service_provider" | "hotel" | "restaurant";
 export type DirectoryRecord = {
@@ -152,7 +165,11 @@ export type SubscriptionView = {
   continuous_since: string | null;
   months: number;
   has_customer: boolean;
-  prices: Record<"standard" | "pro", { monthly: number; currency: string }>;
+  prices: Record<"standard" | "pro", { monthly: number; yearly?: number; currency: string }>;
+  /** Yearly prices exist in Stripe (12 x monthly, no discount). */
+  yearly_available?: boolean;
+  /** How the current plan is billed. */
+  interval?: "month" | "year";
   max_pause_months: number;
   past_due?: boolean;
   grace_ends?: string | null;

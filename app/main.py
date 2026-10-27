@@ -101,6 +101,7 @@ _rank_task: asyncio.Task | None = None
 _billing_task: asyncio.Task | None = None
 _operations_sweep_task: asyncio.Task | None = None
 _bookings_task: asyncio.Task | None = None
+_finds_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
@@ -124,6 +125,11 @@ async def start_automation_scheduler() -> None:
         # Expired payment holds, reminders 24 h and 1 h before, and "how did it go?" (app/bookings/engine.py).
         from app.bookings.engine import bookings_loop
         _bookings_task = asyncio.create_task(bookings_loop(), name="fayfort-bookings")
+    global _finds_task
+    if _finds_task is None or _finds_task.done():
+        # Weekly Finds drops: plan ahead, open for Pro then Standard, move into the catalog (app/finds/service.py).
+        from app.finds.service import finds_loop
+        _finds_task = asyncio.create_task(finds_loop(), name="fayfort-finds")
     if _billing_task is None or _billing_task.done():
         from app.billing.service import billing_loop  # idle until STRIPE_SECRET_KEY is set
         _billing_task = asyncio.create_task(billing_loop(), name="fayfort-billing")

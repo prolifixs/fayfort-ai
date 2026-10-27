@@ -12,6 +12,7 @@ import {
   formatMoney,
 } from "./membershipApi";
 import { FayfortLoader } from "../brand/FayfortLogo";
+import { SlotPicker, memberZone, whenLabel } from "./SlotPicker";
 
 const STATUS_LABEL: Record<Consultation["status"], string> = {
   awaiting_payment: "Waiting for payment",
@@ -20,6 +21,26 @@ const STATUS_LABEL: Record<Consultation["status"], string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+/** A time chosen on fayfort.com arrives as ?slot=… (kept through sign-in). */
+function initialSlot(): string | null {
+  try {
+    const value = new URLSearchParams(window.location.search).get("slot");
+    return value && !Number.isNaN(Date.parse(value)) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function clearSlotParam() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("slot")) return;
+    url.searchParams.delete("slot");
+    window.history.replaceState(window.history.state, "", url.toString());
+  } catch {
+    /* nothing to clear */
+  }
+}
 
 /** Book a consultation: $100 Free, $85 Standard, $50 Pro (first paid month at the plan below). Prices come from the API. */
 export function ConsultationCard({
@@ -32,8 +53,14 @@ export function ConsultationCard({
   onChange: () => void;
 }) {
   const [items, setItems] = useState<Consultation[]>([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => !!initialSlot());
   const [topic, setTopic] = useState("");
+  const [slot, setSlot] = useState<string | null>(initialSlot);
+  const [noTimes, setNoTimes] = useState("");
+  const [changing, setChanging] = useState<{ id: string; mode: "move" | "cancel" } | null>(null);
+  const [newTime, setNewTime] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [rowNotice, setRowNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -56,10 +83,12 @@ export function ConsultationCard({
     try {
       await apiRequest<{ consultation: Consultation }>("/members/consultations", accessToken, {
         method: "POST",
-        body: JSON.stringify({ topic: topic.trim() }),
+        body: JSON.stringify(slot ? { topic: topic.trim(), starts_at: slot, time_zone: memberZone() } : { topic: topic.trim() }),
       });
       setTopic("");
+      setSlot(null);
       setOpen(false);
+      clearSlotParam();
       await load();
       onChange();
     } catch (reason) {
@@ -68,6 +97,31 @@ export function ConsultationCard({
       setBusy(false);
     }
   }
+  async function changeBooking(bookingId: string) {
+    if (!changing) return;
+    setBusy(true);
+    setError("");
+    setRowNotice("");
+    try {
+      if (changing.mode === "move") {
+        await apiRequest(`/members/bookings/${bookingId}/move`, accessToken, { method: "POST", body: JSON.stringify({ starts_at: newTime }) });
+        setRowNotice("Your consultation was moved. We've emailed you the new time.");
+      } else {
+        await apiRequest(`/members/bookings/${bookingId}/cancel`, accessToken, { method: "POST", body: JSON.stringify({ reason: cancelReason.trim() }) });
+        setRowNotice("Your consultation was cancelled.");
+      }
+      setChanging(null);
+      setNewTime(null);
+      setCancelReason("");
+      await load();
+      onChange();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your booking could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const timesClosed = !!noTimes;
   const recent = items.filter((item) => item.status !== "cancelled").slice(0, 3);
   return (
     <section className="member-perk" aria-labelledby="member-perk-consultation">
@@ -78,15 +132,27 @@ export function ConsultationCard({
         </div>
         {quote && <strong className="member-perk-price">{priceLabel}</strong>}
       </div>
-      {recent.map((item) => (
-        <div className="member-perk-row" key={item.id}>
+      {rowNotice && <p className="member-perk-notice" role="status">{rowNotice}</p>}
+      {recent.map((item) => {
+        const booking = item.booking && item.booking.status !== "cancelled" ? item.booking : null;
+        const editing = booking && changing?.id === booking.id ? changing.mode : null;
+        return (
+        <Fragment key={item.id}>
+        <div className="member-perk-row">
           <span>
             <strong>{item.topic}</strong>
-            <small>{STATUS_LABEL[item.status]}</small>
+            {booking && <span className="member-consult-when">{whenLabel(booking.starts_at)}</span>}
+            <small>
+              {booking?.status === "confirmed" ? "Confirmed" : booking?.status === "held" ? "Time held · waiting for payment" : STATUS_LABEL[item.status]}
+            </small>
           </span>
           {item.status === "awaiting_payment" && item.invoice_url ? (
             <a className="primary-button" href={item.invoice_url} target="_blank" rel="noopener noreferrer">
               Pay {formatMoney(Number(item.price), item.currency)}
+            </a>
+          ) : booking?.call_link ? (
+            <a className="primary-button" href={booking.call_link} target="_blank" rel="noopener noreferrer">
+              Join call
             </a>
           ) : item.conversation_id ? (
             <a className="secondary-button" href={`/member/chat?conversation=${item.conversation_id}`}>
@@ -94,7 +160,59 @@ export function ConsultationCard({
             </a>
           ) : null}
         </div>
-      ))}
+        {booking && !editing && (
+          <div className="member-consult-change">
+            {booking.can_change ? (
+              <>
+                <button type="button" className="text-button" onClick={() => { setChanging({ id: booking.id, mode: "move" }); setNewTime(null); setError(""); }}>
+                  Change time
+                </button>
+                <button type="button" className="text-button" onClick={() => { setChanging({ id: booking.id, mode: "cancel" }); setError(""); }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              booking.change_note && <small>{booking.change_note}</small>
+            )}
+          </div>
+        )}
+        {booking && editing === "move" && (
+          <div className="member-perk-form">
+            <SlotPicker accessToken={accessToken} value={newTime} onChange={setNewTime} />
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <div className="member-perk-actions">
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => setChanging(null)}>
+                Keep {whenLabel(booking.starts_at)}
+              </button>
+              <button type="button" className="primary-button" disabled={busy || !newTime} onClick={() => void changeBooking(booking.id)}>
+                {busy ? "Moving…" : newTime ? `Move to ${whenLabel(newTime)}` : "Pick a new time"}
+              </button>
+            </div>
+          </div>
+        )}
+        {booking && editing === "cancel" && (
+          <div className="member-perk-form">
+            <p>
+              {booking.status === "confirmed"
+                ? "You're more than 24 hours before the call, so you get a full refund."
+                : "The payment link stops working and the time is freed."}
+            </p>
+            <label htmlFor={`cancel-${booking.id}`}>Reason (optional)</label>
+            <input id={`cancel-${booking.id}`} maxLength={500} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <div className="member-perk-actions">
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => setChanging(null)}>
+                Keep it
+              </button>
+              <button type="button" className="secondary-button danger" disabled={busy} onClick={() => void changeBooking(booking.id)}>
+                {busy ? "Cancelling…" : "Cancel consultation"}
+              </button>
+            </div>
+          </div>
+        )}
+        </Fragment>
+        );
+      })}
       {open ? (
         <form className="member-perk-form" onSubmit={(event) => void book(event)}>
           <label htmlFor="member-consultation-topic">What would you like to discuss?</label>
@@ -107,17 +225,24 @@ export function ConsultationCard({
             onChange={(event) => setTopic(event.target.value)}
             placeholder="e.g. Finding a reliable wig supplier in Guangzhou before the Canton Fair"
           />
+          <p className="member-slots-label">Choose a time</p>
+          <SlotPicker accessToken={accessToken} value={slot} onChange={setSlot} onUnavailable={(message) => { setNoTimes(message); setSlot(null); }} />
+          {timesClosed && <p className="member-perk-notice">{noTimes}</p>}
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="member-perk-actions">
             <button type="button" className="secondary-button" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
             </button>
-            <button className="primary-button" disabled={busy || topic.trim().length < 3}>
+            <button className="primary-button" disabled={busy || topic.trim().length < 3 || (!slot && !timesClosed)}>
               {busy ? "Booking…" : quote && !quote.included ? `Book · ${priceLabel}` : "Book consultation"}
             </button>
           </div>
           {quote && !quote.included && (
-            <small className="member-deposit-note">You'll get a payment link; the chat opens once it's paid.</small>
+            <small className="member-deposit-note">
+              {slot
+                ? "We hold this time for 24 hours while you pay. Free to move or cancel up to 24 hours before."
+                : "You'll get a payment link; the chat opens once it's paid."}
+            </small>
           )}
         </form>
       ) : (

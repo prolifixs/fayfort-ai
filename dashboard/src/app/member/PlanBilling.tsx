@@ -14,6 +14,7 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [pauseMonths, setPauseMonths] = useState(1);
+  const [interval, setBillingInterval] = useState<"month" | "year">("month");
   if (!subscription) return null;
   if (!subscription.available)
     return <p className="member-plan-note">Plan upgrades open soon.</p>;
@@ -47,8 +48,14 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
       setBusy("");
     }
   }
-  const price = (plan: "standard" | "pro") =>
-    `${formatMoney(subscription.prices[plan].monthly, subscription.prices[plan].currency.toUpperCase())}/month`;
+  const currency = (plan: "standard" | "pro") => subscription.prices[plan].currency.toUpperCase();
+  const price = (plan: "standard" | "pro", every: "month" | "year" = "month") =>
+    every === "year" && subscription.prices[plan].yearly
+      ? `${formatMoney(subscription.prices[plan].yearly!, currency(plan))}/year`
+      : `${formatMoney(subscription.prices[plan].monthly, currency(plan))}/month`;
+  const yearlyPlan = subscription.interval === "year";
+  const period = yearlyPlan ? "paid year" : "paid month";
+  const choosing = subscription.yearly_available ? interval : "month";
   const active = subscription.plan && !subscription.paused;
   const pauseStarts = subscription.paused && subscription.paused_from && new Date(subscription.paused_from) > new Date();
   return (
@@ -66,7 +73,7 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
                     : `Renews on ${date(subscription.current_period_end)} · ${subscription.months} month${subscription.months === 1 ? "" : "s"} in a row`}
               </p>
             </div>
-            <strong className="member-perk-price">{price(subscription.plan!)}</strong>
+            <strong className="member-perk-price">{price(subscription.plan!, yearlyPlan ? "year" : "month")}</strong>
           </div>
           <div className="member-perk-actions">
             <label className="member-pause">
@@ -91,15 +98,16 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
               {busy === "/members/subscription/portal" ? "Opening…" : "Manage subscription"}
             </button>
           </div>
-          {subscription.first_month && (
+          {subscription.first_month && !yearlyPlan && (
             <p className="member-billing-note" role="status">
               First paid month: you're on {subscription.plan === "pro" ? "Standard" : "Free"}-plan prices. Your full{" "}
               {NAMES[subscription.plan!]} perks start with your second paid month.
             </p>
           )}
           <small className="member-deposit-note">
-            A pause starts when your paid month ends, then stops payments and plan perks. Your months in a row and
-            history are kept. Switching to a lower plan also waits for the end of your paid month.
+            A pause starts when your {period} ends, then stops payments and plan perks. Your months in a row and
+            history are kept. Switching to a lower plan{yearlyPlan ? " or to monthly" : ""} also waits for the end of your {period}.
+            {yearlyPlan ? " Included contacts still renew every month of your year." : " You can switch to yearly billing in Manage subscription."}
           </small>
         </>
       ) : subscription.paused ? (
@@ -134,9 +142,23 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
           <div className="member-perk-head">
             <div>
               <h3>Upgrade your plan</h3>
-              <p>Cancel any time. No trials: your first paid month runs on the plan below. Secure payment by Stripe.</p>
+              <p>
+                {choosing === "year"
+                  ? "Yearly: 12 months paid at once at the same price as monthly, with your full plan perks from the start. Secure payment by Stripe."
+                  : "Cancel any time. No trials: your first paid month runs on the plan below. Secure payment by Stripe."}
+              </p>
             </div>
           </div>
+          {subscription.yearly_available && (
+            <div className="member-billing-interval" role="radiogroup" aria-label="Billing">
+              {(["month", "year"] as const).map((every) => (
+                <label key={every} className={interval === every ? "is-on" : undefined}>
+                  <input type="radio" name="member-billing-interval" value={every} checked={interval === every} onChange={() => setBillingInterval(every)} />
+                  {every === "month" ? "Monthly" : "Yearly"}
+                </label>
+              ))}
+            </div>
+          )}
           <div className="member-perk-actions member-upgrade">
             {(["standard", "pro"] as const).map((plan) => (
               <button
@@ -144,9 +166,9 @@ export function PlanBilling({ accessToken, onChange }: { accessToken: string; on
                 type="button"
                 className={plan === "pro" ? "primary-button" : "secondary-button"}
                 disabled={!!busy}
-                onClick={() => void go("/members/subscription/checkout", { plan })}
+                onClick={() => void go("/members/subscription/checkout", { plan, interval: choosing })}
               >
-                {busy && busy.endsWith("checkout") ? "Opening checkout…" : `Get ${NAMES[plan]} · ${price(plan)}`}
+                {busy && busy.endsWith("checkout") ? "Opening checkout…" : `Get ${NAMES[plan]} · ${price(plan, choosing)}`}
               </button>
             ))}
           </div>

@@ -277,7 +277,7 @@ export function OperationsCenterPage() {
               key={params.get("listing") || params.get("tab") || "products"}
               token={token}
               canManage={canManage}
-              initialTab={(["store", "sourcing", "listings", "sections"].includes(params.get("tab") || "") ? params.get("tab") : params.get("listing") ? "listings" : "store") as "store"}
+              initialTab={(["store", "sourcing", "listings", "sections", "finds"].includes(params.get("tab") || "") ? params.get("tab") : params.get("listing") ? "listings" : "store") as "store"}
               initialListing={params.get("listing")}
               onOpenWorkItem={openWorkItem}
             />

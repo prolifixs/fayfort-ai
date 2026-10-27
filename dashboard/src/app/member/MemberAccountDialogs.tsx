@@ -65,7 +65,11 @@ export function MemberDialog({
 }
 
 const PLAN_ROWS: { label: string; free: string; standard: string; pro: string }[] = [
-  { label: "Price", free: "Free", standard: "$5.99 a month", pro: "$14.99 a month" },
+  { label: "Price", free: "Free", standard: "$5.99 a month or $71.88 a year", pro: "$14.99 a month or $179.88 a year" },
+  { label: "FayFort Finds (new every Monday)", free: "A week later, 3 featured", standard: "On Monday, with the research", pro: "Two days early" },
+  { label: "Finds pricing", free: "—", standard: "Price per unit by quantity", pro: "Plus landed cost and margin" },
+  { label: "Watched finds", free: "5, no alerts", standard: "25, with alerts", pro: "Unlimited, with alerts" },
+  { label: "Niche research for you", free: "—", standard: "—", pro: "2 a month" },
   {
     label: "Sourcing deposit",
     free: "50% of the product price",
@@ -111,8 +115,8 @@ export function MemberPlanComparison({ currentTier }: { currentTier: string }) {
       </table>
       <p className="member-plan-note">
         A sourcing deposit counts toward your order when you buy. Your first paid month runs on the plan below (Pro on
-        Standard prices, Standard on Free prices); full perks start with your second paid month. Included contacts renew
-        each paid month.
+        Standard prices, Standard on Free prices); full perks start with your second paid month. Paying yearly (12 months at
+        the same price) gives full perks from the start. Included contacts renew each paid month.
       </p>
     </div>
   );

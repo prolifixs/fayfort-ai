@@ -19,6 +19,7 @@ const TYPE_LABEL: Record<ScheduleEntry["type"], string> = {
   deadline: "Deadlines",
   recurring: "Recurring orders",
   booking: "Bookings",
+  drop: "Finds drops",
 };
 const ALL_TYPES = Object.keys(TYPE_LABEL) as ScheduleEntry["type"][];
 

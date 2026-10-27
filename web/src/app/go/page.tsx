@@ -72,6 +72,14 @@ export default async function GoPage() {
           )}
         </Ticket>
         <Ticket
+          href="/go/finds"
+          icon={ICONS.search}
+          title="FayFort Finds"
+          line="Trending products and rare finds, checked in China and priced for resellers. New every Monday."
+          stubLabel="Members"
+          stub="Weekly"
+        />
+        <Ticket
           href="/go/request"
           icon={ICONS.search}
           title="Find me a product"

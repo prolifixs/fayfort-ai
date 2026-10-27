@@ -16,7 +16,7 @@ from typing import Any
 from app.commerce.db import db, rows
 
 MAX_DAYS = 62
-TYPES = ("giveaway", "sale", "section", "launch", "deadline", "recurring", "booking")
+TYPES = ("giveaway", "sale", "section", "launch", "deadline", "recurring", "booking", "drop")
 ACTIVE = ("open", "claimed", "waiting", "blocked")
 
 
@@ -149,5 +149,15 @@ def build_schedule(*, start: datetime, end: datetime, admin: bool, user_id: str,
                               status="planned" if held else ("done" if booking["status"] in ("completed", "no_show") else "scheduled"),
                               href=f"/operations?view=bookings&booking={booking['id']}",
                               detail="Waiting for payment" if held else "", worker_id=booking.get("host_id")))
+    if "drop" in wanted and department in (None, "", "store_team"):
+        # FayFort Finds drops (docs/FINDS_PLAN.md): Pro opens 48 h before the Monday release.
+        for drop in rows(db().table("find_drops").select("id,title,early_at,release_at,target_count")
+                         .gte("release_at", start_iso).lte("early_at", end_iso).limit(100).execute()):
+            for key, at, label in (("early", drop["early_at"], "Pro early access"), ("release", drop["release_at"], "Release")):
+                if _within(at, start, end):
+                    out.append(_entry("drop", f"{drop['id']}:{key}", f"{label}: {drop['title']}", at,
+                                      status="done" if parse(at) <= now else "scheduled",
+                                      href="/operations?view=products&tab=finds", department="store_team",
+                                      detail=f"Target {drop.get('target_count') or 10} finds"))
     out.sort(key=lambda e: (str(e.get("at") or ""), e["type"]))
     return out

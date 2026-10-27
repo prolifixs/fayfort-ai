@@ -362,6 +362,28 @@ function invoiceFailedSteps(input: PlaybookInput): Step[] {
 // ---------------------------------------------------------------------------------------------
 // Store team (docs/CATALOG_MERCHANDISING_PLAN.md)
 // ---------------------------------------------------------------------------------------------
+/** The research parts a find's listing still needs (app/finds/service.py research_missing). */
+const FIND_RESEARCH = ["where it's moving (platforms)", "why it's a find (for members)", "its trend stage", "how much competition there is", "the China check", "at least one price break", "the weight of one unit"];
+
+/** FayFort Finds (docs/FINDS_PLAN.md): the listing steps with the research and China check first. */
+function findSteps(input: PlaybookInput): Step[] {
+  const [claim, ...rest] = listingSteps(input);
+  const listing = input.flow?.listing;
+  const sent = ["in_review", "published"].includes(listing?.status || "") || FINISHED.includes(input.item.status);
+  const researched = sent || (Array.isArray(listing?.missing) && !listing!.missing!.some((m: string) => FIND_RESEARCH.includes(m)));
+  return [
+    claim,
+    {
+      id: "research",
+      title: "Research and China check",
+      how: "Open Products → Finds and fill in what you saw (platforms, why it's a find, in your own words), check it in China (how, cost, minimum order, sample) and press Mark as checked. Add the price per unit at each quantity and the weight of one unit. Can't get it? Press Not obtainable.",
+      done: researched,
+      target: "ops-listing-details",
+    },
+    ...rest,
+  ];
+}
+
 function listingSteps(input: PlaybookInput): Step[] {
   const listing = input.flow?.listing;
   const store = (listing?.kind || input.item.metadata?.listing_kind) === "store_product";
@@ -524,6 +546,8 @@ export function playbookSteps(input: PlaybookInput): Step[] {
     case "list_store_product":
     case "list_sourcing_item":
       return listingSteps(input);
+    case "list_find":
+      return findSteps(input);
     case "map_product":
       return mapSteps(input);
     case "retire_listing":
@@ -798,6 +822,43 @@ Object.assign(GUIDES, {
     ],
     finishes: "When an administrator publishes it. A trend it came from links to it, so people who shared it see it.",
   },
+  list_find: {
+    title: "Preparing a FayFort Find",
+    department: "store_team",
+    what: "A trending product or rare find for paid members: what you saw, proof it can be got in China, and prices for buying in quantity.",
+    why: "Finds are what members pay for. The research and the China check are the value, so members see how each one was found.",
+    appears: "When you press Scout a trending find or Scout a rare find in Products → Finds.",
+    steps: sample(findSteps, { work_type: "list_find", department: "store_team", metadata: { listing_kind: "sourcing_item" } }),
+    screen: [
+      { name: "Why it's a find", meaning: "Members read this. Write it in your own words; keep other tools' numbers in Scout notes." },
+      { name: "China check", meaning: "In person, with a supplier or online. Members see how and where; the supplier and cost stay with the team." },
+      { name: "Price breaks", meaning: "Our price per unit (USD, commission included) from each quantity. Standard and Pro see them." },
+      { name: "Weight of one unit", meaning: "Packed weight. With the shipping rates it gives Pro members a landed cost for their country." },
+      ...COMMON_SCREEN,
+    ],
+    finishes: "When an administrator publishes the listing. The find goes into the next Monday drop with room and stays out of Browse until a week after release.",
+  },
+  fill_finds_drop: {
+    title: "Filling a Finds drop",
+    department: "store_team",
+    what: "The next Monday drop has fewer finds than its target, three days before it opens for Pro.",
+    why: "Members pay for a full weekly drop. A thin week is noticed.",
+    appears: "By itself, three days before a drop opens for Pro when it's short.",
+    steps: sample(() => [], { work_type: "fill_finds_drop", department: "store_team" }),
+    screen: COMMON_SCREEN,
+    finishes: "By itself when the drop is full, or when it opens.",
+  },
+  research_niche: {
+    title: "Researching a niche for a Pro member",
+    department: "store_team",
+    what: "A Pro member asked the team to scout a niche (they get two a month).",
+    why: "It's a Pro perk, and good niches often become finds for everyone.",
+    appears: "When a Pro member sends Research a niche for me on the Finds page.",
+    steps: sample(() => [], { work_type: "research_niche", department: "store_team" }),
+    screen: COMMON_SCREEN,
+    finishes: "When you reply to the member in their chat and mark it completed. Add anything worth it as a find.",
+    outside: "Reply in the member's chat with what you found; scout the good ones as finds.",
+  },
   map_product: {
     title: "Choosing a category",
     department: "store_team",
@@ -855,11 +916,13 @@ export const TOOL_GUIDES: Record<string, Omit<Guide, "department"> & { departmen
       { title: "Find a product", how: "Pick Store or Sourcing and search by name. The label shows its state: Live, Sold out, Draft in Shopify, Waiting for review, Retired." },
       { title: "Change it", how: "Press Edit. It opens a listing with the current details; send it for review like a new one." },
       { title: "Add something new", how: "New store product or New sourcing item. It opens a Store team work item claimed by you." },
+      { title: "Scout a find", how: "Finds → Scout a trending find or Scout a rare find. Fill in the research and China check there, then the listing, and send it for review." },
     ],
     screen: [
       { name: "Store", meaning: "Products from Shopify. 'Open in Shopify' is for administrators: stock and sales channels." },
       { name: "Sourcing", meaning: "Items FayFort can find but doesn't stock." },
       { name: "In progress", meaning: "Listings being prepared, waiting for review, or sent back." },
+      { name: "Finds", meaning: "FayFort Finds for paid members: research, China check, price breaks, and the weekly drops." },
       { name: "Sections", meaning: "The themed tiles on Browse." },
     ],
     finishes: "—",

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { GO_LINKS, getGoData, money } from '../data'
 import { GoHeader, GoPageHead } from '../GoParts'
+import { LiveSlots } from './LiveSlots'
 
 export const revalidate = 300
 export const metadata: Metadata = {
@@ -45,6 +46,7 @@ export default async function ConsultationPage() {
           </div>
         </dl>
       </section>
+      <LiveSlots bookUrl={GO_LINKS.consultation} />
       <section className="go-panel" aria-labelledby="go-consult-how">
         <h2 id="go-consult-how">How it works</h2>
         <ol className="go-steps">
@@ -53,12 +55,12 @@ export default async function ConsultationPage() {
             <span>A line or two is enough: the product, the market or the trip.</span>
           </li>
           <li>
-            <strong>Pay the invoice</strong>
-            <span>You get a secure payment link for your plan’s price.</span>
+            <strong>Pick a time and pay</strong>
+            <span>Choose a free time. We hold it while you pay the secure link for your plan’s price.</span>
           </li>
           <li>
-            <strong>Agree a time in the chat</strong>
-            <span>A FayFort specialist replies in your consultation chat to set the call.</span>
+            <strong>Join the call</strong>
+            <span>You get the video link by email and in your consultation chat, with reminders before the call.</span>
           </li>
         </ol>
       </section>

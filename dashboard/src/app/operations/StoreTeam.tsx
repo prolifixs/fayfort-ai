@@ -20,6 +20,7 @@ import {
 } from "./storeTypes";
 import type { WorkItem } from "./types";
 import "./store-team.css";
+import { FindsDesk } from "./FindsDesk";
 
 // ---------------------------------------------------------------------------------------------
 // Shared bits
@@ -398,6 +399,12 @@ export function ListingEditor({
         </div>
         <span className={`st-pill is-${listing.status}`}>{LISTING_STATUS_LABEL[listing.status]}</span>
       </header>
+      {listing.find && (
+        <p className="fd-listing-note" role="note">
+          <strong>FayFort Find ({listing.find.lane === "rare" ? "rare find" : "trending"}).</strong> The research, China check and price breaks are in
+          Products → Finds. This listing holds the photos, title, category and rough price members see.
+        </p>
+      )}
       {listing.status === "changes_requested" && listing.review_note && (
         <p className="st-callout is-warning" role="status">
           <strong>Changes asked:</strong> {listing.review_note}
@@ -777,7 +784,7 @@ function previewFromDraft(listing: StoreListing, draft: Draft): Partial<StoreLis
 // ---------------------------------------------------------------------------------------------
 // Products workspace
 // ---------------------------------------------------------------------------------------------
-type Tab = "store" | "sourcing" | "listings" | "sections";
+type Tab = "store" | "sourcing" | "listings" | "sections" | "finds";
 
 export function ProductsWorkspace({
   token,
@@ -803,7 +810,7 @@ export function ProductsWorkspace({
   const [shopifyConnected, setShopifyConnected] = useState(true);
 
   const load = useCallback(async () => {
-    if (tab === "sections") return;
+    if (tab === "sections" || tab === "finds") return;
     setLoading(true);
     setError("");
     try {
@@ -845,6 +852,7 @@ export function ProductsWorkspace({
     ["store", "Store"],
     ["sourcing", "Sourcing"],
     ["listings", "In progress"],
+    ["finds", "Finds"],
     ["sections", "Sections"],
   ];
   return (
@@ -885,7 +893,16 @@ export function ProductsWorkspace({
           {error}
         </p>
       )}
-      {tab === "sections" ? (
+      {tab === "finds" ? (
+        <FindsDesk
+          token={token}
+          canManage={canManage}
+          onOpenListing={(id) => {
+            setOpenListing(id);
+            setTab("listings");
+          }}
+        />
+      ) : tab === "sections" ? (
         <SectionsPanel token={token} categories={categories} />
       ) : (
         <div className={openListing ? "st-split has-editor" : "st-split"}>

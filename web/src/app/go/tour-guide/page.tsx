@@ -40,11 +40,11 @@ export default async function TourGuidePage() {
         <ol className="go-steps">
           <li>
             <strong>Send your trip details</strong>
-            <span>City, arrival date, how many days and how many people.</span>
+            <span>City, your arrival day picked on our guide calendar, how many days and how many people.</span>
           </li>
           <li>
             <strong>Get your quote</strong>
-            <span>Every trip is different, so our team quotes yours in the chat.</span>
+            <span>Every trip is different, so our team quotes yours in the chat and holds your dates while the quote is open.</span>
           </li>
           <li>
             <strong>Pay to confirm</strong>

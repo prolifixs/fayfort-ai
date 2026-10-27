@@ -27,7 +27,7 @@ def documents() -> dict[str, str]:
     return {
         "Membership plans": f"""| | Free | Standard | Pro |
 |---|---|---|---|
-| Price | $0 | {_usd(standard)} a month | {_usd(pro)} a month |
+| Price | $0 | {_usd(standard)} a month or {_usd(round(standard * 12, 2))} a year | {_usd(pro)} a month or {_usd(round(pro * 12, 2))} a year |
 | Sourcing deposit | 50% of the expected total | 25% | None once you've bought with us in the last 90 days (otherwise 25%) |
 | Consultation (1 hour) | {_usd(c['free'])} | {_usd(c['standard'])} | {_usd(c['pro'])} |
 | Supplier contacts | {_usd(single['price'])} each or {pack['credits']} for {_usd(pack['price'])} | {a['standard']} included each paid month, then credits | {a['pro']} included each paid month, then credits |
@@ -35,11 +35,14 @@ def documents() -> dict[str, str]:
 | Ads | Shown | None | None |
 | Premium themes | No | Yes | Yes |
 
-- Plans are paid monthly by card through Stripe. There is no free trial. You can switch, pause (1–3 months) or cancel any
+- Plans are paid by card through Stripe, monthly or yearly. Yearly is 12 months paid at once at the same monthly price
+  (no discount), and you can switch between monthly and yearly in Manage subscription. There is no free trial. You can switch, pause (1–3 months) or cancel any
   time from Member tier.
 - Perks grow with loyalty: in your first paid month you get the plan below (Pro on Standard prices, Standard on Free
-  prices). Your full plan perks start with your second paid month.
-- Included contacts renew each paid month (from your renewal date, not the 1st of the month).
+  prices). Your full plan perks start with your second paid month. A yearly plan pays for 12 months at once, so its full
+  perks start straight away.
+- Included contacts renew each paid month (from your renewal date, not the 1st of the month). On a yearly plan they
+  still renew every month, counted from the start of your year.
 - Moving to a higher plan is charged straight away; moving to a lower plan, and a pause, start when your paid month ends.
 - If a payment fails you keep your plan for {settings.BILLING_PAST_DUE_GRACE_DAYS} days while you update your card; after
   that you're on Free until it's paid.

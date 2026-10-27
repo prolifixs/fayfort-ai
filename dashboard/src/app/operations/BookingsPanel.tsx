@@ -508,11 +508,13 @@ function CalendarWeek({ bookings, start, onOpen, showHost }: { bookings: Booking
 // ---------------------------------------------------------------------------------------------
 type Block = { weekday: number; start_time: string; end_time: string; kinds: BookingKind[] };
 type TimeOff = { id: string; starts_at: string; ends_at: string; reason: string | null };
+type NormalHours = { weekdays: number[]; start_time: string; end_time: string; time_zone: string; in_use: boolean };
 
 export function HoursEditor({ token, me }: { token: string; me: Me }) {
   const [hostId, setHostId] = useState(me.hosts[0]?.user_id || me.user_id);
   const [zone, setZone] = useState(CHINA);
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [normal, setNormal] = useState<NormalHours | null>(null);
   const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -529,7 +531,8 @@ export function HoursEditor({ token, me }: { token: string; me: Me }) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<{ time_zone: string; weekly: Block[]; time_off: TimeOff[]; can_edit: boolean }>(`/operations/availability/${hostId}`, token);
+      const data = await apiRequest<{ time_zone: string; weekly: Block[]; time_off: TimeOff[]; can_edit: boolean; normal_hours?: NormalHours }>(`/operations/availability/${hostId}`, token);
+      setNormal(data.normal_hours || null);
       setZone(data.time_zone || CHINA);
       setBlocks((data.weekly || []).map((b) => ({ weekday: b.weekday, start_time: b.start_time, end_time: b.end_time, kinds: b.kinds })));
       setTimeOff(data.time_off || []);
@@ -554,7 +557,8 @@ export function HoursEditor({ token, me }: { token: string; me: Me }) {
     setSaved("");
     try {
       await apiRequest(`/operations/availability/${hostId}`, token, { method: "PUT", body: JSON.stringify({ time_zone: zone, weekly: blocks }) });
-      setSaved("Weekly hours saved. Members see the new free times straight away.");
+      setSaved(blocks.length ? "Weekly hours saved. Members see the new free times straight away." : "Saved. With no hours set, normal working hours apply.");
+      setNormal((current) => (current ? { ...current, in_use: blocks.length === 0 } : current));
     } catch (reason) {
       setError(errorText(reason, "The weekly hours could not be saved."));
     } finally {
@@ -626,6 +630,28 @@ export function HoursEditor({ token, me }: { token: string; me: Me }) {
           ? "When the CEO takes consultations. Members only see free times inside these hours, at least a day ahead."
           : "When you can take bookings. Members only see free times inside these hours."}
       </p>
+      {!loading && normal && blocks.length === 0 && (
+        <div className="booking-normal-hours" role="note">
+          <p>
+            <strong>Normal working hours apply.</strong> No weekly hours are saved, so members can book{" "}
+            {normal.weekdays.length === 5 && normal.weekdays.join() === "0,1,2,3,4" ? "Monday to Friday" : normal.weekdays.map((d) => WEEKDAYS[d]).join(", ")},{" "}
+            {normal.start_time}–{normal.end_time} China time, except blocked or booked times.
+          </p>
+          {canEdit && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setZone(normal.time_zone);
+                setBlocks(normal.weekdays.map((weekday) => ({ weekday, start_time: normal.start_time, end_time: normal.end_time, kinds: host?.staff_role === "ceo" ? ["consultation"] : ["consultation", "session"] })));
+                setSaved("");
+              }}
+            >
+              Change these hours
+            </button>
+          )}
+        </div>
+      )}
       {loading ? (
         <p className="operations-muted">Loading…</p>
       ) : (
@@ -635,7 +661,11 @@ export function HoursEditor({ token, me }: { token: string; me: Me }) {
             return (
               <div key={name} className="booking-weekday">
                 <h4>{name}</h4>
-                {indexes.length === 0 && <p className="operations-muted">Not available</p>}
+                {indexes.length === 0 && (
+                  <p className="operations-muted">
+                    {normal && blocks.length === 0 && normal.weekdays.includes(weekday) ? `${normal.start_time}–${normal.end_time} (normal hours)` : "Not available"}
+                  </p>
+                )}
                 {indexes.map(([block, index]) => (
                   <div key={index} className="booking-block">
                     <label>
@@ -673,7 +703,7 @@ export function HoursEditor({ token, me }: { token: string; me: Me }) {
                     type="button"
                     className="text-button"
                     onClick={() =>
-                      setBlocks((current) => [...current, { weekday, start_time: "14:00", end_time: "18:00", kinds: host?.staff_role === "ceo" ? ["consultation"] : ["consultation", "session"] }])
+                      setBlocks((current) => [...current, { weekday, start_time: normal?.start_time || "14:00", end_time: normal?.end_time || "18:00", kinds: host?.staff_role === "ceo" ? ["consultation"] : ["consultation", "session"] }])
                     }
                   >
                     + Add hours on {name}
