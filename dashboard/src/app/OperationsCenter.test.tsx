@@ -54,6 +54,15 @@ const report = {
   data_limit_reached: false,
 };
 
+function onboardingFor(identity: { departments: string[] }, over: Record<string, unknown>) {
+  const checklist = [
+    { key: "tour", title: "Take the welcome tour", how: "A walk through.", done: false },
+    { key: "clock_in", title: "Clock in for your first shift", how: "Clock in at the top.", done: false },
+    { key: "claim", title: "Claim your first item", how: "Press Claim.", done: false },
+    { key: "guide_x", title: "Read how your desk works", how: "Guide.", done: false },
+  ];
+  return { show_tour: false, completed_at: null, job_title: "Sourcing agent", departments: identity.departments.slice().sort(), checklist, done: 0, total: checklist.length, ...over };
+}
 const rail = () => screen.findByRole("navigation", { name: "Operations desks" });
 function desksFor(identity: { departments: string[]; can_manage: boolean }) {
   const all = ["conversation_intake", "sourcing", "fulfillment", "disputes", "member_support", "store_team"];
@@ -66,8 +75,9 @@ function desksFor(identity: { departments: string[]; can_manage: boolean }) {
   };
 }
 
-function routeApi(identity: { user_id: string; departments: string[]; can_manage: boolean }, items: Record<string, unknown>[] = [sourcingItem, openItem]) {
+function routeApi(identity: { user_id: string; departments: string[]; can_manage: boolean }, items: Record<string, unknown>[] = [sourcingItem, openItem], onboardingOver: Record<string, unknown> = {}) {
   mocks.apiRequest.mockImplementation(async (path: string) => {
+    if (path === "/operations/me/onboarding") return onboardingFor(identity, onboardingOver);
     if (path === "/operations/me/departments") return identity;
     if (path.startsWith("/operations/work-items?")) return { work_items: items };
     if (path === "/operations/sourcing/batches") return { batches: [] };
@@ -248,17 +258,47 @@ describe("Operations Center", () => {
     );
   });
 
-  it("opens a guide for every work type from the Guide tab", async () => {
+  it("opens a guide for every desk and every work type from the Guide", async () => {
     routeApi({ user_id: "worker-1", departments: ["fulfillment"], can_manage: false }, [openItem]);
     render(<OperationsCenterPage />);
     fireEvent.click(within(await rail()).getByRole("button", { name: "Guide" }));
     const index = await screen.findByRole("complementary", { name: "Guides" });
-    const buttons = within(index).getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(8);
-    for (const button of buttons) {
-      fireEvent.click(button);
-      expect(screen.getByRole("heading", { level: 2, name: button.textContent || "" })).toBeInTheDocument();
+    const topLevel = within(index).getAllByRole("button").map((button) => button.textContent || "");
+    expect(topLevel).toEqual(expect.arrayContaining(["Welcome tour", "Fulfillment desk", "Sourcing desk", "Glossary"]));
+    let workGuides = 0;
+    for (const name of topLevel) {
+      fireEvent.click(within(index).getByRole("button", { name }));
+      expect(screen.getByRole("heading", { level: 2, name: name.replace(/ · \d+\/\d+$/, "") })).toBeInTheDocument();
+      if (name.endsWith(" desk")) {
+        const article = screen.getByRole("heading", { level: 2, name }).closest("article")!;
+        for (const work of within(article).queryAllByRole("button").map((button) => button.textContent || "")) {
+          fireEvent.click(within(screen.getByRole("heading", { level: 2, name }).closest("article")!).getByRole("button", { name: work }));
+          expect(screen.getByRole("heading", { level: 2, name: work })).toBeInTheDocument();
+          workGuides += 1;
+          fireEvent.click(within(index).getByRole("button", { name }));
+        }
+      }
     }
+    expect(workGuides).toBeGreaterThan(15);
+    // Reading your own desk's guide ticks it on the checklist.
+    expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/me/onboarding/guide_fulfillment", "staff-token", { method: "POST" });
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("welcomes a new worker with the tour on their first visit, then shows their first week", async () => {
+    routeApi({ user_id: "worker-1", departments: ["sourcing", "conversation_intake"], can_manage: false }, [openItem], { show_tour: true });
+    window.history.replaceState(null, "", "/operations");
+    render(<OperationsCenterPage />);
+    const tour = await screen.findByRole("dialog", { name: "Welcome to the FayFort team" });
+    expect(within(tour).getByText(/You're on Conversations and Sourcing as Sourcing agent/)).toBeInTheDocument();
+    for (let step = 0; step < 5; step += 1) fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Next" }));
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Your first week" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Start working" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mocks.apiRequest).toHaveBeenCalledWith("/operations/me/onboarding/tour", "staff-token", { method: "POST" });
+    const week = await screen.findByRole("region", { name: "Your first week" }, { timeout: 3000 });
+    expect(within(week).getByText(/1 of 4 done/)).toBeInTheDocument();
+    expect(within(week).getByText("Clock in for your first shift")).toBeInTheDocument();
   });
 
   it("explains business reply delivery outcomes to staff", () => {

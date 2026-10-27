@@ -28,7 +28,6 @@ import {
   ArchiveControls,
   DeadlinePanel,
   FlowPanel,
-  GuideTab,
   HelpSheet,
   OpsSection,
   PaymentsPanel,
@@ -48,6 +47,7 @@ import { SchedulePanel } from "./operations/SchedulePanel";
 import { CustomerPane, AnswersSearch, isChatItem } from "./operations/CustomerPane";
 import { MemberChatsPanel } from "./workspace/MemberChatsPanel";
 import { BookingsTodayCard, CaseFile, GiveawaysCard, InvoicesCard, isDisputeItem, useSupportOverview } from "./operations/SupportTools";
+import { DeskGuideTab, FirstWeekCard, WelcomeTour, useOnboarding } from "./operations/Onboarding";
 import { ComingUpCard, ListingsCard, NextDropCard, useStoreOverview } from "./operations/StoreTools";
 import { CatalogCard, DepositsCard, OrdersCard, TrendsCard, useSourcingOverview } from "./operations/SourcingTools";
 import { DESK_LABEL, DESK_ORDER, DeskHeader, MyWorkHome, OpsRail, ToolCard, useDesks, type RailEntry } from "./operations/Desks";
@@ -88,6 +88,8 @@ export function OperationsCenterPage() {
   const [showMemberChats, setShowMemberChats] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
   const [firstWeek, setFirstWeek] = useFirstWeek(ops.canManage);
+  const onboarding = useOnboarding(ops.token);
+  const [tourOpen, setTourOpen] = useState(false);
   const selectedId = ops.selected?.id;
   // On phones and tablets the detail sits under the queue, so bring it into view when an item opens.
   useEffect(() => {
@@ -308,6 +310,7 @@ export function OperationsCenterPage() {
   const guideKey = selected ? guideKeyFor(selected) : "";
   const openHelp = () => setHelp(guideKey || "glossary");
   return (
+    <>
     <ShiftGate accessToken={token || ""} required={Boolean(token) && ops.identityLoaded && !canManage} pending={Boolean(token) && !ops.identityLoaded && !error}>
     <main className="operations-center-page">
       <header className="ops-head">
@@ -382,7 +385,16 @@ export function OperationsCenterPage() {
               </button>
             </section>
           )}
-          {view === "guide" && <GuideTab firstWeek={firstWeek} setFirstWeek={setFirstWeek} />}
+          {view === "guide" && (
+            <DeskGuideTab
+              firstWeek={firstWeek}
+              setFirstWeek={setFirstWeek}
+              myDesks={canManage ? [] : myDesks}
+              onboarding={onboarding.state}
+              onRecord={onboarding.record}
+              onTour={() => setTourOpen(true)}
+            />
+          )}
           {view === "products" && storeTeam && <PageHelp id="ops/products" guide={toPageGuide(TOOL_GUIDES.products_workspace)} />}
           {view === "schedule" && <PageHelp id="ops/schedule" guide={toPageGuide(TOOL_GUIDES.schedule)} />}
           {view === "products" && storeTeam && (
@@ -429,6 +441,17 @@ export function OperationsCenterPage() {
                 <section className="ops-desk-head ops-member-chats" aria-label="All member app chats">
                   <MemberChatsPanel accessToken={token} />
                 </section>
+              )}
+              {view === "queue" && !deskDepartment && !canManage && (
+                <FirstWeekCard
+                  state={onboarding.state}
+                  onOpenGuide={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("guide", "first-week");
+                    window.history.replaceState(null, "", url.toString());
+                    openView("guide");
+                  }}
+                />
               )}
               {view === "queue" && !deskDepartment && <MyWorkHome desks={desks} onOpenDesk={(department) => openRail(`desk:${department}`)} />}
               {view === "queue" ? <QueueFilters ops={ops} /> : <ArchiveControls ops={ops} />}
@@ -642,5 +665,19 @@ export function OperationsCenterPage() {
       {help && <HelpSheet guideKey={help} onClose={() => setHelp(null)} />}
     </main>
     </ShiftGate>
+    {(tourOpen || onboarding.state?.show_tour) && onboarding.state && (
+      <WelcomeTour
+        state={onboarding.state}
+        onFinish={() => {
+          setTourOpen(false);
+          void onboarding.record("tour");
+        }}
+        onClose={() => {
+          setTourOpen(false);
+          void onboarding.record("tour");
+        }}
+      />
+    )}
+    </>
   );
 }

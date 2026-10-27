@@ -17,7 +17,7 @@ from app.database.connections import get_connection, get_connection_credentials
 from app.database.conversations import get_conversation
 from app.accounts.operations_reports import operations_report
 from app.accounts import operations_flow
-from app.accounts import conversation_desk, sourcing_desk, support_desk
+from app.accounts import conversation_desk, onboarding, sourcing_desk, support_desk
 from app.accounts.desks import desk_stage, desk_summaries, latest_request_stages, my_due_counts
 
 logger = logging.getLogger(__name__)
@@ -629,6 +629,35 @@ def create_operations_router(trusted_fayfort_staff: Callable[[str | None], dict 
         except Exception as exc:
             logger.exception("Could not load the case file")
             raise HTTPException(status_code=503, detail="The case file could not be loaded.") from exc
+
+    @router.get("/operations/me/onboarding")
+    def my_onboarding(authorization: str | None = Header(default=None)):
+        """The welcome tour and first-week checklist (R7): whether to show the tour, and the checklist for this
+        person's own desks, most of it ticked from what they've already done."""
+        staff = staff_identity(authorization)
+        admin = staff.get("role") == "platform_admin"
+        try:
+            return onboarding.state(supabase, staff["user_id"], list(DEPARTMENTS) if admin else departments_for(staff["user_id"]),
+                                    admin=admin)
+        except Exception as exc:
+            logger.exception("Could not load onboarding")
+            raise HTTPException(status_code=503, detail="Your first-week checklist could not be loaded.") from exc
+
+    @router.post("/operations/me/onboarding/{key}")
+    def record_onboarding(key: str, authorization: str | None = Header(default=None)):
+        """Tick a checklist item that can't tick itself: finishing or skipping the tour, reading a desk's guide."""
+        staff = staff_identity(authorization)
+        if len(key) > 40:
+            raise HTTPException(status_code=422, detail="Unknown checklist item.")
+        try:
+            return {"progress": onboarding.record(supabase, staff["user_id"], key)}
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail="You don't have a worker profile yet.") from exc
+        except Exception as exc:
+            logger.exception("Could not record onboarding")
+            raise HTTPException(status_code=503, detail="That couldn't be saved. Try again.") from exc
 
     @router.get("/operations/desks")
     def operations_desks(authorization: str | None = Header(default=None)):

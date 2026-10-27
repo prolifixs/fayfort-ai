@@ -353,3 +353,35 @@ Each phase: tests, screenshots at phone, iPad and desktop, guide text, and an up
   - **Products:** the full Products workspace (Store, Sourcing, In progress, Finds, Sections), as before.
 - The desk line now mentions the weekly FayFort Finds drop.
 - Tests: `tests/test_store_desk.py`, e2e `ops-store.spec.ts` at phone, iPad and desktop.
+
+## 11. R7 build notes (Guide by desk, welcome tour and first week)
+
+- **Welcome tour** (owner ask 2026-10-27: "a welcome tour/onboarding to new workers on their first signing"): six short
+  screens on a worker's first visit to the Operations Center, on any device, until they finish or skip it. It shows over
+  the clock-in screen too, so it's the first thing a new worker sees.
+  1. Welcome: their desks (with what each one does) and job title.
+  2. Start and end your shift: clock in, breaks, clock out, the 30-minute auto-stop, and the chat switch for
+     Conversations workers.
+  3. Your menu: My work, your desks and their badges, the shared pages.
+  4. Every desk works the same way: the strip, How this desk works, tool cards, Everything / Free to pick up.
+  5. Working an item: claim first, Do now and ?, deadline colours, and for chats the customer card, Answers and Send to
+     another desk.
+  6. Your first week: the checklist, first-week mode, the Guide.
+  Administrators aren't shown it automatically; anyone can take it again from Guide → Welcome tour.
+- **First-week checklist** (`GET /operations/me/onboarding`, `app/accounts/onboarding.py`), built from the worker's own
+  desks: take the tour, clock in, take chats for a shift (Conversations), claim your first item, and for each desk
+  "Read how the X desk works" and "Finish your first X item", plus "Send something from a chat to another desk"
+  (Conversations). Most items tick themselves from what happened (a shift, a claim, a completed item on that desk, a
+  hand-off, chat availability); finishing the tour and opening a desk's guide are recorded by the dashboard
+  (`POST /operations/me/onboarding/{key}`). It shows on My work with progress and the next three items until it's done,
+  and in full under Guide → Your first week.
+- **Guide by desk:** Start here (Welcome tour, Your first week), Your desks first and Other desks after, each with a desk
+  page (purpose, the pipeline with each stage explained, the tools on the desk, where its work goes next, and the work
+  types you'll see there, each opening its step-by-step guide), then Tools and the Glossary. First-week mode stays at
+  the top. Administrators see every desk under Desks.
+- **Migration** `20261030090000_worker_onboarding.sql`: `fayfort_workers.onboarding_completed_at` and
+  `onboarding_progress`; and it adds `handed_off` to the work history event types. *Fix for R3:* that event type
+  wasn't allowed, so a chat's history silently skipped the "Sent to Sourcing: …" line (the hand-off item itself was
+  always created).
+- Tests: `tests/test_worker_onboarding.py`, Operations Center tests (tour on first visit, checklist on My work, every
+  desk and work guide opens), e2e `ops-onboarding.spec.ts` at phone, iPad and desktop.
