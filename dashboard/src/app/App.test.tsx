@@ -35,7 +35,7 @@ beforeEach(()=>{
   vi.stubGlobal("fetch",fetchMock);
 });
 afterEach(()=>vi.unstubAllGlobals());
-const renderWorkspace=()=>render(<DashboardWorkspace accessToken="test-access-token" eventStreaming={false}/>);
+const renderWorkspace=()=>render(<DashboardWorkspace accessToken="test-access-token" eventStreaming={false} platformAdmin/>);
 
 describe("authenticated dashboard workspace",()=>{
  it("starts Google member sign-in with the member callback",async()=>{
@@ -426,9 +426,13 @@ describe("authenticated dashboard workspace",()=>{
    if(url.endsWith("/dashboard/businesses"))return {ok:true,status:200,json:async()=>({businesses:[]}),headers:new Headers()} as Response;
    return {ok:true,status:200,json:async()=>({}),headers:new Headers()} as Response;
   });
-  renderWorkspace();const nav=await screen.findByRole("navigation",{name:"Main navigation"});
+  render(<DashboardWorkspace accessToken="test-access-token" eventStreaming={false}/>);const nav=await screen.findByRole("navigation",{name:"Main navigation"});
   await waitFor(()=>expect(fetchMock).toHaveBeenCalled());
   expect(within(nav).queryByRole("button",{name:/Member Requests/})).not.toBeInTheDocument();
+  // Restructure R1: workers see only My account and the Operations Center link, none of the admin groups.
+  for(const page of [/Conversations/,/Automations/,/Knowledge/,/Settings/,/Verification/,/Website/])expect(within(nav).queryByRole("button",{name:page})).not.toBeInTheDocument();
+  expect(within(nav).getByRole("link",{name:/Operations Center/})).toBeInTheDocument();
+  expect(screen.getAllByRole("button",{name:/My account/}).length).toBeGreaterThan(0);
  });
 
  it("shows paid purchase, private warehouse evidence, and shipment tracking on the member timeline",async()=>{
@@ -565,7 +569,7 @@ describe("authenticated dashboard workspace",()=>{
   expect(screen.getByRole("button",{name:"Retry"})).toBeInTheDocument();
   expect(screen.queryByRole("button",{name:"Sign out and sign in again"})).not.toBeInTheDocument();
  });
- it("shows permanent module navigation and an explicit disabled-stream status",async()=>{renderWorkspace();expect(await screen.findByRole("heading",{name:"Overview"})).toBeInTheDocument();expect(screen.getByRole("combobox",{name:"Client account"})).toHaveValue("business-1");const nav=screen.getByRole("navigation",{name:"Main navigation"});expect(within(nav).getByRole("button",{name:/Conversations/})).toBeInTheDocument();expect(within(nav).getByRole("button",{name:/Verification/})).toBeInTheDocument();await waitFor(()=>expect(screen.getByText(/Events Disabled/)).toBeInTheDocument());});
+ it("shows permanent module navigation and an explicit disabled-stream status",async()=>{renderWorkspace();expect(await screen.findByRole("heading",{name:"Overview"})).toBeInTheDocument();expect(screen.queryByRole("combobox",{name:"Client account"})).not.toBeInTheDocument();const nav=screen.getByRole("navigation",{name:"Main navigation"});expect(within(nav).getByRole("button",{name:/Conversations/})).toBeInTheDocument();expect(within(nav).queryByRole("button",{name:/Verification/})).not.toBeInTheDocument();await waitFor(()=>expect(screen.getByText(/Events Disabled/)).toBeInTheDocument());});
  it("lets staff switch the Control Center to dark mode and back, remembered on this device",async()=>{
   window.localStorage.removeItem("fayfort.staffTheme");
   const view=renderWorkspace();

@@ -41,3 +41,7 @@
 .shift-gate-button { width: 100%; min-height: 48px; font-size: 16px; }
 .shift-gate .form-error { margin: 0; }
 .staff-topbar .shift-control .ops-head-button { min-height: 36px; }
+/* Chat availability (R1): grey when not taking chats, amber when away. */
+.chat-status.is-offline .shift-dot { background: var(--color-text-muted, #6b6b6b); box-shadow: none; animation: none; }
+.chat-status.is-away .shift-dot { background: var(--color-warning, #a15c00); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning, #a15c00) 22%, transparent); animation: none; }
+.chat-availability .shift-pop > button { width: 100%; }

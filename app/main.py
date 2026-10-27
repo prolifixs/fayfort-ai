@@ -207,6 +207,11 @@ async def stop_automation_scheduler() -> None:
     _rank_task = None
     _billing_task = None
 
+# Administrator-only Control Center pages; added before CORS so refusals still carry CORS headers.
+from app.admin_pages import admin_pages_guard  # noqa: E402
+
+app.middleware("http")(admin_pages_guard)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_allowed_origins(),

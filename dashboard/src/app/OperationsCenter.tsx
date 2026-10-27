@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { OperationsNotifications } from "./OperationsNotifications";
 import { ShiftControl } from "./ShiftControl";
+import { ChatAvailability } from "./ChatAvailability";
 import { departmentLabel, statusLabel } from "./operations/types";
 import { ShortId, readable } from "./staff/StaffChrome";
 import { useOperationsCenter } from "./operations/useOperationsCenter";
@@ -193,15 +194,22 @@ export function OperationsCenterPage() {
       <header className="ops-head">
         <div className="ops-head-top">
           <div className="ops-head-title">
-            <a className="ops-crumb" href="/">
-              ← Control Center
-            </a>
+            {canManage ? (
+              <a className="ops-crumb" href="/">
+                ← Control Center
+              </a>
+            ) : (
+              <a className="ops-crumb" href="/?page=account">
+                My account
+              </a>
+            )}
             <h1>Operations Center</h1>
             <p>Every piece of staff work in one place, step by step.</p>
           </div>
           {token && (
             <div className="ops-head-actions">
               <ShiftControl accessToken={token} />
+              {!canManage && <ChatAvailability accessToken={token} />}
               <OperationsNotifications accessToken={token} />
               <StaffThemeToggle theme={staffTheme} onChange={setStaffTheme} className="ops-head-button staff-theme-toggle" />
               <button

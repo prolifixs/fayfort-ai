@@ -13,6 +13,10 @@ class KnowledgeAuthorizationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         self.headers = {"Authorization": "Bearer test-token"}
+        # Knowledge and FAQ pages are platform-admin pages (app/admin_pages.py); these tests cover the endpoints behind it.
+        guard = patch("app.admin_pages.trusted_platform_admin", return_value={"user_id": "platform-admin"})
+        guard.start()
+        self.addCleanup(guard.stop)
 
     @patch("app.main.list_knowledge_documents")
     @patch("app.main.trusted_business_member", return_value=None)
@@ -75,6 +79,10 @@ class ApprovedFaqWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         self.headers = {"Authorization": "Bearer test-token"}
+        # Knowledge and FAQ pages are platform-admin pages (app/admin_pages.py); these tests cover the endpoints behind it.
+        guard = patch("app.admin_pages.trusted_platform_admin", return_value={"user_id": "platform-admin"})
+        guard.start()
+        self.addCleanup(guard.stop)
 
     def test_normalized_matching_is_case_punctuation_and_whitespace_exact(self):
         self.assertEqual(normalize_faq_question("  WHAT are our hours?! "), "what are our hours")

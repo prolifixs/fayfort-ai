@@ -3,6 +3,7 @@ import { ApiRequestError, apiRequest } from "../../lib/api";
 import { FayfortLoader } from "../brand/FayfortLogo";
 import { WebsiteChatSection } from "./WebsiteChatSection";
 import { WebsiteReviewsSection } from "./WebsiteReviewsSection";
+import { VerificationPage } from "../workspace/VerificationPage";
 
 /** Control Center → Website: FayFort AI on the website, customer reviews, and the Instagram posts and reels on www.fayfort.com (docs/PUBLIC_SITE_REBUILD_PLAN.md). */
 
@@ -11,7 +12,7 @@ type Post = { id: string; kind: "p" | "reel"; shortcode: string; label: string |
 const postUrl = (post: Post) => `https://www.instagram.com/${post.kind}/${post.shortcode}/`;
 const embedUrl = (post: Post) => `${postUrl(post)}embed/`;
 
-export function WebsitePage({ accessToken }: { accessToken: string }) {
+export function WebsitePage({ accessToken, businessId }: { accessToken: string; businessId?: string }) {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -82,6 +83,8 @@ export function WebsitePage({ accessToken }: { accessToken: string }) {
     <div className="email-center website-center">
       <WebsiteReviewsSection accessToken={accessToken} />
       <WebsiteChatSection accessToken={accessToken} />
+      {/* Directory verification is a website tool (owner decision 2026-10-26); it moved here from the Operations menu. */}
+      {businessId && <VerificationPage accessToken={accessToken} businessId={businessId} />}
       <section className="control-panel" aria-label="Instagram on the website">
         <div className="panel-heading">
           <h2>Instagram on the website</h2>

@@ -38,7 +38,6 @@ export const modules = [
   ["Channels & Connections", "Operations"],
   ["Automations", "Operations"],
   ["Entitlements", "Operations"],
-  ["Verification", "Operations"],
   ["Human Agents", "Operations"],
   ["Knowledge", "Manage"],
   ["Analytics", "Manage"],
@@ -83,7 +82,7 @@ export function DashboardWorkspace({
   eventStreaming = true,
 }: WorkspaceProps) {
   const linkedPage = new URLSearchParams(window.location.search).get("page");
-  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : "Overview");
+  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : linkedPage === "account" ? "My account" : "Overview");
   const [conversationTarget, setConversationTarget] = useState<ConversationRow | null>(null);
   const [requestTargetId, setRequestTargetId] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -356,6 +355,12 @@ export function DashboardWorkspace({
     ) : undefined;
   const showAlert = waitingHandoffs !== null && waitingHandoffs > (acknowledgedWaiting[businessId] || 0);
   const gated = !platformAdmin && activeWorker;
+  // Workers work in the Operations Center (docs/OPERATIONS_RESTRUCTURE_PLAN.md R1); the Control Center keeps only their
+  // own account page for them.
+  const sendToOperations = !platformAdmin && workerChecked && activeWorker && active !== "My account";
+  useEffect(() => {
+    if (sendToOperations) window.location.replace("/operations");
+  }, [sendToOperations]);
   return (
     <ShiftGate accessToken={accessToken} required={gated} pending={!platformAdmin && !workerChecked} onSignOut={onSignOut ? () => void onSignOut() : undefined}>
     <div className={drawerOpen && !isDesktop ? "staff-app shell sidebar-open" : "staff-app shell"}>
@@ -382,7 +387,7 @@ export function DashboardWorkspace({
         </div>
         {businessLoading ? (
           <div className="business-placeholder">Checking client accounts…</div>
-        ) : businesses.length > 0 ? (
+        ) : businesses.length === 1 ? null : businesses.length > 0 ? (
           <label className="business-picker">
             <span>Client account</span>
             <select aria-label="Client account" value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
@@ -397,7 +402,7 @@ export function DashboardWorkspace({
           <div className="business-placeholder">{businessError || "No client accounts are available."}</div>
         )}
         <nav aria-label="Main navigation">
-          {groups.map((group) => (
+          {platformAdmin && groups.map((group) => (
             <section key={group} aria-label={group}>
               <h2>{group}</h2>
               {modules
@@ -516,7 +521,7 @@ export function DashboardWorkspace({
           ) : active === "Ads" && platformAdmin ? (
             <AdsPage accessToken={accessToken} />
           ) : active === "Website" && platformAdmin ? (
-            <WebsitePage accessToken={accessToken} />
+            <WebsitePage accessToken={accessToken} businessId={businessId} />
 
           ) : active === "Member Requests" && (platformAdmin || activeWorker) ? (
             platformAdmin ? (
@@ -602,7 +607,7 @@ export function DashboardWorkspace({
             <DirectoryToolsPage accessToken={accessToken} businessId={businessId} />
           ) : active === "Entitlements" ? (
             <EntitlementsPage accessToken={accessToken} businessId={businessId} />
-          ) : active === "Verification" ? (
+          ) : active === "Verification" && platformAdmin ? (
             <VerificationPage accessToken={accessToken} businessId={businessId} />
           ) : active === "Knowledge" ? (
             <KnowledgePage accessToken={accessToken} businessId={businessId} canManage={Boolean(currentBusiness)} />
