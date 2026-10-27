@@ -807,6 +807,7 @@ export function BrowsePanel({
   onEnter,
   busyId,
   home,
+  homeLoading = false,
 }: {
   accessToken: string;
   onOpen: (card: ShopCard) => void;
@@ -814,6 +815,8 @@ export function BrowsePanel({
   onEnter: (giveaway: Giveaway) => void;
   busyId?: string;
   home: ShopHome | null;
+  /** The shop front (tiles, sections, rails) is still loading: hold its space so nothing below jumps. */
+  homeLoading?: boolean;
 }) {
   const [openSection, setOpenSection] = useState<StoreSectionTile | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -949,6 +952,11 @@ export function BrowsePanel({
             accessToken={accessToken}
           />
         </>
+      ) : !filtering && homeLoading ? (
+        <div className="shop-front-skeleton" aria-hidden="true">
+          <i className="is-tiles" />
+          <i className="is-rail" />
+        </div>
       ) : null}
       {openSection && (
         <SectionSheet section={openSection} accessToken={accessToken} onOpen={(card) => { setOpenSection(null); onOpen(card); }} onClose={() => setOpenSection(null)} />

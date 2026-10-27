@@ -1,6 +1,9 @@
 /* Ads (docs/ADS_PLAN.md). Uses the member theme tokens, with fallbacks so Control Center previews look the same. */
 .fayfort-ad{position:relative;display:grid;gap:4px;min-width:0;margin:0;list-style:none}
 .fayfort-ad-banner{margin:14px 0}
+/* Space held while a free member's ads load, and inside a banner until its ad draws, so the shop doesn't jump. */
+.fayfort-ad-reserve{height:116px;margin:14px 0}
+.fayfort-ad-banner:not(:has(.fayfort-ad-custom,.fayfort-ad-google))::before{content:"";display:block;height:84px}
 .fayfort-ad-square{margin:10px 12px 4px;max-width:260px}
 .fayfort-ad-feed{grid-template-rows:1fr auto;align-content:stretch}
 .member-directory-list>li.fayfort-ad{padding:0;border:0;background:none}

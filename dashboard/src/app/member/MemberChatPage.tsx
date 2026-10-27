@@ -43,6 +43,9 @@ import { HomePanel } from "./HomePanel";
 import { MEMBER_NAV, MEMBER_ACCOUNT_NAV, MEMBER_TABS, NavIcon } from "./memberNav";
 import { canonicalHref, panelFor, panelHref, type MemberPanel } from "./memberRoutes";
 
+const MENU_FOLDED_KEY = "ff_menu_folded";
+/** Phones and tablets: in a conversation and on a product the tab bar starts folded to a handle (owner choice). */
+const FOLDED_TAB_PANELS: MemberPanel[] = ["chat", "product"];
 /** Sections with no chat beside them: Home (it has its own Ask FayFort box) and the account pages. */
 const ACCOUNT_PANELS: MemberPanel[] = ["home", "settings", "membership", "notifications", "notfound"];
 /** Which section the current address opens (memberRoutes.ts: /member/shop, /member/orders, old ?panel= links …). */
@@ -86,6 +89,24 @@ export function MemberChatPage() {
   const requestExpectedTotal =
     requestBudget.trim() && Number.isFinite(requestBudgetValue) && requestBudgetValue > 0 ? requestBudgetValue : null;
   const isDesktop = useMediaQuery(DESKTOP);
+  // Laptop: the menu can fold to an icon rail. Remembered on this browser only (a convenience, not an account setting).
+  const [menuFolded, setMenuFolded] = useState(() => {
+    try {
+      return window.localStorage.getItem(MENU_FOLDED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function toggleMenuFolded() {
+    setMenuFolded((folded) => {
+      try {
+        window.localStorage.setItem(MENU_FOLDED_KEY, folded ? "0" : "1");
+      } catch {
+        /* storage blocked: the choice lasts for this visit */
+      }
+      return !folded;
+    });
+  }
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -170,6 +191,9 @@ export function MemberChatPage() {
   const [progressRequest, setProgressRequest] = useState<MemberOwnedRequest | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set());
   const [activePanel, setActivePanel] = useState<MemberPanel>(panelFromUrl);
+  const [shopLoaded, setShopLoaded] = useState(false);
+  const [tabsFolded, setTabsFolded] = useState(() => FOLDED_TAB_PANELS.includes(panelFromUrl()));
+  useEffect(() => setTabsFolded(FOLDED_TAB_PANELS.includes(activePanel)), [activePanel]);
   const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
   /** `href` keeps a deep link inside the section, for example /member/orders#request-… from Home. */
   function selectMemberPanel(panel: MemberPanel, href?: string) {
@@ -211,6 +235,8 @@ export function MemberChatPage() {
       setCart(currentCart && Array.isArray(currentCart.lines) ? currentCart : null);
     } catch {
       /* The shop is optional around the chat; the chat keeps working without it. */
+    } finally {
+      setShopLoaded(true);
     }
   }, []);
   async function wantTrend(trend: TrendCard) {
@@ -925,7 +951,8 @@ export function MemberChatPage() {
   };
   const split = activePanel !== "chat" && chatExpanded && isDesktop && !ACCOUNT_PANELS.includes(activePanel);
   // Phones get a tab bar on every section except the conversation itself and a product page.
-  const showTabs = !isDesktop && activePanel !== "chat" && activePanel !== "product";
+  // The tab bar is on every section on phones and tablets, so the menu is never out of reach.
+  const showTabs = !isDesktop;
   const showChat = activePanel === "chat" || split;
   // A worker reply in the chat already on screen doesn't need a pop-up (MemberNotificationsBar checks this).
   const visibleChatId = showChat ? activeChat?.id || null : null;
@@ -973,7 +1000,11 @@ export function MemberChatPage() {
   const listedChats = chats.filter((chat) => !unwrittenIds.includes(chat.id));
   return (
     <AdsProvider accessToken={verified ? token : null} planKey={memberPlan?.tier} onUpgrade={openPlans}>
-    <div className={["mapp", sidebarOpen && !isDesktop ? "sidebar-open" : "", showTabs ? "has-tabbar" : ""].filter(Boolean).join(" ")}>
+    <div
+      className={["mapp", sidebarOpen && !isDesktop ? "sidebar-open" : "", showTabs ? "has-tabbar" : "", isDesktop && menuFolded ? "menu-folded" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <aside
         id="member-sidebar"
         className="mapp-sidebar"
@@ -993,8 +1024,31 @@ export function MemberChatPage() {
               </svg>
             </button>
           )}
+          {isDesktop && (
+            <button
+              type="button"
+              className="icon-button mapp-fold"
+              aria-label={menuFolded ? "Open the menu" : "Fold the menu"}
+              title={menuFolded ? "Open the menu" : "Fold the menu"}
+              aria-expanded={!menuFolded}
+              aria-controls="member-sidebar"
+              onClick={toggleMenuFolded}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 5h16v14H4zM9 5v14" />
+                <path d={menuFolded ? "M13 10l2 2-2 2" : "M16 10l-2 2 2 2"} />
+              </svg>
+            </button>
+          )}
         </div>
-        <button type="button" className="mapp-new-chat" data-tour="new-chat" onClick={() => void createChat()} disabled={busy}>
+        <button
+          type="button"
+          className="mapp-new-chat"
+          data-tour="new-chat"
+          title={menuFolded && isDesktop ? "Ask FayFort" : undefined}
+          onClick={() => void createChat()}
+          disabled={busy}
+        >
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
           </svg>
@@ -1007,6 +1061,7 @@ export function MemberChatPage() {
               href={panelHref(item.panel)}
               className={activePanel === item.panel ? "active" : ""}
               data-tour={item.tour}
+              title={menuFolded && isDesktop ? item.label : undefined}
               aria-current={activePanel === item.panel ? "page" : undefined}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -1024,6 +1079,7 @@ export function MemberChatPage() {
               key={item.panel}
               href={panelHref(item.panel)}
               className={activePanel === item.panel ? "active" : ""}
+              title={menuFolded && isDesktop ? item.label : undefined}
               aria-current={activePanel === item.panel ? "page" : undefined}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -1361,14 +1417,19 @@ export function MemberChatPage() {
                 <HomePanel
                   accessToken={token}
                   memberName={memberName}
+                  shop={home}
                   onGo={(panel, href) => selectMemberPanel(panel, href)}
                   onAsk={(text) => void askFromHome(text)}
+                  onOpenProduct={openProduct}
+                  onEnter={(giveaway) => void enterGiveaway(giveaway)}
+                  busyId={shopBusyId}
                 />
               )}
               {activePanel === "catalog" && (
                 <BrowsePanel
                   accessToken={token}
                   home={home}
+                  homeLoading={!shopLoaded}
                   onOpen={openProduct}
                   onWant={(trend) => void wantTrend(trend)}
                   onEnter={(giveaway) => void enterGiveaway(giveaway)}
@@ -1917,6 +1978,7 @@ export function MemberChatPage() {
                           ref={composerRef}
                           value={draft}
                           onChange={(event) => setDraft(event.target.value)}
+                          onFocus={() => !isDesktop && setTabsFolded(true)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey && isDesktop && !event.nativeEvent.isComposing) {
                               event.preventDefault();
@@ -2002,37 +2064,52 @@ export function MemberChatPage() {
                 </button>
               )}
         </div>
-        {showTabs && (
-          <nav className="mapp-tabbar" aria-label="Sections">
-            {MEMBER_TABS.map((item) =>
-              item.panel === "more" ? (
-                <button
-                  key="more"
-                  type="button"
-                  aria-controls="member-sidebar"
-                  aria-expanded={sidebarOpen}
-                  onClick={() => setSidebarOpen(true)}
-                >
-                  <NavIcon d={item.icon} />
-                  <span>{item.label}</span>
-                </button>
-              ) : (
-                <a
-                  key={item.panel}
-                  href={panelHref(item.panel)}
-                  aria-current={activePanel === item.panel ? "page" : undefined}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    selectMemberPanel(item.panel);
-                  }}
-                >
-                  <NavIcon d={item.icon} />
-                  <span>{"short" in item && item.short ? item.short : item.label}</span>
-                </a>
-              ),
-            )}
-          </nav>
-        )}
+        {showTabs &&
+          (tabsFolded ? (
+            <div className="mapp-tabbar-handle">
+              <button type="button" aria-controls="member-tabbar" aria-expanded={false} onClick={() => setTabsFolded(false)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M7 14l5-5 5 5" />
+                </svg>
+                <span>Menu</span>
+              </button>
+            </div>
+          ) : (
+            <nav className="mapp-tabbar" id="member-tabbar" aria-label="Sections">
+              <button type="button" className="mapp-tabbar-fold" aria-label="Fold the menu" aria-controls="member-tabbar" aria-expanded onClick={() => setTabsFolded(true)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M7 10l5 5 5-5" />
+                </svg>
+              </button>
+              {MEMBER_TABS.map((item) =>
+                item.panel === "more" ? (
+                  <button
+                    key="more"
+                    type="button"
+                    aria-controls="member-sidebar"
+                    aria-expanded={sidebarOpen}
+                    onClick={() => setSidebarOpen(true)}
+                  >
+                    <NavIcon d={item.icon} />
+                    <span>{item.label}</span>
+                  </button>
+                ) : (
+                  <a
+                    key={item.panel}
+                    href={panelHref(item.panel)}
+                    aria-current={activePanel === item.panel ? "page" : undefined}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      selectMemberPanel(item.panel);
+                    }}
+                  >
+                    <NavIcon d={item.icon} />
+                    <span>{"short" in item && item.short ? item.short : item.label}</span>
+                  </a>
+                ),
+              )}
+            </nav>
+          ))}
       </div>
     </div>
     </AdsProvider>

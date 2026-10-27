@@ -319,7 +319,11 @@ describe("member Home (facelift phase 3)", () => {
     window.history.replaceState({}, "", "/member/home");
     render(<App />);
     const needs = await screen.findByRole("region", { name: "Needs you" });
-    expect(await within(needs).findByText("Lace closure")).toBeInTheDocument();
+    // One line until opened: the first thing waiting and how many more.
+    const fold = within(needs).getByRole("button", { name: /Needs you/ });
+    await waitFor(() => expect(fold).toHaveTextContent("Lace closure and 1 more"));
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(fold);
     expect(within(needs).getByText("$45.00")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /^Good (morning|afternoon|evening)/ })).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Member navigation" })).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
@@ -336,5 +340,19 @@ describe("member Home (facelift phase 3)", () => {
     fireEvent.click(within(ask).getByRole("button", { name: "Send to FayFort" }));
     await waitFor(() => expect(window.location.pathname).toBe("/member/chat"));
     expect(await screen.findByDisplayValue("20 lace front wigs to Lagos")).toBeInTheDocument();
+  });
+});
+
+describe("Home clocks", () => {
+  it("names the member's place and how far ahead Guangzhou is", async () => {
+    const { memberPlace, chinaOffsetHours } = await import("./HomePanel");
+    expect(memberPlace("Africa/Lagos", { city: "Lagos", country: "Nigeria" })).toBe("Lagos, Nigeria");
+    expect(memberPlace("Africa/Lagos", { city: "Ikeja", country: "Nigeria" })).toBe("Lagos");
+    expect(memberPlace("America/Los_Angeles")).toBe("Los Angeles");
+    const now = new Date("2026-10-27T20:00:00Z");
+    expect(chinaOffsetHours(now, "Africa/Lagos")).toBe(7);
+    expect(chinaOffsetHours(now, "America/Los_Angeles")).toBe(15);
+    expect(chinaOffsetHours(now, "Asia/Shanghai")).toBe(0);
+    expect(chinaOffsetHours(new Date("2026-10-31T23:30:00Z"), "Europe/London")).toBe(8);
   });
 });

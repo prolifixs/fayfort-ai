@@ -45,6 +45,8 @@ type AdEvent = { placement: string; creative_id?: string | null; source: "google
 
 type AdsContextValue = {
   config: Extract<MemberAdsConfig, { show: true }> | null;
+  /** A free member's ad settings are still loading: banner slots hold their space so the page doesn't jump. */
+  pending: boolean;
   allowed: (id: string) => boolean;
   register: (id: string, priority: number) => () => void;
   report: (event: AdEvent) => void;
@@ -86,6 +88,7 @@ export function AdsProvider({
   children: ReactNode;
 }) {
   const [config, setConfig] = useState<AdsContextValue["config"]>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [slots, setSlots] = useState<{ id: string; priority: number; order: number }[]>([]);
   const order = useRef(0);
   const queue = useRef<AdEvent[]>([]);
@@ -100,7 +103,8 @@ export function AdsProvider({
     let alive = true;
     apiRequest<MemberAdsConfig>("/members/ads", accessToken)
       .then((result) => alive && setConfig(result && result.show === true && Array.isArray(result.placements) ? result : null))
-      .catch(() => alive && setConfig(null));
+      .catch(() => alive && setConfig(null))
+      .finally(() => alive && setLoadedFor(`${accessToken}:${planKey || ""}`));
     return () => {
       alive = false;
     };
@@ -156,8 +160,16 @@ export function AdsProvider({
   );
 
   const value = useMemo<AdsContextValue>(
-    () => ({ config, allowed: (id) => allowedIds.has(id), register, report, onUpgrade }),
-    [config, allowedIds, register, report, onUpgrade],
+    () => ({
+      config,
+      // Only free members see ads, so only they get the reserved space while the settings load.
+      pending: planKey === "free" && !!accessToken && loadedFor !== `${accessToken}:${planKey}`,
+      allowed: (id) => allowedIds.has(id),
+      register,
+      report,
+      onUpgrade,
+    }),
+    [config, planKey, accessToken, loadedFor, allowedIds, register, report, onUpgrade],
   );
   return <AdsContext.Provider value={value}>{children}</AdsContext.Provider>;
 }
@@ -218,6 +230,7 @@ export function AdSlot({ placement, as = "div", className }: { placement: string
     if (!spec || !register) return;
     return register(id, spec.priority);
   }, [spec, register, id]);
+  if (ads?.pending && placement === "browse_top") return <div className="fayfort-ad-reserve" aria-hidden="true" />;
   if (!ads || !config || !spec || !ads.allowed(id)) return null;
   return (
     <AdFrame
@@ -247,7 +260,8 @@ function AdFrame({
   onUpgrade?: () => void;
 }) {
   const ref = useRef<HTMLElement | null>(null);
-  const near = useNearScreen(ref);
+  // Draw the ad well before it scrolls in (800px), so it never grows while the member is looking at it.
+  const near = useNearScreen(ref, "800px");
   const useGoogle = !!(google && placement.google);
   const [googleState, setGoogleState] = useState<"pending" | "filled" | "unfilled">("pending");
   const creative = useMemo(() => pickCreative(placement.creatives), [placement.creatives]);

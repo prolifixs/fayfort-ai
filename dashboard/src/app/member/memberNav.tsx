@@ -14,7 +14,8 @@ const ICONS = {
   orders: "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8",
   saved: "M6 4h12v16l-6-4-6 4z",
   tools: "M4 7h16v13H4zM8 3v4M16 3v4M4 11h16M8 15h3",
-  membership: "M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z",
+  // A crown: Membership no longer shares the Finds star.
+  membership: "M4 19h16M5 16 3.5 7.5l5 3.5L12 5l3.5 6 5-3.5L19 16z",
   settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z",
   notifications: "M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0",
   more: "M4 7h16M4 12h16M4 17h16",
