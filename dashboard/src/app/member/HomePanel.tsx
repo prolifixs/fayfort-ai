@@ -32,6 +32,7 @@ type HomeFinds = {
   drop: { title: string; release_at: string } | null;
   finds: HomeFind[];
   next_drop: { title: string; opens_for_you: string } | null;
+  drop_alerts?: boolean;
 };
 
 export type HomeData = {
@@ -311,6 +312,8 @@ export function HomePanel({
   const [place, setPlace] = useState("");
   const [open, setOpen] = useState<"needs" | "progress" | null>(null);
   const [shelfKey, setShelfKey] = useState("");
+  const [alerts, setAlerts] = useState<boolean | null>(null);
+  const [alertsBusy, setAlertsBusy] = useState(false);
   useEffect(() => {
     let alive = true;
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -396,6 +399,23 @@ export function HomePanel({
     });
   const shelf = shelves.find((item) => item.key === shelfKey) || shelves[0];
   const giveaway = (shop?.giveaways || []).find((item) => item.status === "open");
+  const alertsOn = alerts ?? Boolean(finds?.drop_alerts);
+  async function toggleAlerts() {
+    const next = !alertsOn;
+    setAlerts(next);
+    setAlertsBusy(true);
+    try {
+      const saved = await apiRequest<{ drop_alerts: boolean }>("/members/finds/alerts", accessToken, {
+        method: "PUT",
+        body: JSON.stringify({ on: next }),
+      });
+      setAlerts(saved.drop_alerts);
+    } catch {
+      setAlerts(!next);
+    } finally {
+      setAlertsBusy(false);
+    }
+  }
   const findsCountdown = finds?.next_drop ? countdown(finds.next_drop.opens_for_you, now.getTime()) : "";
 
   function go(event: React.MouseEvent<HTMLAnchorElement>, panel: MemberPanel, href: string) {
@@ -610,9 +630,27 @@ export function HomePanel({
               </p>
             )}
             <p>Trending products and rare finds, checked in China and priced for resellers.</p>
-            <a className="primary-button" href={PANEL_PATHS.finds} onClick={(event) => go(event, "finds", PANEL_PATHS.finds)}>
-              {finds?.drop ? `See ${finds.drop.title}` : "Open Finds"}
-            </a>
+            <div className="member-home-finds-actions">
+              <a className="primary-button" href={PANEL_PATHS.finds} onClick={(event) => go(event, "finds", PANEL_PATHS.finds)}>
+                {finds?.drop ? `See ${finds.drop.title}` : "Open Finds"}
+              </a>
+              {data && (
+                <button
+                  type="button"
+                  className={alertsOn ? "member-home-bell is-on" : "member-home-bell"}
+                  aria-pressed={alertsOn}
+                  disabled={alertsBusy}
+                  onClick={() => void toggleAlerts()}
+                  title={alertsOn ? "We'll email you when a drop opens for you" : "Get an email when a drop opens for you"}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                    {!alertsOn && <path d="M3 3l18 18" />}
+                  </svg>
+                  {alertsOn ? "We'll email you" : "Notify me"}
+                </button>
+              )}
+            </div>
           </div>
           {!data ? (
             <HomeSkeleton rows={1} tiles />

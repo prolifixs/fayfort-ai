@@ -659,6 +659,7 @@ def member_finds(member_id: str, *, drop_id: str | None = None, lane: str | None
         "next_drop": ({"title": upcoming["title"], "release_at": upcoming["release_at"], "early_at": upcoming["early_at"],
                        "opens_for_you": opens_at(upcoming, access).isoformat()} if upcoming else None),
         "watching_count": len(watching), "countries": shipping.COUNTRIES,
+        "drop_alerts": drop_alerts_on(member_id, access),
     }
 
 
@@ -810,6 +811,43 @@ def _members(tiers: tuple[str, ...]) -> list[str]:
                                              .in_("member_tier", list(tiers)).limit(5000).execute())]
 
 
+def drop_alerts_on(member_id: str, access: dict | None = None) -> bool:
+    """Whether the member gets an email when a drop opens for them. Members choose with the bell on Home; until they
+    do, paid plans get it and Free does not."""
+    try:
+        profile = one(db().table("member_profiles").select("finds_drop_alerts").eq("user_id", member_id).limit(1).execute())
+    except Exception:
+        logger.exception("Could not read the member's drop alert choice")
+        profile = None
+    choice = (profile or {}).get("finds_drop_alerts")
+    if choice is None:
+        return bool((access or access_for(member_id))["research"])
+    return bool(choice)
+
+
+def set_drop_alerts(member_id: str, on: bool) -> bool:
+    db().table("member_profiles").update({"finds_drop_alerts": bool(on)}).eq("user_id", member_id).execute()
+    return bool(on)
+
+
+def _alerts_off() -> set[str]:
+    try:
+        return {str(r["user_id"]) for r in rows(db().table("member_profiles").select("user_id")
+                                                .eq("finds_drop_alerts", False).limit(5000).execute())}
+    except Exception:
+        logger.exception("Could not read drop alert choices")
+        return set()
+
+
+def _alerts_chosen_on() -> list[str]:
+    try:
+        return [str(r["user_id"]) for r in rows(db().table("member_profiles").select("user_id")
+                                                .eq("finds_drop_alerts", True).limit(5000).execute())]
+    except Exception:
+        logger.exception("Could not read drop alert choices")
+        return []
+
+
 def _fill_drop_task(drop: dict, count: int, now: datetime) -> None:
     from app.accounts import operations_flow as flow
     target = int(drop.get("target_count") or DROP_TARGET)
@@ -845,8 +883,9 @@ def sweep(now: datetime | None = None) -> dict[str, int]:
                 .eq("drop_id", str(drop["id"])).eq("status", "scheduled").execute()
             counts["opened"] += 1
             if count:
+                off = _alerts_off()
                 for member_id in _members(("pro",)):
-                    if access_for(member_id)["early"]:
+                    if member_id not in off and access_for(member_id)["early"]:
                         _email(member_id, f"Your early look: {drop['title']}"[:150],
                                f"{count} new finds are open for Pro members, two days before everyone else.")
                         counts["emails"] += 1
@@ -854,8 +893,9 @@ def sweep(now: datetime | None = None) -> dict[str, int]:
             changed = True
         if parse(drop["release_at"]) <= now and "release" not in notified:
             if count:
+                off = _alerts_off()
                 for member_id in _members(("standard", "pro")):
-                    if not access_for(member_id)["early"]:
+                    if member_id not in off and not access_for(member_id)["early"]:
                         _email(member_id, f"New this Monday: {drop['title']}"[:150],
                                f"{count} new finds, each checked in China, with prices for buying in quantity.")
                         counts["emails"] += 1
@@ -865,6 +905,16 @@ def sweep(now: datetime | None = None) -> dict[str, int]:
             ids = [str(f["product_id"]) for f in rows(db().table("finds").select("product_id,status")
                                                      .eq("drop_id", str(drop["id"])).eq("status", "released").execute())
                    if f.get("product_id")]
+            if count:
+                # Free members who turned the bell on hear when the drop opens for them.
+                for member_id in _alerts_chosen_on():
+                    try:
+                        if not access_for(member_id)["research"]:
+                            _email(member_id, f"Now open for you: {drop['title']}"[:150],
+                                   f"{count} finds from {drop['title']} are open on FayFort, each checked in China.")
+                            counts["emails"] += 1
+                    except Exception:
+                        logger.exception("Could not send a drop alert")
             if ids:
                 db().table("directory_products").update({"active": True}).in_("id", ids).execute()
                 counts["catalog"] += len(ids)

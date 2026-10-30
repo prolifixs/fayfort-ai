@@ -216,6 +216,31 @@ class WatchAndReleaseTests(FindsCase):
         self.assertTrue(product["active"])
         self.assertTrue(finds._drop(drop["id"])["notified"].get("catalog"))
 
+    def test_the_drop_bell_lets_free_opt_in_and_paid_opt_out(self):
+        self.assertFalse(finds.member_finds(FREE)["drop_alerts"])
+        self.assertTrue(finds.member_finds(STANDARD)["drop_alerts"])
+        finds.set_drop_alerts(FREE, True)
+        finds.set_drop_alerts(PRO, False)
+        self.assertTrue(finds.member_finds(FREE)["drop_alerts"])
+        self.assertFalse(finds.member_finds(PRO)["drop_alerts"])
+        self.ready_find()
+        for moment in (datetime(2026, 11, 7, 1, 5, tzinfo=timezone.utc), datetime(2026, 11, 9, 1, 5, tzinfo=timezone.utc),
+                       datetime(2026, 11, 16, 1, 5, tzinfo=timezone.utc)):
+            with patch.object(finds, "now_utc", return_value=moment):
+                finds.sweep(moment)
+        drop_emails = [(m, t) for m, t in self.emails() if not t.startswith("Price drop")]
+        self.assertEqual(sorted(m for m, _t in drop_emails), sorted([STANDARD, FREE]))
+        self.assertTrue(any(m == FREE and t.startswith("Now open for you") for m, t in drop_emails))
+
+    def test_the_drop_bell_endpoint(self):
+        app = FastAPI()
+        app.include_router(create_finds_router(lambda _a: FREE, lambda _a: None))
+        client = TestClient(app)
+        response = client.put("/members/finds/alerts", json={"on": True}, headers={"Authorization": "Bearer t"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"drop_alerts": True})
+        self.assertTrue(finds.drop_alerts_on(FREE))
+
     def test_sweep_plans_ahead_and_asks_to_fill_a_short_drop(self):
         finds.sweep(NOW)
         releases = sorted(d["release_at"] for d in self.db.rows["find_drops"])

@@ -20,6 +20,12 @@ for (const size of [{ n: "laptop", w: 1280, h: 900 }, { n: "phone", w: 390, h: 8
     await page.setViewportSize({ width: size.w, height: size.h });
     await signedInMember(page);
     await page.route(`${API}/members/finds`, (route) => route.fulfill({ json: finds }));
+    const saved: unknown[] = [];
+    await page.route(`${API}/members/finds/alerts`, (route) => {
+      const body = route.request().postDataJSON() as { on: boolean };
+      saved.push(body);
+      return route.fulfill({ json: { drop_alerts: body.on } });
+    });
     await page.goto("/member/home");
     const today = page.locator(".member-home-today");
     await expect(today.getByRole("heading", { level: 2 })).toContainText(/Good (morning|afternoon|evening)/);
@@ -30,6 +36,11 @@ for (const size of [{ n: "laptop", w: 1280, h: 900 }, { n: "phone", w: 390, h: 8
     await expect(findsCard.locator(".member-home-big strong")).toHaveText(/^8d \d+h$/);
     await expect(findsCard.locator(".member-home-fan li")).toHaveCount(3);
     await expect(findsCard.locator(".member-home-fan-locked")).toHaveCount(1);
+    const bell = findsCard.getByRole("button", { name: "Notify me" });
+    await expect(bell).toHaveAttribute("aria-pressed", "false");
+    await bell.click();
+    await expect(findsCard.getByRole("button", { name: "We'll email you" })).toHaveAttribute("aria-pressed", "true");
+    expect(saved).toEqual([{ on: true }]);
     const ticket = page.locator(".member-home-giveaway");
     await expect(ticket.getByRole("button", { name: "Enter free" })).toBeVisible();
     await expect(page.locator(".member-home-strip")).toHaveCount(0);

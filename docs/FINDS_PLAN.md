@@ -152,6 +152,11 @@ Each phase comes with tests, screenshots at phone, iPad and desktop, guide text 
   Standard 25, Pro unlimited; alerts on a price drop or when it's quick to source again) and "Order or request a
   batch" (opens the product page). Pro has "Research a niche for me" (2 a month, a Store team task). Free sees each
   drop a week later with three finds featured and the rest locked.
+- **Drop bell on Home** (added 30 Oct 2026): the Finds card on Home counts down to the next drop and has a "Notify
+  me" bell (`PUT /members/finds/alerts`, stored in `member_profiles.finds_drop_alerts`). Until a member chooses,
+  Standard and Pro get the drop email and Free does not; Free members who turn it on get "Now open for you" when the
+  drop opens for them a week later, and paid members can turn their drop emails off. Migration
+  `20261107090000_finds_drop_alerts.sql`.
 - **Plans**: the plan comparison lists Finds, Finds pricing, Watched finds and Niche research.
 - **fayfort.com/go/finds** and a FayFort Finds ticket on /go: the last drop's effort, three finds from earlier drops,
   how we find them, what each plan gets (`GET /public/finds/teaser`, times and photos only).

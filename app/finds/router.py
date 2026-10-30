@@ -84,6 +84,10 @@ class NicheRequest(BaseModel):
     text: str = Field(min_length=10, max_length=1000)
 
 
+class DropAlerts(BaseModel):
+    on: bool
+
+
 def _fail(exc: Exception, default: str) -> HTTPException:
     if isinstance(exc, HTTPException):
         return exc
@@ -234,6 +238,14 @@ def create_finds_router(require_verified_member: Callable[[str | None], str],
             return service.member_finds(member_id, drop_id=str(drop) if drop else None, lane=lane)
         except Exception as exc:
             raise _fail(exc, "Finds could not be loaded.") from exc
+
+    @router.put("/members/finds/alerts")
+    def drop_alerts(payload: DropAlerts, authorization: str | None = Header(default=None)):
+        member_id = require_verified_member(authorization)
+        try:
+            return {"drop_alerts": service.set_drop_alerts(member_id, payload.on)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't save. Please try again.") from exc
 
     @router.get("/members/finds/watching")
     def watching(authorization: str | None = Header(default=None)):
