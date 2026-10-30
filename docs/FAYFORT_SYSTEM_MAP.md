@@ -93,6 +93,31 @@ flowchart LR
   ADM[Admin] -->|deactivate| REL[Release assignments + ban sign-in]
 ```
 
+## 3b. HR and hiring (docs/HR_AND_HIRING_PLAN.md)
+
+**Job:** find, hire and look after the team. **Fed by:** fayfort.com/careers applications, the booking engine (interview
+times, leave blocking bookings), timesheets and customer ratings (review context). **Feeds:** staff invitations (Hire),
+employment records, the booking engine (interviews and approved leave), staff notices.
+
+Code: `app/hr` (service: jobs, applications, status links; interviews; offers; people; leave; reviews). Screens:
+Control Center → People (Hiring, Records, Time off, Policies, Team, Settings, HR access, My interviews) and My account →
+My HR. Candidates use fayfort.com/careers and a private status link (only SHA-256 hashes of link tokens are stored).
+Access: platform admins, the CEO and workers with the HR flag run it; interviewers see only their candidates; every
+team member sees their own My HR. Pay and ID documents are never stored. A background loop (`hr_loop`) sends interview
+reminders, expires offers, opens reviews a week ahead, closes leavers' accounts after their last day and anonymises
+candidates after 12 months.
+
+```mermaid
+flowchart LR
+  CAR[fayfort.com/careers] --> APP[Application + CV] --> BRD[People: Hiring board]
+  BRD --> INT[Interview: candidate picks a time] -->|one booking per interviewer| BK[Booking engine]
+  INT --> SC[Scorecards] --> OF[Offer, accepted by typed name] --> HIRE[Hire]
+  HIRE --> INVT[Staff invitation] --> REC[Employment record + signed offer]
+  REC --> POL[Policies to accept] & LV[Time off] & RV[Reviews] & OFF[Finish employment]
+  LV -->|approved| BK
+  OFF -->|after last day| DEACT[Deactivate + release work]
+```
+
 ## 4. Sourcing requests (the original FayFort service)
 
 **Job:** find an item the store doesn't stock. **Fed by:** chat request dialog, Find It "Source it", saved/catalog items,

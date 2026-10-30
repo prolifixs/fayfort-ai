@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1 to H6 built 30 Oct 2026 (section 10).** H7 (reviews and offboarding) is next.
+30 Oct 2026 (section 9). all seven phases (H1 to H7) built 30 Oct 2026 (section 10).**
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -331,4 +331,24 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
 - **People → Settings → Leave:** days a year per type (empty means not counted), whether each type needs approval and is
   in use, working days, and public holidays.
 - **Not yet:** a sick note upload, and the clock-in screen saying someone is on leave.
+
+### H7 Reviews and finishing employment (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261106090000_hr_reviews_offboarding_h7.sql` adds `hr_reviews`, `hr_offboarding`,
+  how often regular reviews happen (`review_every_months` on `hr_settings`, every 6 months to start), new timeline
+  entries and the `hr_review` staff notice.
+- **Reviews:** opened a week before they're due (checked hourly): the probation review on the probation end date, then
+  regular reviews every 3, 6 or 12 months (People → Settings) from the last one or the start date. The person and their
+  reviewer (their manager, or HR and the CEO) get a notice. The person writes a self-review in My HR. The reviewer
+  completes it in People → Records or in their own My HR ("Reviews to do"): customer rating, hours, finished work and
+  leave from the last 90 days are shown, then scores of 1 to 4 for speed, care and accuracy, a note the person reads and,
+  for probation, Pass, Extend (1 to 3 months) or End. The person sees the scores and note once it's finished.
+- **Finishing employment:** HR starts it from the record with the last day and a reason (internal). Open reviews stop.
+  The checklist shows open work (with "Hand back to the desks"), future bookings (moved or cancelled in Bookings),
+  equipment returned and other accounts closed, plus an exit note for HR. After the last day the account is closed the
+  same way as deactivating from the Team tab (status, work released, sign-in blocked), the record is marked finished
+  and the timeline says they left. It can be stopped before then.
+
+All seven phases are built. Still open from earlier phases: a sick note upload and the clock-in screen saying someone is
+on leave (H6).
 

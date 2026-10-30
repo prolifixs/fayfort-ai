@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import "./hr.css";
 import { MyTimeOff } from "./PeopleLeave";
+import { CompletedReview, FinishEmployment, MyReviews, ReviewForm, ReviewsToDo, type Offboarding, type Review, type ReviewContext } from "./PeopleReviews";
 import { apiRequest } from "../../lib/api";
 
 /* HR H5 (docs/HR_AND_HIRING_PLAN.md): Control Center → People → Records and Policies, and My HR on My account. */
 
 type TeamRow = {
   worker_id: string; name: string; photo_url: string | null; staff_role: string; job_title: string | null; start_date: string | null;
-  status: "starting" | "active" | "finished"; has_record: boolean; probation_due: boolean; probation_end: string | null; policies_to_read: number; away_until?: string | null;
+  status: "starting" | "active" | "finished"; has_record: boolean; probation_due: boolean; probation_end: string | null; policies_to_read: number; away_until?: string | null; leaving_on?: string | null; review_open?: boolean;
 };
 type Doc = { id: string; kind: string; kind_label: string; title: string; file_name: string | null; file_size: number | null; offer_id: string | null; visible_to_worker: boolean; created_at: string };
 type PolicyState = { id: string; title: string; summary: string; version: number; published_at: string | null; accepted_at: string | null; accepted_before: boolean };
@@ -17,6 +18,7 @@ type Person = {
   job: { job_title: string | null; job_type: string | null; location: string | null; start_date: string | null; probation_end: string | null;
     hours_per_week: number | null; manager_id: string | null; status: string | null; probation_passed_at: string | null };
   manager_name: string | null; personal: Personal; documents: Doc[]; policies: PolicyState[];
+  reviews?: Review[]; review_context?: ReviewContext | null; offboarding?: Offboarding | null;
   timeline: { id: string; kind: string; detail: Record<string, string>; created_at: string; actor_name: string | null }[];
 };
 type Policy = { id: string; title: string; summary: string; body: string; status: "draft" | "published" | "archived"; version: number;
@@ -33,7 +35,8 @@ const STATUS: Record<TeamRow["status"], string> = { starting: "Starting", active
 const EVENT: Record<string, string> = {
   record_opened: "Record opened", hired: "Hired", started: "Started", job_changed: "Job details changed", details_changed: "Personal details changed",
   probation_passed: "Probation passed", probation_extended: "Probation extended", document_added: "Document added",
-  document_removed: "Document removed", policy_accepted: "Policy accepted", finished: "Finished",
+  document_removed: "Document removed", policy_accepted: "Policy accepted", finished: "Left FayFort",
+  review_completed: "Review finished", offboarding_started: "Finishing employment started", offboarding_cancelled: "Finishing employment stopped",
 };
 const msg = (reason: unknown, fallback: string) => (reason instanceof Error ? reason.message : fallback);
 const longDate = (value?: string | null) => (value ? new Date(`${value.slice(0, 10)}T12:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Not set");
@@ -85,6 +88,8 @@ export function RecordsPanel({ accessToken }: { accessToken: string }) {
                 <span><strong>{row.name}</strong><small>{row.job_title || "No job title"}{row.start_date ? ` · since ${longDate(row.start_date)}` : ""}</small></span>
                 <span className="hr-person-flags">
                   <span className={`hr-status is-${row.status === "active" ? "open" : row.status === "starting" ? "paused" : "closed"}`}>{STATUS[row.status]}</span>
+                  {row.leaving_on && <b className="hr-flag is-due">Leaving {longDate(row.leaving_on)}</b>}
+                  {row.review_open && <b className="hr-flag">Review due</b>}
                   {row.away_until && <b className="hr-flag is-away">Away until {longDate(row.away_until)}</b>}
                   {row.probation_due && <b className="hr-flag is-due">Probation review</b>}
                   {row.policies_to_read > 0 && <b className="hr-flag">{row.policies_to_read} to read</b>}
@@ -175,7 +180,16 @@ function PersonPanel({ accessToken, workerId, team, onClose, onChanged }: { acce
         {saved && <p className="email-delivery ok" role="status">{saved}</p>}
         {!person ? <p className="muted">Loading…</p> : (
           <div className="hr-panel-body">
-            {probationOpen && (
+            {(person.reviews || []).filter((r) => r.status === "open").map((r) => (
+              <section key={r.id} className="hr-probation"><ReviewForm review={r} context={person.review_context} name={person.name} accessToken={accessToken}
+                onDone={async (done) => {
+                  const fresh = await apiRequest<{ person: Person }>(`/hr/people/${workerId}`, accessToken);
+                  take(fresh.person);
+                  setSaved(done.next === "offboarding" ? "Review saved. Start “Finish employment” below to set their last day." : "Review saved.");
+                  onChanged();
+                }} /></section>
+            ))}
+            {probationOpen && !(person.reviews || []).some((r) => r.status === "open" && r.kind === "probation") && (
               <section className="hr-probation"><h3>Probation {person.job.probation_end && new Date(person.job.probation_end) <= new Date() ? "review due" : `ends ${longDate(person.job.probation_end)}`}</h3>
                 <div className="hr-links">
                   <button type="button" className="primary-button" disabled={busy} onClick={() => void call(`/hr/people/${workerId}/probation`, { method: "POST", body: JSON.stringify({ decision: "pass" }) }, "Probation passed.")}>Pass probation</button>
@@ -244,6 +258,11 @@ function PersonPanel({ accessToken, workerId, team, onClose, onChanged }: { acce
                 ))}</ul>
               )}
             </section>
+            {(person.reviews || []).some((r) => r.status === "completed") && (
+              <section><h3>Past reviews</h3>{(person.reviews || []).filter((r) => r.status === "completed").map((r) => <CompletedReview key={r.id} review={r} />)}</section>
+            )}
+            <FinishEmployment workerId={workerId} name={person.name} offboarding={person.offboarding || null} accessToken={accessToken}
+              isActive={person.account_status === "active"} onPerson={(p) => { take(p as Person); onChanged(); }} />
             <section><h3>Timeline</h3>
               <ol className="hr-activity">{person.timeline.map((e) => (
                 <li key={e.id}><span>{EVENT[e.kind] || e.kind}{e.detail.title ? `: ${e.detail.title}` : e.detail.job_title ? `: ${e.detail.job_title}` : e.detail.until ? ` to ${longDate(e.detail.until)}` : ""}{e.actor_name ? ` · ${e.actor_name}` : ""}</span>
@@ -357,7 +376,7 @@ export function PoliciesPanel({ accessToken }: { accessToken: string }) {
 // ---- My HR (every team member, on My account) -------------------------------------------------------------------------
 type Mine = {
   job: { job_title: string | null; job_type: string | null; location: string | null; start_date: string | null; probation_end: string | null; hours_per_week: number | null; manager: string | null };
-  personal: Personal; documents: Doc[]; policies: PolicyState[];
+  personal: Personal; documents: Doc[]; policies: PolicyState[]; reviews?: Review[];
 };
 
 export function MyHr({ accessToken }: { accessToken: string }) {
@@ -384,6 +403,8 @@ export function MyHr({ accessToken }: { accessToken: string }) {
       {error && <p className="form-error" role="alert">{error}</p>}
       {saved && <p className="email-delivery ok" role="status">{saved}</p>}
       <MyTimeOff accessToken={accessToken} />
+      <ReviewsToDo accessToken={accessToken} />
+      <MyReviews reviews={mine.reviews || []} accessToken={accessToken} onChanged={(r) => setMine({ ...mine, reviews: (mine.reviews || []).map((x) => (x.id === r.id ? r : x)) })} />
       <div className="my-hr-grid">
         <section className="my-hr-card"><h3>Policies to read</h3>
           {mine.policies.length === 0 ? <p className="muted">Nothing to read yet.</p> : (

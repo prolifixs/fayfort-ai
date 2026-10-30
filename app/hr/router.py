@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.settings import settings
-from app.hr import interviews, leave, offers, people, service
+from app.hr import interviews, leave, offers, people, reviews, service
 from app.hr.service import HrError
 
 logger = logging.getLogger(__name__)
@@ -161,6 +161,7 @@ class HrSettings(BaseModel):
     offer_template: str | None = Field(default=None, max_length=8000)
     probation_months: int | None = Field(default=None, ge=0, le=12)
     offer_days: int | None = Field(default=None, ge=1, le=30)
+    review_every_months: Literal[0, 3, 6, 12] | None = None
 
 
 class PersonFields(BaseModel):
@@ -252,6 +253,33 @@ class LeaveSettings(BaseModel):
     leave_types: list[LeaveTypeFields] | None = Field(default=None, max_length=20)
     work_days: list[int] | None = Field(default=None, max_length=7)
     holidays: list[Holiday] | None = Field(default=None, max_length=200)
+
+
+class ReviewCompletion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scores: dict[str, int] = Field(max_length=3)
+    note: str = Field(max_length=3000)
+    decision: Literal["pass", "extend", "end"] | None = None
+    extend_months: Literal[1, 2, 3] | None = None
+
+
+class SelfReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(max_length=3000)
+
+
+class OffboardingStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    last_day: str = Field(max_length=10)
+    reason_kind: Literal["resigned", "contract_ended", "probation_ended", "dismissed", "other"]
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class OffboardingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    steps: dict[str, bool] | None = None
+    exit_note: str | None = Field(default=None, max_length=3000)
+    last_day: str | None = Field(default=None, max_length=10)
 
 
 class Access(BaseModel):
@@ -911,6 +939,68 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             return leave.save_settings(fields, staff["user_id"])
         except Exception as exc:
             raise _fail(exc, "Leave settings could not be saved.") from exc
+
+    # ---- Reviews and finishing employment (H7) --------------------------------------------------------------------
+    @router.get("/hr/reviews/to-do")
+    def reviews_to_do(authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            return {"reviews": reviews.to_review(staff), "scores": reviews.SCORES}
+        except Exception as exc:
+            raise _fail(exc, "Reviews could not be loaded.") from exc
+
+    @router.post("/hr/reviews/{review_id}/complete")
+    def complete_review(review_id: UUID, payload: ReviewCompletion, authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            return {"review": reviews.complete(str(review_id), payload.scores, payload.note, payload.decision,
+                                               payload.extend_months, staff)}
+        except Exception as exc:
+            raise _fail(exc, "The review couldn't be saved.") from exc
+
+    @router.post("/hr/my/reviews/{review_id}/self")
+    def my_self_review(review_id: UUID, payload: SelfReview, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            return {"review": reviews.self_review(str(review_id), staff["user_id"], payload.text)}
+        except Exception as exc:
+            raise _fail(exc, "Your self-review couldn't be saved.") from exc
+
+    @router.post("/hr/people/{worker_id}/offboarding", status_code=201)
+    def start_offboarding(worker_id: UUID, payload: OffboardingStart, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            reviews.start_offboarding(str(worker_id), payload.model_dump(), staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "Finishing employment couldn't be started.") from exc
+
+    @router.put("/hr/people/{worker_id}/offboarding")
+    def update_offboarding(worker_id: UUID, payload: OffboardingUpdate, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            reviews.update_offboarding(str(worker_id), payload.model_dump(exclude_unset=True), staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The checklist couldn't be saved.") from exc
+
+    @router.post("/hr/people/{worker_id}/offboarding/release")
+    def release_work(worker_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            reviews.release_work(str(worker_id), staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "Their work couldn't be handed back.") from exc
+
+    @router.delete("/hr/people/{worker_id}/offboarding")
+    def cancel_offboarding(worker_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            reviews.cancel_offboarding(str(worker_id), staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work.") from exc
 
     # ---- Owner ---------------------------------------------------------------------------------------------------
     @router.get("/hr/access")

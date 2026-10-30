@@ -65,7 +65,8 @@ def settings() -> dict:
     return {"offer_template": (found.get("offer_template") or "").strip() or DEFAULT_TEMPLATE,
             "is_default_template": not (found.get("offer_template") or "").strip(),
             "probation_months": int(found.get("probation_months") if found.get("probation_months") is not None else 3),
-            "offer_days": int(found.get("offer_days") or 7), "placeholders": list(PLACEHOLDERS)}
+            "offer_days": int(found.get("offer_days") or 7), "placeholders": list(PLACEHOLDERS),
+            "review_every_months": int(found.get("review_every_months") if found.get("review_every_months") is not None else 6)}
 
 
 def save_settings(fields: dict, actor_id: str) -> dict:
@@ -78,6 +79,10 @@ def save_settings(fields: dict, actor_id: str) -> dict:
         values["offer_template"] = "" if text == DEFAULT_TEMPLATE.strip() else text[:8000]
     if fields.get("probation_months") is not None:
         values["probation_months"] = max(0, min(12, int(fields["probation_months"])))
+    if fields.get("review_every_months") is not None:
+        if int(fields["review_every_months"]) not in (0, 3, 6, 12):
+            raise HrError("Reviews are every 3, 6 or 12 months, or never.", 422)
+        values["review_every_months"] = int(fields["review_every_months"])
     if fields.get("offer_days") is not None:
         values["offer_days"] = max(1, min(30, int(fields["offer_days"])))
     db().table("hr_settings").upsert({"id": 1, **values}, on_conflict="id").execute()

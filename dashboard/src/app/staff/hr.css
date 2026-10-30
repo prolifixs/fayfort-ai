@@ -233,3 +233,20 @@
   .leave-month h2 { min-width: 0; }
   .leave-calendar { gap: 2px; }
 }
+
+/* H7: reviews and finishing employment */
+.review-form { display: grid; gap: var(--space-2); }
+.review-form h4 { margin: 0; }
+.review-form label { display: grid; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.review-form textarea, .review-form select { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 400; }
+.review-form > button { justify-self: start; }
+.review-context { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); padding: var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg); }
+.review-note { margin: 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--accent); background: var(--color-surface); white-space: pre-wrap; }
+.review-done { display: grid; gap: 6px; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
+.review-done p { margin: 0; }
+.review-scores { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-sm); }
+.hr-offboarding { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent); border-radius: var(--radius-md); }
+.hr-offboarding h3, .hr-offboarding p { margin: 0; }
+.hr-offboarding > button { justify-self: start; }
+.offboarding-steps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.offboarding-steps li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 6px 0; border-bottom: 1px solid var(--color-border-subtle); }

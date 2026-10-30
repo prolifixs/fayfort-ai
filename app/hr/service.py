@@ -697,6 +697,7 @@ async def hr_loop() -> None:
     from app.hr import interviews
     await asyncio.sleep(60)
     last_retention = 0.0
+    last_reviews = 0.0
     while True:
         try:
             counts = await asyncio.to_thread(interviews.sweep)
@@ -704,6 +705,11 @@ async def hr_loop() -> None:
             counts["offers_expired"] = await asyncio.to_thread(offers.expire)
             if any(counts.values()):
                 logger.info("Interview sweep: %s", counts)
+            if time.monotonic() - last_reviews > 3600:
+                # Reviews a week before they're due, and leavers after their last day (app/hr/reviews.py).
+                from app.hr import reviews
+                await asyncio.to_thread(reviews.sweep)
+                last_reviews = time.monotonic()
             if time.monotonic() - last_retention > 6 * 3600:
                 await asyncio.to_thread(anonymise_expired)
                 last_retention = time.monotonic()

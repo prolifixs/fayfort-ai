@@ -121,6 +121,10 @@ def team() -> list[dict]:
     pending = policies_pending_counts(ids)
     from app.hr import leave
     away = leave.away_until(ids)
+    leaving = {str(o["worker_id"]): o["last_day"] for o in rows(db().table("hr_offboarding").select("worker_id,last_day,cancelled_at")
+               .limit(1000).execute()) if not o.get("cancelled_at")}
+    due_reviews = {str(r["worker_id"]) for r in rows(db().table("hr_reviews").select("worker_id,status").eq("status", "open")
+                   .limit(1000).execute())}
     out = []
     for worker in workers:
         rec = records.get(str(worker["user_id"])) or {}
@@ -135,6 +139,8 @@ def team() -> list[dict]:
             "probation_end": probation_end if not rec.get("probation_passed_at") else None,
             "policies_to_read": pending.get(str(worker["user_id"]), 0),
             "away_until": away.get(str(worker["user_id"])),
+            "leaving_on": leaving.get(str(worker["user_id"])),
+            "review_open": str(worker["user_id"]) in due_reviews,
         })
     return sorted(out, key=lambda p: (p["status"] != "starting", p["name"].casefold()))
 
@@ -162,7 +168,15 @@ def person(worker_id: str, actor_id: str) -> dict:
                      for e in timeline],
         "documents": documents_for(worker_id),
         "policies": policy_status_for(worker_id),
+        "reviews": _reviews().for_worker(worker_id),
+        "review_context": _reviews().context(worker_id),
+        "offboarding": _reviews().offboarding(worker_id),
     }
+
+
+def _reviews():
+    from app.hr import reviews
+    return reviews
 
 
 def update(worker_id: str, fields: dict, actor_id: str, *, own: bool = False) -> dict:
@@ -454,7 +468,8 @@ def mine(worker_id: str) -> dict:
                     "hours_per_week": rec.get("hours_per_week"), "manager": manager},
             "personal": {k: rec.get(k) for k in PERSONAL_FIELDS},
             "documents": documents_for(worker_id, own=True),
-            "policies": policy_status_for(worker_id)}
+            "policies": policy_status_for(worker_id),
+            "reviews": _reviews().mine(worker_id)}
 
 
 def on_hired(worker_id: str, offer: dict, actor_id: str) -> None:

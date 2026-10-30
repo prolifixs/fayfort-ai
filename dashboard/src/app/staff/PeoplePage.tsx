@@ -972,15 +972,16 @@ function OfferSection({ accessToken, detail, onChanged }: { accessToken: string;
 }
 
 function HrSettingsPanel({ accessToken }: { accessToken: string }) {
-  const [data, setData] = useState<{ offer_template: string; is_default_template: boolean; probation_months: number; offer_days: number; placeholders: string[] } | null>(null);
+  const [data, setData] = useState<{ offer_template: string; is_default_template: boolean; probation_months: number; offer_days: number; placeholders: string[]; review_every_months?: number } | null>(null);
   const [template, setTemplate] = useState("");
   const [probation, setProbation] = useState(3);
   const [days, setDays] = useState(7);
+  const [every, setEvery] = useState(6);
   const [state, setState] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     apiRequest<{ settings: NonNullable<typeof data> }>("/hr/settings", accessToken).then((r) => {
-      setData(r.settings); setTemplate(r.settings.offer_template); setProbation(r.settings.probation_months); setDays(r.settings.offer_days);
+      setData(r.settings); setTemplate(r.settings.offer_template); setProbation(r.settings.probation_months); setDays(r.settings.offer_days); setEvery(r.settings.review_every_months ?? 6);
     }).catch((reason) => setError(message(reason, "HR settings could not be loaded.")));
   }, [accessToken]);
   async function save(event: FormEvent) {
@@ -988,7 +989,7 @@ function HrSettingsPanel({ accessToken }: { accessToken: string }) {
     setState("Saving…");
     setError("");
     try {
-      const r = await apiRequest<{ settings: NonNullable<typeof data> }>("/hr/settings", accessToken, { method: "PUT", body: JSON.stringify({ offer_template: template, probation_months: probation, offer_days: days }) });
+      const r = await apiRequest<{ settings: NonNullable<typeof data> }>("/hr/settings", accessToken, { method: "PUT", body: JSON.stringify({ offer_template: template, probation_months: probation, offer_days: days, review_every_months: every }) });
       setData(r.settings);
       setState("Saved.");
     } catch (reason) {
@@ -999,10 +1000,11 @@ function HrSettingsPanel({ accessToken }: { accessToken: string }) {
   if (!data) return error ? <p className="form-error" role="alert">{error}</p> : <p className="muted">Loading…</p>;
   return (
     <form className="control-panel hr-editor" onSubmit={save} aria-label="HR settings">
-      <div className="panel-heading"><h2>HR settings</h2><p className="muted">Used for every new offer. Leave allowances come with time off.</p></div>
+      <div className="panel-heading"><h2>HR settings</h2><p className="muted">Offers, probation and reviews. Leave is set below.</p></div>
       <div className="hr-grid">
         <label>Usual probation (months)<input type="number" min={0} max={12} value={probation} onChange={(e) => setProbation(Number(e.target.value))} /></label>
         <label>Offers stay open for (days)<input type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label>
+        <label>Regular reviews<select value={every} onChange={(e) => setEvery(Number(e.target.value))}><option value={3}>Every 3 months</option><option value={6}>Every 6 months</option><option value={12}>Every year</option><option value={0}>Never</option></select></label>
       </div>
       <label>Offer letter template<textarea className="hr-letter-edit" rows={18} value={template} onChange={(e) => setTemplate(e.target.value)} /></label>
       <p className="muted">Words in curly brackets are filled in: {data.placeholders.map((p) => `{${p}}`).join(" ")}</p>

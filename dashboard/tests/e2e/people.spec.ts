@@ -184,3 +184,38 @@ for (const size of [{ n: "laptop", w: 1440, h: 900 }, { n: "phone", w: 390, h: 8
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, "page scrolls sideways").toBeLessThanOrEqual(1);
 });
+
+test("a probation review and finishing employment on a record", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signedInStaff(page);
+  const personal = { legal_name: null, preferred_name: null, phone: null, country: null, city: null, date_of_birth: null, emergency_name: null, emergency_relationship: null, emergency_phone: null };
+  const person = { worker_id: "w2", name: "Ben Li", photo_url: null, staff_role: "staff", account_status: "active", status: "active", desks: ["Sourcing desk"],
+    job: { job_title: "Sourcing agent", job_type: "full_time", location: "guangzhou", start_date: "2026-08-03", probation_end: "2026-11-06", hours_per_week: 40, manager_id: "w1", status: "active", probation_passed_at: null },
+    manager_name: "Ada Eze", personal, documents: [], policies: [], timeline: [],
+    reviews: [{ id: "r1", worker_id: "w2", kind: "probation", due_on: "2026-11-06", status: "open", self_review: "I learned the Baima and Yide Road suppliers and I answer members within the hour. I'd like more training on quality checks.",
+      self_submitted_at: "2026-11-02T00:00:00Z", scores: {}, manager_note: null, decision: null, completed_at: null }],
+    review_context: { rating: 4.8, rating_count: 12, hours: 410.5, shifts: 58, finished_work: 96, leave_days: 2 },
+    offboarding: null };
+  await page.route("**/hr/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [], departments: {}, job_types: {}, locations: {} } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications: [], close_reasons: [], emailed_stages: [] } });
+    if (path === "/hr/people") return route.fulfill({ json: { people: [{ worker_id: "w2", name: "Ben Li", photo_url: null, staff_role: "staff", job_title: "Sourcing agent", start_date: "2026-08-03",
+      status: "active", has_record: true, probation_due: true, probation_end: "2026-11-06", policies_to_read: 0, review_open: true, leaving_on: null }] } });
+    if (path.startsWith("/hr/people/")) return route.fulfill({ json: { person } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?page=people");
+  await page.getByRole("tab", { name: "Records" }).click();
+  await page.getByRole("button", { name: /Ben Li.*Review due/ }).click();
+  const panel = page.getByRole("dialog", { name: "Ben Li" });
+  await expect(panel.getByText("4.8 ★ (12)")).toBeVisible();
+  await panel.getByRole("radio", { name: "Speed: 4" }).check({ force: true });
+  await panel.getByRole("radio", { name: "Care: 4" }).check({ force: true });
+  await panel.getByRole("radio", { name: "Accuracy: 3" }).check({ force: true });
+  await panel.getByRole("radio", { name: "Pass" }).check({ force: true });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "test-results/hr/people-review-laptop.png" });
+  await panel.getByRole("button", { name: "Finish employment…" }).scrollIntoViewIfNeeded();
+  await expect(panel.getByRole("button", { name: "Finish employment…" })).toBeVisible();
+});
