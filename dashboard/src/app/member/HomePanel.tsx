@@ -143,36 +143,141 @@ const CHINA_ZONE = "Asia/Shanghai";
 const clock = (now: Date, timeZone?: string) =>
   now.toLocaleTimeString(undefined, { timeZone, hour: "numeric", minute: "2-digit" });
 
-/** The member's place and time next to Guangzhou's, ticking every half minute. */
-function PlaceClocks({ place }: { place: string }) {
+/** The clock the Home widgets share, ticking every half minute. */
+function useNow() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+  return now;
+}
+
+export type GuangzhouPhase = "dawn" | "day" | "dusk" | "night";
+export type GuangzhouStatus = { phase: GuangzhouPhase; open: boolean; line: string; workday: number };
+
+/**
+ * What Guangzhou is doing right now, for a member deciding when to ask a supplier something. Offices there work
+ * roughly 9 AM to 6 PM with a lunch break, Monday to Saturday; most suppliers rest on Sunday.
+ */
+export function guangzhouStatus(now: Date): GuangzhouStatus {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: CHINA_ZONE, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(now)
+    .reduce<Record<string, string>>((all, part) => ({ ...all, [part.type]: part.value }), {});
+  const minutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+  const hour = minutes / 60;
+  const phase: GuangzhouPhase = hour >= 5 && hour < 9 ? "dawn" : hour >= 9 && hour < 17 ? "day" : hour >= 17 && hour < 20 ? "dusk" : "night";
+  const workday = Math.min(1, Math.max(0, (minutes - 9 * 60) / (9 * 60)));
+  const sunday = parts.weekday === "Sun";
+  const saturdayNight = parts.weekday === "Sat" && hour >= 18;
+  if (sunday || saturdayNight) return { phase, open: false, line: "Most suppliers rest on Sunday. Replies pick up on Monday.", workday: sunday ? 0 : workday };
+  if (hour >= 9 && hour < 12) return { phase, open: true, line: "Guangzhou is open. A good time to ask for quotes.", workday };
+  if (hour >= 12 && hour < 13.5) return { phase, open: true, line: "Lunch break in Guangzhou. Replies resume at 1:30 PM there.", workday };
+  if (hour >= 13.5 && hour < 18) return { phase, open: true, line: "Guangzhou is open. Suppliers are replying.", workday };
+  if (hour >= 5 && hour < 9) return { phase, open: false, line: "Guangzhou is waking up. Suppliers reply from 9 AM there.", workday };
+  return { phase, open: false, line: "Guangzhou is closed. Replies come in from 9 AM there.", workday };
+}
+
+/** Time until something, short enough for a big countdown: "8d 14h", "5h 20m", "12m". */
+export function countdown(target: string, now = Date.now()): string {
+  const ms = Date.parse(target) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  const minutes = Math.floor(ms / 60_000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days >= 1) return `${days}d ${hours}h`;
+  if (hours >= 1) return `${hours}h ${minutes % 60}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
+function DayIcon({ hour }: { hour: number }) {
+  return hour >= 6 && hour < 18 ? (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  ) : (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+    </svg>
+  );
+}
+
+const hourIn = (now: Date, timeZone?: string) =>
+  Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(now)) % 24;
+
+/** Today: the greeting with a one-line summary, and the member's clock next to Guangzhou's with what it is doing. */
+function TodayWidget({ title, summary, place }: { title: string; summary: string; place: string }) {
+  const now = useNow();
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const ahead = chinaOffsetHours(now, zone);
   const gap =
-    ahead === 0 ? "same time" : `${Math.abs(ahead)} ${Math.abs(ahead) === 1 ? "hour" : "hours"} ${ahead > 0 ? "ahead" : "behind"}`;
+    ahead === 0 ? "Same time as you" : `${Math.abs(ahead)} ${Math.abs(ahead) === 1 ? "hour" : "hours"} ${ahead > 0 ? "ahead" : "behind"}`;
+  const status = guangzhouStatus(now);
+  const today = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
   return (
-    <p className="member-home-clocks">
-      <span>
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
-          <circle cx="12" cy="10" r="2.5" />
-        </svg>
-        <b>{place || "You"}</b> {clock(now, zone)}
-      </span>
-      <span>
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 2" />
-        </svg>
-        <b>Guangzhou, China</b> {clock(now, CHINA_ZONE)} <small>({gap})</small>
-      </span>
-    </p>
+    <header className="member-home-today" data-phase={status.phase}>
+      <div className="member-home-today-main">
+        <small>{today}</small>
+        <h2 id="member-home-title">{title}</h2>
+        {summary && <p>{summary}</p>}
+      </div>
+      <div className="member-home-today-side">
+        <div className="member-home-clocks">
+          <div className="member-home-clock">
+            <span>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+              {place || "You"}
+            </span>
+            <strong>{clock(now, zone)}</strong>
+            <small>
+              <DayIcon hour={hourIn(now, zone)} />
+              Your time
+            </small>
+          </div>
+          <div className="member-home-clock is-china">
+            <span>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              Guangzhou, China
+            </span>
+            <strong>{clock(now, CHINA_ZONE)}</strong>
+            <small>
+              <DayIcon hour={hourIn(now, CHINA_ZONE)} />
+              {gap}
+            </small>
+          </div>
+        </div>
+        <p className={status.open ? "member-home-gz is-open" : "member-home-gz"}>
+          <i aria-hidden="true" />
+          {status.line}
+        </p>
+        <div
+          className="member-home-gz-bar"
+          role="img"
+          aria-label={`Guangzhou workday ${Math.round(status.workday * 100)}% through`}
+        >
+          <i style={{ width: `${Math.round(status.workday * 100)}%` }} />
+        </div>
+      </div>
+    </header>
   );
 }
+
+/** Shown in the Finds fan before the first drop, so the card keeps its shape. */
+const FAN_PLACEHOLDERS: HomeFind[] = [1, 2, 3].map((n) => ({ id: `soon-${n}`, name: "", media_url: null, media_type: null, locked: true }));
+
+const GIFT_ICON = (
+  <svg aria-hidden="true" viewBox="0 0 24 24">
+    <rect x="3" y="8" width="18" height="4" rx="1" />
+    <path d="M12 8v13M19 12v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+  </svg>
+);
 
 type Shelf = { key: string; label: string; items: ShelfItem[] };
 type ShelfItem = { key: string; name: string; image: string | null; line: string; open: () => void; tag?: string };
@@ -236,7 +341,14 @@ export function HomePanel({
   const progress = data ? homeProgress(data) : [];
   const finds = data?.finds;
   const firstName = memberName === "Member" ? "" : memberName.split(/\s+/)[0];
-  const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+  const now = useNow();
+  const summary = !data
+    ? ""
+    : needs.length
+      ? `${needs.length} ${needs.length === 1 ? "thing needs" : "things need"} you${progress.length ? `, ${progress.length} on the way` : ""}.`
+      : progress.length
+        ? `Nothing needs you. ${progress.length} on the way.`
+        : "Nothing needs you today.";
 
   // The carousel: the shop's product rails, new Finds and group buys, each behind a chip.
   const shelves: Shelf[] = [];
@@ -284,6 +396,7 @@ export function HomePanel({
     });
   const shelf = shelves.find((item) => item.key === shelfKey) || shelves[0];
   const giveaway = (shop?.giveaways || []).find((item) => item.status === "open");
+  const findsCountdown = finds?.next_drop ? countdown(finds.next_drop.opens_for_you, now.getTime()) : "";
 
   function go(event: React.MouseEvent<HTMLAnchorElement>, panel: MemberPanel, href: string) {
     if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -298,14 +411,7 @@ export function HomePanel({
 
   return (
     <section className="member-workspace-panel member-home" aria-labelledby="member-home-title">
-      <header className="member-home-head">
-        <small>{today}</small>
-        <h2 id="member-home-title">
-          {greeting()}
-          {firstName ? `, ${firstName}` : ""}
-        </h2>
-        <PlaceClocks place={place} />
-      </header>
+      <TodayWidget title={`${greeting()}${firstName ? `, ${firstName}` : ""}`} summary={summary} place={place} />
 
       <section className="member-home-card member-home-ask" aria-labelledby="home-ask-title">
         <div>
@@ -478,49 +584,76 @@ export function HomePanel({
         )}
       </section>
 
-      <div className="member-home-feature">
+      <div className={giveaway ? "member-home-feature" : "member-home-feature is-solo"}>
         <section className="member-home-card member-home-finds" aria-labelledby="home-finds-title">
-          <div className="member-home-card-head">
-            <h3 id="home-finds-title">FayFort Finds</h3>
-            {finds?.next_drop && (
-              <span className="member-home-tag">
-                Next drop {new Date(finds.next_drop.opens_for_you).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-              </span>
+          <div className="member-home-finds-body">
+            <h3 id="home-finds-title" className="member-home-eyebrow">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+              </svg>
+              FayFort Finds
+            </h3>
+            {findsCountdown ? (
+              <p className="member-home-big">
+                <strong>{findsCountdown}</strong>
+                <span>until {finds?.next_drop?.title || "the next drop"} opens for you</span>
+              </p>
+            ) : finds?.drop ? (
+              <p className="member-home-big">
+                <strong>Live now</strong>
+                <span>{finds.drop.title}</span>
+              </p>
+            ) : (
+              <p className="member-home-big">
+                <strong>Mondays</strong>
+                <span>A new drop every week</span>
+              </p>
             )}
+            <p>Trending products and rare finds, checked in China and priced for resellers.</p>
+            <a className="primary-button" href={PANEL_PATHS.finds} onClick={(event) => go(event, "finds", PANEL_PATHS.finds)}>
+              {finds?.drop ? `See ${finds.drop.title}` : "Open Finds"}
+            </a>
           </div>
-          <p>Trending products and rare finds, checked in China and priced for resellers. A new drop every Monday.</p>
           {!data ? (
             <HomeSkeleton rows={1} tiles />
-          ) : finds && finds.finds.length > 0 ? (
-            <ul className="member-home-tiles">
-              {finds.finds.slice(0, 3).map((find) => (
-                <li key={find.id}>
+          ) : (
+            <ul className="member-home-fan" aria-label={finds?.finds.length ? "From the latest drop" : undefined} aria-hidden={finds?.finds.length ? undefined : true}>
+              {(finds?.finds.length ? finds.finds.slice(0, 3) : FAN_PLACEHOLDERS).map((find) => (
+                <li key={find.id} title={find.locked ? "Opens for you soon" : find.name}>
                   {find.media_url && find.media_type !== "video" && !find.locked ? (
-                    <img src={find.media_url} alt="" loading="lazy" />
+                    <img src={find.media_url} alt={find.name} loading="lazy" />
                   ) : (
-                    <span aria-hidden="true" className="member-home-tile-blank" />
+                    <span className="member-home-fan-locked">
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <rect x="5" y="11" width="14" height="10" rx="2" />
+                        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                      </svg>
+                      <small>{find.locked ? "Soon" : find.name}</small>
+                    </span>
                   )}
-                  <small>{find.locked ? "Opens soon" : find.name}</small>
                 </li>
               ))}
             </ul>
-          ) : null}
-          <a className="primary-button" href={PANEL_PATHS.finds} onClick={(event) => go(event, "finds", PANEL_PATHS.finds)}>
-            {finds?.drop ? `See ${finds.drop.title}` : "Open Finds"}
-          </a>
+          )}
         </section>
 
-        <section className="member-home-card member-home-giveaway" aria-labelledby="home-giveaway-title">
-          <div className="member-home-card-head">
-            <h3 id="home-giveaway-title">Giveaway</h3>
-            {giveaway && <span className="member-home-tag">Ends in {timeLeft(giveaway.ends_at)}</span>}
-          </div>
-          {giveaway ? (
-            <>
+        {giveaway && (
+          <section className="member-home-card member-home-giveaway" aria-labelledby="home-giveaway-title">
+            <div className="member-home-ticket-top">
+              <h3 id="home-giveaway-title" className="member-home-eyebrow">
+                {GIFT_ICON}
+                Giveaway
+              </h3>
               <p className="member-home-prize">
                 <strong>{giveaway.prize_text ? `Win ${giveaway.prize_text}` : giveaway.title}</strong>
-                <span>{giveaway.title}</span>
+                {giveaway.prize_text && <span>{giveaway.title}</span>}
               </p>
+            </div>
+            <div className="member-home-ticket-stub">
+              <span>
+                <small>Time left</small>
+                <b>{timeLeft(giveaway.ends_at, now.getTime()).replace(" left", "")}</b>
+              </span>
               <button
                 type="button"
                 className="primary-button"
@@ -529,12 +662,22 @@ export function HomePanel({
               >
                 {giveaway.entered ? "You're in" : busyId === giveaway.id ? "Entering…" : "Enter free"}
               </button>
-            </>
-          ) : (
-            <p className="member-home-empty">No giveaway running right now. The next one shows up here and in the shop.</p>
-          )}
-        </section>
+            </div>
+          </section>
+        )}
       </div>
+
+      {!giveaway && (
+        <section className="member-home-strip" aria-label="Giveaway">
+          <span className="member-home-strip-icon">{GIFT_ICON}</span>
+          <p>
+            <strong>No giveaway right now.</strong> The next one shows up here and in the shop.
+          </p>
+          <a href={PANEL_PATHS.catalog} onClick={(event) => go(event, "catalog", PANEL_PATHS.catalog)}>
+            Visit the shop
+          </a>
+        </section>
+      )}
 
       {failed && (
         <p className="member-home-empty" role="status">

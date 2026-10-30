@@ -356,3 +356,28 @@ describe("Home clocks", () => {
     expect(chinaOffsetHours(new Date("2026-10-31T23:30:00Z"), "Europe/London")).toBe(8);
   });
 });
+
+describe("Home widgets", () => {
+  it("says what Guangzhou is doing and how far through its workday it is", async () => {
+    const { guangzhouStatus } = await import("./HomePanel");
+    // 2026-10-30 is a Friday. Guangzhou is UTC+8.
+    const at = (utc: string) => guangzhouStatus(new Date(utc));
+    expect(at("2026-10-30T02:00:00Z")).toMatchObject({ phase: "day", open: true, line: expect.stringContaining("ask for quotes") });
+    expect(at("2026-10-30T02:00:00Z").workday).toBeCloseTo(1 / 9, 2);
+    expect(at("2026-10-30T04:30:00Z")).toMatchObject({ open: true, line: expect.stringContaining("Lunch break") });
+    expect(at("2026-10-30T07:00:00Z")).toMatchObject({ open: true, line: expect.stringContaining("Suppliers are replying") });
+    expect(at("2026-10-29T23:10:00Z")).toMatchObject({ phase: "dawn", open: false, line: expect.stringContaining("waking up") });
+    expect(at("2026-10-30T11:00:00Z")).toMatchObject({ phase: "dusk", open: false, workday: 1 });
+    expect(at("2026-10-30T16:00:00Z")).toMatchObject({ phase: "night", open: false, line: expect.stringContaining("closed") });
+    expect(at("2026-11-01T03:00:00Z")).toMatchObject({ open: false, line: expect.stringContaining("Sunday") });
+  });
+
+  it("counts down to the next Finds drop", async () => {
+    const { countdown } = await import("./HomePanel");
+    const now = Date.parse("2026-10-30T10:00:00Z");
+    expect(countdown("2026-11-08T00:00:00Z", now)).toBe("8d 14h");
+    expect(countdown("2026-10-30T15:20:00Z", now)).toBe("5h 20m");
+    expect(countdown("2026-10-30T10:12:30Z", now)).toBe("12m");
+    expect(countdown("2026-10-30T09:00:00Z", now)).toBe("");
+  });
+});

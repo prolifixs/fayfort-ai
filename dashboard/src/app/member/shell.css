@@ -241,10 +241,6 @@
 /* ---------- Member Home ---------- */
 .member-home { display: grid; align-content: start; gap: var(--space-5); }
 .member-home > * { width: 100%; max-width: 1080px; margin-inline: auto; }
-.member-home-head { display: grid; gap: var(--space-1); }
-.member-home-head small { color: #b10362; font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: .14em; text-transform: uppercase; }
-.member-theme-runtime:not([data-theme-id="base"]) .member-home-head small { color: var(--color-muted); }
-.member-home-head h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 500; letter-spacing: -0.02em; }
 .member-home-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--space-5); }
 .member-home-card {
   display: grid; align-content: start; gap: var(--space-3); min-width: 0;
@@ -349,11 +345,6 @@
 /* ---------- Home, restructured (facelift 4, owner feedback) ---------- */
 /* Order: greeting and clocks, Ask FayFort, the two one-line folds, For you carousel, Finds and the giveaway. */
 .member-home { gap: var(--space-4); }
-.member-home-clocks { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-1) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
-.member-home-clocks > span { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
-.member-home-clocks b { color: var(--color-text); font-weight: var(--weight-strong); }
-.member-home-head .member-home-clocks small { color: var(--color-muted); font-size: var(--text-xs); font-weight: 400; letter-spacing: 0; text-transform: none; }
-.member-home-clocks svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 
 .member-home-ask { grid-template-columns: minmax(0, 1fr) minmax(280px, 1.1fr); align-items: center; gap: var(--space-5); }
 .member-home-ask > div { display: grid; gap: var(--space-2); }
@@ -406,18 +397,135 @@
 .member-home-carousel small { color: var(--color-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .member-home-carousel button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; border-radius: 12px; }
 
-/* Finds and the giveaway side by side, each with one clear action. */
+/* ---------- Home widgets: one frame, a small eyebrow, one big thing, one action. ---------- */
+.member-home-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  color: #b10362; font-family: var(--font-body) !important; font-size: var(--text-xs) !important; font-weight: var(--weight-strong) !important;
+  letter-spacing: .14em !important; text-transform: uppercase;
+}
+.member-theme-runtime:not([data-theme-id="base"]) .member-home-eyebrow { color: var(--color-muted); }
+.member-home-eyebrow svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Today: greeting and summary on the left, the two clocks and Guangzhou's status on the right. */
+.member-home-today {
+  --phase: #7cc4ff;
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); align-items: center; gap: var(--space-5);
+  overflow: clip; padding: var(--space-5); border: 1px solid var(--color-border-subtle); border-radius: 20px;
+  background:
+    radial-gradient(70% 120% at 100% 0%, color-mix(in srgb, var(--phase) 30%, transparent), transparent 70%),
+    radial-gradient(50% 90% at 0% 100%, color-mix(in srgb, #f20789 7%, transparent), transparent 70%),
+    var(--color-bg);
+  box-shadow: 0 1px 2px rgb(2 20 78 / 5%), 0 8px 24px rgb(2 20 78 / 6%);
+  animation: mapp-section-in var(--duration-slow) var(--ease-out) backwards;
+}
+.member-workspace-panel > header.member-home-today { margin-bottom: 0; }
+.member-home-today[data-phase="dawn"] { --phase: #ffb37a; }
+.member-home-today[data-phase="day"] { --phase: #7cc4ff; }
+.member-home-today[data-phase="dusk"] { --phase: #ff7aa8; }
+.member-home-today[data-phase="night"] { --phase: #6f6cff; }
+.member-home-today-main { display: grid; gap: var(--space-1); min-width: 0; }
+.member-home-today-main small { color: #b10362; font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: .14em; text-transform: uppercase; }
+.member-theme-runtime:not([data-theme-id="base"]) .member-home-today-main small { color: var(--color-muted); }
+.member-home-today-main h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 500; letter-spacing: -0.02em; }
+.member-home-today-main p { margin: var(--space-1) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.member-home-today-side { display: grid; gap: var(--space-2); min-width: 0; }
+.member-home-clocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.member-home-clock {
+  display: grid; gap: 2px; min-width: 0; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: 14px;
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent); backdrop-filter: blur(8px);
+}
+.member-home-clock > span, .member-home-clock small { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; color: var(--color-muted); font-size: var(--text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.member-home-clock > span { color: var(--color-text); font-weight: var(--weight-strong); }
+.member-home-clock strong { font-family: var(--font-display); font-size: 1.625rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.15; }
+.member-home-clock svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.member-home-gz { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; color: var(--color-text); font-size: var(--text-xs); line-height: 1.4; }
+.member-home-gz i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-muted); }
+.member-home-gz.is-open i { background: #12a150; box-shadow: 0 0 0 4px color-mix(in srgb, #12a150 18%, transparent); }
+.member-home-gz-bar { height: 5px; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--color-text) 9%, transparent); }
+.member-home-gz-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f20789, var(--phase)); }
+@media (max-width: 899px) {
+  .member-home-today { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--space-4); }
+  .member-home-clock strong { font-size: 1.375rem; }
+}
+
+/* Finds and the giveaway side by side; Finds takes the full width when no giveaway is running. */
 .member-home-feature { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--space-4); }
+.member-home-feature.is-solo { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 899px) { .member-home-feature { grid-template-columns: minmax(0, 1fr); } }
-.member-home-finds > p, .member-home-giveaway > p { margin: 0; color: var(--color-muted); font-size: var(--text-sm); line-height: 1.55; }
-.member-home-finds .primary-button, .member-home-giveaway .primary-button { justify-self: start; text-decoration: none; }
+
+.member-home-finds { grid-template-columns: minmax(0, 1fr) minmax(170px, 44%); align-items: center; gap: var(--space-4); overflow: clip; }
+.member-home-feature.is-solo .member-home-finds { grid-template-columns: minmax(0, 1fr) minmax(220px, 40%); }
+.member-home-finds-body { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
+.member-home-finds-body > p:not(.member-home-big) { margin: 0; color: var(--color-muted); font-size: var(--text-sm); line-height: 1.55; }
+.member-home-finds .primary-button { justify-self: start; margin-top: var(--space-1); text-decoration: none; }
+.member-home-big { display: grid; gap: 2px; margin: 0; }
+.member-home-big strong { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1.05; }
+.member-home-big span { color: var(--color-muted); font-size: var(--text-sm); }
+.member-home-fan { position: relative; display: block; height: 200px; margin: 0; padding: 0; list-style: none; }
+.member-home-fan li {
+  position: absolute; top: 50%; left: 50%; width: 46%; max-width: 132px; aspect-ratio: 4 / 5; overflow: hidden;
+  border: 3px solid var(--color-bg); border-radius: 14px; background: var(--color-surface-2);
+  box-shadow: 0 10px 24px rgb(2 20 78 / 16%);
+  transform: translate(-50%, -50%); transition: transform var(--duration-base, .25s) var(--ease-out);
+}
+.member-home-fan li:nth-child(1) { transform: translate(-102%, -46%) rotate(-9deg); }
+.member-home-fan li:nth-child(2) { z-index: 1; transform: translate(-50%, -54%); }
+.member-home-fan li:nth-child(3) { transform: translate(2%, -46%) rotate(9deg); }
+.member-home-finds:hover .member-home-fan li:nth-child(1) { transform: translate(-112%, -46%) rotate(-12deg); }
+.member-home-finds:hover .member-home-fan li:nth-child(3) { transform: translate(12%, -46%) rotate(12deg); }
+.member-home-fan img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.member-home-fan-locked {
+  display: grid; place-content: center; justify-items: center; gap: 6px; width: 100%; height: 100%; color: #ffffff;
+  background:
+    radial-gradient(60% 50% at 30% 30%, #ff8cc6, transparent 70%),
+    radial-gradient(60% 60% at 75% 70%, #7cc4ff, transparent 70%),
+    radial-gradient(70% 60% at 40% 90%, #ffd27a, transparent 70%),
+    #c9b8ff;
+}
+.member-home-fan li:nth-child(2) .member-home-fan-locked { filter: hue-rotate(40deg); }
+.member-home-fan li:nth-child(3) .member-home-fan-locked { filter: hue-rotate(-50deg); }
+.member-home-fan-locked svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 25%)); }
+.member-home-fan-locked small { max-width: 90%; overflow: hidden; font-size: var(--text-2xs, 11px); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgb(0 0 0 / 25%); }
+@media (max-width: 599px) {
+  .member-home-finds, .member-home-feature.is-solo .member-home-finds { grid-template-columns: minmax(0, 1fr); }
+  .member-home-fan { order: -1; height: 170px; }
+}
+
+/* The giveaway as a ticket: prize on top, a perforated line, then time left and the action on the stub. */
 .member-home-giveaway {
+  --notch: 12px;
+  grid-template-rows: 1fr auto; gap: 0; padding: 0; overflow: clip;
   background:
     radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, #f20789 16%, transparent), transparent 60%),
     var(--color-bg);
+  -webkit-mask: radial-gradient(circle var(--notch) at 0 calc(100% - 72px), transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% calc(100% - 72px), transparent 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle var(--notch) at 0 calc(100% - 72px), transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% calc(100% - 72px), transparent 98%, #000) right / 51% 100% no-repeat;
 }
-.member-home-prize { display: grid; gap: 4px; }
-.member-home-prize strong { color: var(--color-text); font-family: var(--font-display); font-size: 1.5rem; font-weight: 500; line-height: 1.15; }
+.member-home-ticket-top { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-5) var(--space-5) var(--space-4); }
+.member-home-prize { display: grid; gap: 4px; margin: 0; }
+.member-home-prize strong { color: var(--color-text); font-family: var(--font-display); font-size: 1.625rem; font-weight: 500; line-height: 1.15; }
 .member-home-prize span { color: var(--color-muted); font-size: var(--text-sm); }
+.member-home-ticket-stub {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 72px; padding: var(--space-3) var(--space-5);
+  border-top: 2px dashed var(--color-border); background: color-mix(in srgb, #f20789 5%, var(--color-bg));
+}
+.member-home-ticket-stub span { display: grid; gap: 1px; }
+.member-home-ticket-stub small { color: var(--color-muted); font-size: var(--text-xs); }
+.member-home-ticket-stub b { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.member-home-ticket-stub .primary-button { white-space: nowrap; }
+
+/* No giveaway: a slim strip instead of an empty card. */
+.member-home-strip {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border); border-radius: 16px; background: color-mix(in srgb, #f20789 4%, var(--color-bg));
+}
+.member-home-strip-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, #f20789 12%, var(--color-bg)); color: #b10362; }
+.member-home-strip-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.member-home-strip p { flex: 1; min-width: 0; margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+.member-home-strip strong { color: var(--color-text); font-weight: var(--weight-strong); }
+.member-home-strip a { flex: none; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+@media (max-width: 599px) { .member-home-strip { flex-wrap: wrap; } .member-home-strip a { margin-left: 48px; } }
 /* On phones and tablets the Chat button sits inside the sheet, above the menu bar or its handle. */
 .mapp.has-tabbar .member-chat-restore { position: absolute; right: var(--space-4); bottom: var(--space-4); }
