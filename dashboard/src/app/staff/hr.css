@@ -188,3 +188,48 @@
 .my-hr .panel-heading h2 { display: flex; align-items: center; gap: 8px; }
 /* Six tabs for owners: wrap on small screens instead of pushing the page sideways. */
 .people-page > .team-tabs { flex-wrap: wrap; }
+
+/* H6: time off */
+.hr-time-off { display: grid; gap: var(--space-3); }
+.hr-flag.is-away { background: color-mix(in srgb, #6d28d9 14%, transparent); color: #6d28d9; }
+.my-time-off { gap: var(--space-3); }
+.leave-balances { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin: 0; padding: 0; list-style: none; }
+.leave-balances li { display: grid; gap: 6px; }
+.leave-balances li > span:first-child { display: grid; }
+.leave-bar { display: flex; height: 8px; overflow: hidden; border-radius: 4px; background: var(--color-surface-2, var(--color-surface)); }
+.leave-bar i { display: block; height: 100%; background: var(--accent); }
+.leave-bar i.is-pending { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.leave-requests { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.leave-request { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
+.leave-request p { margin: 0; }
+.leave-request .hr-inline { flex-wrap: wrap; }
+.leave-to-answer h3 { margin: 0 0 8px; }
+.leave-month { display: flex; align-items: center; gap: var(--space-2); }
+.leave-month h2 { min-width: 160px; margin: 0; text-align: center; font-size: var(--text-md); }
+.leave-month button { min-width: 40px; }
+.leave-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: var(--space-3); }
+.leave-head { padding: 4px; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-strong); text-align: center; }
+.leave-day { display: flex; flex-direction: column; gap: 3px; min-height: 84px; padding: 6px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-bg); overflow: hidden; }
+.leave-day.is-off { background: var(--color-surface); }
+.leave-day.is-holiday { background: color-mix(in srgb, var(--color-warning) 10%, var(--color-bg)); }
+.leave-day.is-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.leave-date { font-size: var(--text-xs); font-weight: var(--weight-strong); }
+.leave-holiday { color: var(--color-warning); font-size: 10px; line-height: 1.2; }
+.leave-chip { display: inline-block; max-width: 100%; overflow: hidden; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.leave-chip.is-pending { background: transparent; border: 1px dashed var(--accent); color: var(--accent); }
+.leave-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.leave-types { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.leave-types th, .leave-types td { padding: 8px; border-bottom: 1px solid var(--color-border-subtle); text-align: left; }
+.leave-types td input[type=number] { width: 120px; }
+@media (max-width: 640px) {
+  .leave-day { min-height: 56px; padding: 3px; }
+  .leave-chip { padding: 0 3px; font-size: 9px; }
+  .leave-holiday { display: none; }
+}
+.hr-time-off .hr-jobs-head { flex-wrap: wrap; }
+.hr-time-off, .hr-time-off > .control-panel { min-width: 0; }
+.leave-request .hr-inline input { min-width: 0; flex: 1 1 160px; }
+@media (max-width: 640px) {
+  .leave-month h2 { min-width: 0; }
+  .leave-calendar { gap: 2px; }
+}

@@ -119,6 +119,8 @@ def team() -> list[dict]:
     records = {str(r["worker_id"]): r for r in rows(db().table("hr_employment").select("*").in_("worker_id", ids).execute())} if ids else {}
     names = names_for(ids)
     pending = policies_pending_counts(ids)
+    from app.hr import leave
+    away = leave.away_until(ids)
     out = []
     for worker in workers:
         rec = records.get(str(worker["user_id"])) or {}
@@ -132,6 +134,7 @@ def team() -> list[dict]:
                                   and date.fromisoformat(str(probation_end)) <= today()),
             "probation_end": probation_end if not rec.get("probation_passed_at") else None,
             "policies_to_read": pending.get(str(worker["user_id"]), 0),
+            "away_until": away.get(str(worker["user_id"])),
         })
     return sorted(out, key=lambda p: (p["status"] != "starting", p["name"].casefold()))
 

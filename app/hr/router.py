@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.settings import settings
-from app.hr import interviews, offers, people, service
+from app.hr import interviews, leave, offers, people, service
 from app.hr.service import HrError
 
 logger = logging.getLogger(__name__)
@@ -214,6 +214,44 @@ class PolicyFields(BaseModel):
 class PolicyAccept(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int = Field(ge=1)
+
+
+class LeaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    leave_type: str = Field(max_length=30)
+    start_date: str = Field(max_length=10)
+    end_date: str | None = Field(default=None, max_length=10)
+    half_day: Literal["morning", "afternoon"] | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+class LeaveDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "decline"]
+    note: str | None = Field(default=None, max_length=500)
+
+
+class LeaveTypeFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(max_length=30)
+    name: str | None = Field(default=None, max_length=60)
+    yearly_days: float | None = Field(default=None, ge=0, le=365)
+    active: bool | None = None
+    needs_approval: bool | None = None
+
+
+class Holiday(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    day: str = Field(max_length=10)
+    name: str = Field(max_length=80)
+    region: str | None = Field(default=None, max_length=40)
+
+
+class LeaveSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    leave_types: list[LeaveTypeFields] | None = Field(default=None, max_length=20)
+    work_days: list[int] | None = Field(default=None, max_length=7)
+    holidays: list[Holiday] | None = Field(default=None, max_length=200)
 
 
 class Access(BaseModel):
@@ -794,6 +832,85 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             return {"policies": people.accept_policy(str(policy_id), staff["user_id"], payload.version)}
         except Exception as exc:
             raise _fail(exc, "That didn't work. Please try again.") from exc
+
+    # ---- Time off (H6) -------------------------------------------------------------------------------------------
+    @router.get("/hr/my/time-off")
+    def my_time_off(authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            return leave.mine(staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "Your time off could not be loaded.") from exc
+
+    @router.post("/hr/my/time-off", status_code=201)
+    def ask_time_off(payload: LeaveRequest, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            leave.request(staff["user_id"], payload.model_dump(), staff["user_id"])
+            return leave.mine(staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "Your request couldn't be sent.") from exc
+
+    @router.post("/hr/my/time-off/{time_off_id}/cancel")
+    def cancel_my_time_off(time_off_id: UUID, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            leave.cancel(str(time_off_id), staff)
+            return leave.mine(staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "That didn't work.") from exc
+
+    @router.post("/hr/time-off/{time_off_id}/decide")
+    def decide_time_off(time_off_id: UUID, payload: LeaveDecision, authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            return {"time_off": leave.decide(str(time_off_id), payload.decision, payload.note, staff)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work.") from exc
+
+    @router.get("/hr/time-off")
+    def time_off_calendar(month: str | None = Query(default=None, max_length=7), authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return leave.calendar(month)
+        except Exception as exc:
+            raise _fail(exc, "Time off could not be loaded.") from exc
+
+    @router.post("/hr/people/{worker_id}/time-off", status_code=201)
+    def record_time_off(worker_id: UUID, payload: LeaveRequest, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            row = leave.request(str(worker_id), payload.model_dump(), staff["user_id"], approved_by_hr=True)
+            return {"time_off": {**row, "clashing_bookings": leave.clashing_bookings(row)}}
+        except Exception as exc:
+            raise _fail(exc, "The leave couldn't be recorded.") from exc
+
+    @router.post("/hr/time-off/{time_off_id}/cancel")
+    def hr_cancel_time_off(time_off_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"time_off": leave.cancel(str(time_off_id), staff, as_hr=True)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work.") from exc
+
+    @router.get("/hr/leave-settings")
+    def leave_settings(authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return leave.settings_view()
+        except Exception as exc:
+            raise _fail(exc, "Leave settings could not be loaded.") from exc
+
+    @router.put("/hr/leave-settings")
+    def save_leave_settings(payload: LeaveSettings, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            fields = payload.model_dump(exclude_unset=True)
+            if "leave_types" in fields and fields["leave_types"] is not None:
+                fields["leave_types"] = [t.model_dump(exclude_unset=True) for t in payload.leave_types or []]
+            return leave.save_settings(fields, staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "Leave settings could not be saved.") from exc
 
     # ---- Owner ---------------------------------------------------------------------------------------------------
     @router.get("/hr/access")

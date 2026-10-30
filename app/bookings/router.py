@@ -482,6 +482,11 @@ def create_bookings_router(require_verified_member, trusted_fayfort_staff, trust
         try:
             if not can_manage_host(actor, str(host_id)):
                 raise PermissionError("You can't change this calendar.")
+            found = db().table("staff_time_off").select("id,leave_type").eq("id", str(time_off_id)).eq("worker_id", str(host_id)) \
+                .limit(1).execute()
+            row = (found.data or [None])[0] if found is not None else None
+            if row and row.get("leave_type"):
+                raise PermissionError("This is leave. Cancel it from My HR or People, Time off.")
             db().table("staff_time_off").delete().eq("id", str(time_off_id)).eq("worker_id", str(host_id)).execute()
             return {"deleted": True}
         except Exception as exc:

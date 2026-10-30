@@ -193,7 +193,7 @@ class SlotTests(BookingTestCase):
 
     def test_bookings_time_off_and_kinds_block_times(self):
         engine.hold(host_id=CEO, kind="consultation", member_id=MEMBER, starts=self.at("2026-11-04T07:00:00"))
-        self.db.rows["staff_time_off"].append({"id": "t", "worker_id": CEO, "starts_at": "2026-11-05T00:00:00+00:00",
+        self.db.rows["staff_time_off"].append({"status": "approved", "id": "t", "worker_id": CEO, "starts_at": "2026-11-05T00:00:00+00:00",
                                                "ends_at": "2026-11-06T00:00:00+00:00", "reason": "Travel"})
         starts = [s["starts_at"] for s in engine.free_slots(CEO, "consultation", NOW, NOW + timedelta(days=7))]
         # 07:00-08:00 booked plus a 15 min gap: 06:00 (ends 07:00 + gap overlaps) and 06:30, 07:30, 08:00 are blocked.
@@ -263,7 +263,7 @@ class LifecycleTests(BookingTestCase):
         # Staff may fit it outside weekly hours, but not over blocked time.
         staff_moved = engine.move(booking, self.at("2026-11-06T02:00:00"), by="staff", reason="CEO asked")
         self.assertEqual(staff_moved["reschedule_count"], 1)
-        self.db.rows["staff_time_off"].append({"id": "x", "worker_id": CEO, "starts_at": "2026-11-07T00:00:00+00:00",
+        self.db.rows["staff_time_off"].append({"status": "approved", "id": "x", "worker_id": CEO, "starts_at": "2026-11-07T00:00:00+00:00",
                                                "ends_at": "2026-11-08T00:00:00+00:00"})
         with self.assertRaises(engine.SlotTaken):
             engine.move(staff_moved, self.at("2026-11-07T03:00:00"), by="staff")
@@ -356,6 +356,13 @@ class ApiTests(BookingTestCase):
         off = self.client.post(f"/operations/availability/{CEO}/time-off", headers=self.h("assistant"),
                                json={"starts_at": "2026-11-09T00:00:00Z", "ends_at": "2026-11-10T00:00:00Z", "reason": "Fair"})
         self.assertEqual(off.status_code, 201, off.text)
+        # Leave from HR (docs/HR_AND_HIRING_PLAN.md H6) is cancelled in My HR or People, never deleted here.
+        self.db.rows["staff_time_off"].append({"id": "00000000-0000-0000-0000-00000000aaa1", "worker_id": CEO, "leave_type": "annual", "status": "approved",
+                                               "starts_at": "2026-11-16T00:00:00Z", "ends_at": "2026-11-17T00:00:00Z"})
+        refused = self.client.delete(f"/operations/availability/{CEO}/time-off/00000000-0000-0000-0000-00000000aaa1", headers=self.h("assistant"))
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(self.client.delete(f"/operations/availability/{CEO}/time-off/{off.json()['time_off']['id']}",
+                                            headers=self.h("assistant")).status_code, 200)
         me = self.client.get("/operations/bookings/me", headers=self.h("assistant")).json()
         self.assertEqual([h["user_id"] for h in me["hosts"]], [CEO, ASSISTANT])
         self.assertTrue(me["sees_all"])
@@ -453,7 +460,7 @@ class NormalHoursTests(BookingTestCase):
 
     def test_blocked_time_still_wins_over_normal_hours(self):
         self.db.rows["staff_availability"] = []
-        self.db.rows["staff_time_off"].append({"id": "t", "worker_id": CEO, "starts_at": "2026-11-03T00:00:00+00:00",
+        self.db.rows["staff_time_off"].append({"status": "approved", "id": "t", "worker_id": CEO, "starts_at": "2026-11-03T00:00:00+00:00",
                                                "ends_at": "2026-11-04T00:00:00+00:00", "reason": "Fair"})
         starts = [s["starts_at"] for s in engine.free_slots(CEO, "consultation", NOW, NOW + timedelta(days=3))]
         self.assertFalse([s for s in starts if s.startswith("2026-11-03")])

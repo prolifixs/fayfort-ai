@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1 to H5 built 30 Oct 2026 (section 10).** H6 (time off) is next.
+30 Oct 2026 (section 9). H1 to H6 built 30 Oct 2026 (section 10).** H7 (reviews and offboarding) is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -311,4 +311,24 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
   a new version, which asks everyone again. HR sees who has accepted the current version.
 - **My HR (My account, for every team member):** their job, policies to read (with a badge), their documents and their
   own personal details and emergency contact, which only HR sees.
+
+### H6 Time off (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261105090000_hr_time_off_h6.sql` adds leave columns to the booking engine's
+  `staff_time_off` (type, status, dates, half day, days, note, approver, decision), `hr_leave_types` (Annual, Sick,
+  Unpaid, Other, with no allowance until HR sets one), working days on `hr_settings`, `hr_public_holidays`, and the
+  `time_off` staff notice. Rows without a leave type are still the "block time" entries from Bookings.
+- **Asking (My account → My HR → Time off):** type, first and last day, a morning or afternoon for one-day requests and a
+  note. Only working days that aren't public holidays count. Leave can't start in the past, except sick leave. Balances
+  show days left of each allowance, pro-rated from the start date, with days waiting for an answer.
+- **Answering:** the person's manager (set on their record), or HR and the CEO when they have none, gets a notice and
+  answers in their own My HR ("Requests from your team") or in People → Time off. The answer shows how many bookings
+  fall in those days. The person gets a notice either way and can cancel before the leave starts.
+- **Effects:** only approved leave blocks the person's bookable time (consultations, sessions, interviews). Leave can't
+  be deleted from the Bookings calendar. Records show "Away until" for people on leave today.
+- **People → Time off:** requests waiting for an answer, a month calendar of who is away (approved and waiting, with
+  holidays and non-working days), and "Record leave for someone" (approved straight away, can be in the past).
+- **People → Settings → Leave:** days a year per type (empty means not counted), whether each type needs approval and is
+  in use, working days, and public holidays.
+- **Not yet:** a sick note upload, and the clock-in screen saying someone is on leave.
 

@@ -192,7 +192,10 @@ def weekly_hours(host_id: str) -> list[dict]:
 
 
 def time_off(host_id: str, start: datetime | None = None, end: datetime | None = None) -> list[dict]:
-    query = db().table("staff_time_off").select("id,starts_at,ends_at,reason").eq("worker_id", host_id)
+    # Only approved time counts: leave that is requested, declined or cancelled (HR, docs/HR_AND_HIRING_PLAN.md H6)
+    # doesn't block anything.
+    query = db().table("staff_time_off").select("id,starts_at,ends_at,reason,status,leave_type").eq("worker_id", host_id) \
+        .eq("status", "approved")
     if start:
         query = query.gt("ends_at", start.isoformat())
     if end:
@@ -313,7 +316,7 @@ def add_time_off(host_id: str, actor_id: str, starts: datetime, ends: datetime, 
         raise BookingError("Block at most 120 days at a time.")
     found = one(db().table("staff_time_off").insert({
         "worker_id": host_id, "starts_at": starts.isoformat(), "ends_at": ends.isoformat(),
-        "reason": (reason or "").strip()[:200] or None, "created_by": actor_id}).execute())
+        "reason": (reason or "").strip()[:200] or None, "created_by": actor_id, "status": "approved"}).execute())
     clashes = rows(db().table("bookings").select("id,starts_at").eq("host_id", host_id).in_("status", list(LIVE))
                    .lt("starts_at", ends.isoformat()).gt("blocked_until", starts.isoformat()).execute())
     return {**(found or {}), "clashing_bookings": len(clashes)}

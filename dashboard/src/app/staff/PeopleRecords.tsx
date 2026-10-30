@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import "./hr.css";
+import { MyTimeOff } from "./PeopleLeave";
 import { apiRequest } from "../../lib/api";
 
 /* HR H5 (docs/HR_AND_HIRING_PLAN.md): Control Center → People → Records and Policies, and My HR on My account. */
 
 type TeamRow = {
   worker_id: string; name: string; photo_url: string | null; staff_role: string; job_title: string | null; start_date: string | null;
-  status: "starting" | "active" | "finished"; has_record: boolean; probation_due: boolean; probation_end: string | null; policies_to_read: number;
+  status: "starting" | "active" | "finished"; has_record: boolean; probation_due: boolean; probation_end: string | null; policies_to_read: number; away_until?: string | null;
 };
 type Doc = { id: string; kind: string; kind_label: string; title: string; file_name: string | null; file_size: number | null; offer_id: string | null; visible_to_worker: boolean; created_at: string };
 type PolicyState = { id: string; title: string; summary: string; version: number; published_at: string | null; accepted_at: string | null; accepted_before: boolean };
@@ -84,6 +85,7 @@ export function RecordsPanel({ accessToken }: { accessToken: string }) {
                 <span><strong>{row.name}</strong><small>{row.job_title || "No job title"}{row.start_date ? ` · since ${longDate(row.start_date)}` : ""}</small></span>
                 <span className="hr-person-flags">
                   <span className={`hr-status is-${row.status === "active" ? "open" : row.status === "starting" ? "paused" : "closed"}`}>{STATUS[row.status]}</span>
+                  {row.away_until && <b className="hr-flag is-away">Away until {longDate(row.away_until)}</b>}
                   {row.probation_due && <b className="hr-flag is-due">Probation review</b>}
                   {row.policies_to_read > 0 && <b className="hr-flag">{row.policies_to_read} to read</b>}
                 </span>
@@ -381,6 +383,7 @@ export function MyHr({ accessToken }: { accessToken: string }) {
       <div className="panel-heading"><div><h2>My HR {toRead.length > 0 && <b className="hr-flag is-due">{toRead.length} to read</b>}</h2><p>Your job, your details, your documents and the staff policies.</p></div></div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {saved && <p className="email-delivery ok" role="status">{saved}</p>}
+      <MyTimeOff accessToken={accessToken} />
       <div className="my-hr-grid">
         <section className="my-hr-card"><h3>Policies to read</h3>
           {mine.policies.length === 0 ? <p className="muted">Nothing to read yet.</p> : (

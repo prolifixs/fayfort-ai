@@ -26,6 +26,7 @@ beforeEach(() => {
     if (url.includes("/hr/policies/p1/publish")) return ok({ policy: { ...policy, version: 3, has_changes: false } });
     if (url.includes("/hr/policies/p1/acknowledgements")) return ok({ version: 2, people: [{ worker_id: "w2", name: "Ben Li", accepted_at: null }] });
     if (url.includes("/hr/policies")) return ok({ policies: [policy] });
+    if (url.includes("/hr/my/time-off")) return ok({ types: [{ key: "annual", name: "Annual leave" }], balances: [], requests: [], to_answer: [], work_days: [0, 1, 2, 3, 4] });
     if (url.includes("/hr/my/policies/p1/accept")) return ok({ policies: [{ ...person.policies[0], accepted_at: "2026-10-30T00:00:00Z" }] });
     if (url.includes("/hr/my/policies/p1")) return ok({ policy: { id: "p1", title: "Customer data handling", body: "Use member details only for FayFort work.", version: 2 } });
     if (url.includes("/hr/my")) return ok({ job: { job_title: "Sourcing agent", job_type: "full_time", location: "guangzhou", start_date: "2026-03-01", probation_end: null, hours_per_week: 40, manager: "Ada Eze" },

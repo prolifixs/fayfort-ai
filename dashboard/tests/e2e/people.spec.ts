@@ -157,3 +157,30 @@ test("records: the team and one person's record", async ({ page }) => {
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/hr/people-record-laptop.png" });
 });
+
+for (const size of [{ n: "laptop", w: 1440, h: 900 }, { n: "phone", w: 390, h: 844 }]) test(`time off calendar ${size.n}`, async ({ page }) => {
+  await page.setViewportSize({ width: size.w, height: size.h });
+  await signedInStaff(page);
+  const base = { half_day: null, note: null, decided_at: null, decision_note: null, approver_name: null };
+  const leave = [
+    { ...base, id: "l1", worker_id: "w2", leave_type: "annual", type_name: "Annual leave", status: "approved", start_date: "2026-11-09", end_date: "2026-11-13", days: 4, name: "Ben Li" },
+    { ...base, id: "l2", worker_id: "w1", leave_type: "sick", type_name: "Sick leave", status: "approved", start_date: "2026-11-03", end_date: "2026-11-03", days: 1, name: "Ada Eze" },
+    { ...base, id: "l3", worker_id: "w3", leave_type: "annual", type_name: "Annual leave", status: "requested", start_date: "2026-11-23", end_date: "2026-11-27", days: 5, name: "Amaka Obi", note: "Going home for my sister's wedding", clashing_bookings: 1 },
+  ];
+  await page.route("**/hr/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [], departments: {}, job_types: {}, locations: {} } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications: [], close_reasons: [], emailed_stages: [] } });
+    if (path === "/hr/time-off") return route.fulfill({ json: { month: "2026-11", first: "2026-11-01", last: "2026-11-30", leave, waiting: [leave[2]],
+      holidays: [{ day: "2026-11-11", name: "Company day" }], work_days: [0, 1, 2, 3, 4, 5] } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?page=people");
+  await page.getByRole("tab", { name: "Time off" }).click();
+  await expect(page.getByRole("grid")).toBeVisible();
+  await page.getByRole("heading", { name: "Waiting for an answer" }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `test-results/hr/people-time-off-${size.n}.png`, fullPage: size.n === "phone" });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, "page scrolls sideways").toBeLessThanOrEqual(1);
+});

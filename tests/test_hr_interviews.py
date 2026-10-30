@@ -42,7 +42,7 @@ class ProposeAndPickTests(InterviewCase):
     def test_the_candidate_picks_a_time_everyone_is_free_and_each_interviewer_gets_a_booking(self):
         token, application_id = self.applied()
         # Ben is away all of Tuesday 3 Nov (China time), so only times both can do are offered.
-        self.db.rows.setdefault("staff_time_off", []).append({"worker_id": OTHER, "starts_at": "2026-11-02T16:00:00+00:00",
+        self.db.rows.setdefault("staff_time_off", []).append({"status": "approved", "worker_id": OTHER, "starts_at": "2026-11-02T16:00:00+00:00",
                                                               "ends_at": "2026-11-03T16:00:00+00:00"})
         made = self.propose(application_id)
         self.assertEqual(made.status_code, 201, made.text)
@@ -78,7 +78,7 @@ class ProposeAndPickTests(InterviewCase):
 
     def test_no_common_time_is_explained_and_nothing_is_saved(self):
         _token, application_id = self.applied()
-        self.db.rows.setdefault("staff_time_off", []).append({"worker_id": OTHER, "starts_at": "2026-11-01T00:00:00+00:00",
+        self.db.rows.setdefault("staff_time_off", []).append({"status": "approved", "worker_id": OTHER, "starts_at": "2026-11-01T00:00:00+00:00",
                                                               "ends_at": "2026-12-31T00:00:00+00:00"})
         refused = self.propose(application_id)
         self.assertEqual(refused.status_code, 409)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { apiRequest } from "../../lib/api";
 import { WorkforcePage } from "./WorkforcePage";
 import { PoliciesPanel, RecordsPanel } from "./PeopleRecords";
+import { LeaveSettingsPanel, TimeOffPanel } from "./PeopleLeave";
 import "./hr.css";
 
 /* Control Center → People (docs/HR_AND_HIRING_PLAN.md, H1). Hiring for HR staff, the CEO and the owner; Team (today's
@@ -60,7 +61,7 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
   accessToken: string; platformAdmin: boolean; canHire?: boolean; hasInterviews?: boolean;
 }) {
   const hiring = platformAdmin || canHire;
-  const [tab, setTab] = useState<"hiring" | "team" | "access" | "interviews" | "settings" | "records" | "policies">(() => {
+  const [tab, setTab] = useState<"hiring" | "team" | "access" | "interviews" | "settings" | "records" | "policies" | "time_off">(() => {
     // Old links (?page=workforce, a worker profile, #timesheets) open the Team tab.
     const query = new URLSearchParams(window.location.search);
     if (platformAdmin && (query.get("page") === "workforce" || query.get("worker") || window.location.hash === "#timesheets")) return "team";
@@ -77,7 +78,7 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
   const tabs = [
     ...(hiring ? [["hiring", "Hiring"]] : []),
     ...(hasInterviews || !hiring ? [["interviews", "My interviews"]] : []),
-    ...(hiring ? [["records", "Records"], ["policies", "Policies"]] : []),
+    ...(hiring ? [["records", "Records"], ["time_off", "Time off"], ["policies", "Policies"]] : []),
     ...(platformAdmin ? [["team", "Team"]] : []),
     ...(hiring ? [["settings", "Settings"]] : []),
     ...(platformAdmin ? [["access", "HR access"]] : []),
@@ -95,6 +96,8 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
       )}
       {tab === "hiring" && hiring && <HiringPanel accessToken={accessToken} />}
       {tab === "settings" && hiring && <HrSettingsPanel accessToken={accessToken} />}
+      {tab === "settings" && hiring && <LeaveSettingsPanel accessToken={accessToken} />}
+      {tab === "time_off" && hiring && <TimeOffPanel accessToken={accessToken} />}
       {tab === "records" && hiring && <RecordsPanel accessToken={accessToken} />}
       {tab === "policies" && hiring && <PoliciesPanel accessToken={accessToken} />}
       {tab === "interviews" && <MyInterviews accessToken={accessToken} onOpen={setOpened} />}
