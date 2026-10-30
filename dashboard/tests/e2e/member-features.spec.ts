@@ -80,7 +80,7 @@ test("Ask about a product: phone sheet", async ({ page }) => {
   await shoot(page, "product-ask-phone-sheet");
 });
 
-test("Plans live in Settings; the tier pop-up keeps the rank", async ({ page }) => {
+test("Plans live in Account details; the tier pop-up keeps the rank", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await signedInMember(page);
   await page.goto("/member/chat?conversation=c1");
@@ -89,9 +89,9 @@ test("Plans live in Settings; the tier pop-up keeps the rank", async ({ page }) 
   const tier = page.getByRole("dialog", { name: "Member tier" });
   await expect(tier.getByRole("table")).toHaveCount(0);
   await shoot(page, "tier-dialog-laptop");
-  await tier.getByRole("button", { name: "Plans and perks in Settings" }).click();
-  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
-  await shoot(page, "settings-plan-laptop");
+  await tier.getByRole("button", { name: "Plan and billing" }).click();
+  await expect(page.getByRole("dialog", { name: "Account details" }).getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+  await shoot(page, "account-plan-laptop");
 });
 
 test("The tour explains each chat tool (phone)", async ({ page }) => {

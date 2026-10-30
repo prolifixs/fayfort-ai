@@ -49,8 +49,10 @@ export function MemberDialog({
             <p className="eyebrow">{eyebrow}</p>
             <h2 id={titleId}>{title}</h2>
           </div>
-          <button type="button" aria-label={`Close ${title}`} onClick={onClose}>
-            ×
+          <button type="button" className="member-dialog-close" aria-label={`Close ${title}`} onClick={onClose}>
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
           </button>
         </header>
         <div className="member-account-dialog-body">{children}</div>
@@ -106,9 +108,9 @@ export function MemberPlanComparison({ currentTier }: { currentTier: string }) {
           {PLAN_ROWS.map((row) => (
             <tr key={row.label}>
               <th scope="row">{row.label}</th>
-              <td className={currentTier === "Free" ? "current" : undefined}>{row.free}</td>
-              <td className={currentTier === "Standard" ? "current" : undefined}>{row.standard}</td>
-              <td className={currentTier === "Pro" ? "current" : undefined}>{row.pro}</td>
+              <td data-plan="Free" className={currentTier === "Free" ? "current" : undefined}>{row.free}</td>
+              <td data-plan="Standard" className={currentTier === "Standard" ? "current" : undefined}>{row.standard}</td>
+              <td data-plan="Pro" className={currentTier === "Pro" ? "current" : undefined}>{row.pro}</td>
             </tr>
           ))}
         </tbody>
@@ -157,7 +159,7 @@ function PointsDialog({
   }
   return (
     <>
-      <div className="member-dialog-stat">
+      <div className="member-dialog-stat member-points-hero">
         <small>Your balance</small>
         <strong>{new Intl.NumberFormat().format(balance)}</strong>
         <span>virtual points to spend</span>
@@ -166,10 +168,16 @@ function PointsDialog({
         <div className="member-perk-row member-reward" key={reward.id}>
           <span>
             <strong>{reward.label}</strong>
-            <small>{new Intl.NumberFormat().format(reward.cost)} points</small>
+            <small>
+              {new Intl.NumberFormat().format(reward.cost)} points
+              {balance < reward.cost ? ` · ${new Intl.NumberFormat().format(reward.cost - balance)} to go` : " · ready"}
+            </small>
+            <span className="member-reward-bar" role="img" aria-label={`${Math.min(100, Math.round((balance / reward.cost) * 100))}% of the way`}>
+              <i style={{ width: `${Math.min(100, (balance / reward.cost) * 100)}%` }} />
+            </span>
           </span>
           <button type="button" className="primary-button" disabled={busy || balance < reward.cost} onClick={() => void redeem(reward)}>
-            {balance < reward.cost ? `${new Intl.NumberFormat().format(reward.cost - balance)} to go` : "Redeem"}
+            Redeem
           </button>
         </div>
       ))}
@@ -218,7 +226,7 @@ function TierDialog({
 }: {
   profile: Profile;
   accessToken?: string | null;
-  /** Plans, billing and plan perks live in Settings → Plan (owner decision 2026-10-17). */
+  /** Plan and billing live in Account details (owner decision 2026-10-29). */
   onOpenPlan?: () => void;
 }) {
   const { rank: status } = useMemberRank(accessToken);
@@ -302,7 +310,7 @@ function TierDialog({
         </span>
         {onOpenPlan && (
           <button type="button" className="secondary-button" onClick={onOpenPlan}>
-            Plans and perks in Settings
+            Plan and billing
           </button>
         )}
       </div>
@@ -310,13 +318,13 @@ function TierDialog({
   );
 }
 
-function AccountDialog({ profile, onOpenSettings }: { profile: Profile; onOpenSettings: () => void }) {
+function AccountDialog({ profile, onOpenSettings, children }: { profile: Profile; onOpenSettings: () => void; children?: ReactNode }) {
   const [email, setEmail] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   useEffect(() => {
     let mounted = true;
     supabaseClient?.auth.getSession().then(({ data }) => {
-      if (mounted) setEmail(data.session?.user.email || "");
+      if (mounted) setEmail(data.session?.user?.email || "");
     });
     return () => {
       mounted = false;
@@ -328,6 +336,12 @@ function AccountDialog({ profile, onOpenSettings }: { profile: Profile; onOpenSe
   const shipping = [profile?.shipping_city, profile?.shipping_country].filter(
     (part): part is string => typeof part === "string" && !!part.trim(),
   );
+  const photo = typeof profile?.profile_photo_url === "string" ? profile.profile_photo_url : "";
+  const initials = name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
   async function signOut() {
     setSigningOut(true);
     await supabaseClient?.auth.signOut();
@@ -335,15 +349,16 @@ function AccountDialog({ profile, onOpenSettings }: { profile: Profile; onOpenSe
   }
   return (
     <>
+      <div className="member-account-hero">
+        <span className="member-account-avatar" aria-hidden="true">
+          {photo ? <img src={photo} alt="" /> : initials || "M"}
+        </span>
+        <span className="member-account-who">
+          <strong>{name}</strong>
+          <small>{email || "Verified account"}</small>
+        </span>
+      </div>
       <dl className="member-account-facts">
-        <div>
-          <dt>Name</dt>
-          <dd>{name}</dd>
-        </div>
-        <div>
-          <dt>Email</dt>
-          <dd>{email || "Verified account"}</dd>
-        </div>
         <div>
           <dt>Plan</dt>
           <dd>{formatMemberTier(profile?.member_tier)}</dd>
@@ -359,9 +374,10 @@ function AccountDialog({ profile, onOpenSettings }: { profile: Profile; onOpenSe
           <dd>{shipping.length ? shipping.join(", ") : "No saved address"}</dd>
         </div>
       </dl>
+      {children}
       <div className="member-account-dialog-actions">
         <button type="button" className="secondary-button" onClick={onOpenSettings}>
-          Edit in settings
+          Addresses, sign-in and more in Settings
         </button>
         <button type="button" className="primary-button" disabled={signingOut} onClick={() => void signOut()}>
           {signingOut ? "Signing out…" : "Sign out"}
@@ -380,6 +396,8 @@ export function MemberAccountDialogs({
   accessToken,
   onPlanChange,
   onOpenPlan,
+  account,
+  onOpenSettings,
 }: {
   kind: MemberAccountDialogKind | null;
   profile: Profile;
@@ -392,6 +410,10 @@ export function MemberAccountDialogs({
   onOpenPlan?: () => void;
   /** The settings panel, passed in so this file doesn't import the account pages (avoids a cycle). */
   settings: ReactNode;
+  /** Profile photo, name, plan and billing: shown in Account details (owner decision 2026-10-29). */
+  account?: ReactNode;
+  /** Opens the Settings page in the member shell. */
+  onOpenSettings?: () => void;
 }) {
   if (!kind) return null;
   if (kind === "points")
@@ -408,8 +430,10 @@ export function MemberAccountDialogs({
     );
   if (kind === "account")
     return (
-      <MemberDialog eyebrow="ACCOUNT" title="Account details" onClose={onClose}>
-        <AccountDialog profile={profile} onOpenSettings={() => onOpen("settings")} />
+      <MemberDialog eyebrow="ACCOUNT" title="Account details" onClose={onClose} wide>
+        <AccountDialog profile={profile} onOpenSettings={onOpenSettings || (() => onOpen("settings"))}>
+          {account}
+        </AccountDialog>
       </MemberDialog>
     );
   return (

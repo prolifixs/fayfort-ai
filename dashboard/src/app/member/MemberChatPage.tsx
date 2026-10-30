@@ -901,7 +901,8 @@ export function MemberChatPage() {
     setAccountOpen(false);
     setSidebarOpen(false);
     setSettingsFocus("plan");
-    setAccountDialog("settings");
+    // Plan and billing live in Account details (owner decision 2026-10-29).
+    setAccountDialog("account");
   }, []);
   // Back from Stripe Checkout: thank the member and show their plan once the webhook has updated it.
   useEffect(() => {
@@ -1199,17 +1200,19 @@ export function MemberChatPage() {
                 <strong>{memberName}</strong>
               </div>
               <button type="button" role="menuitem" onClick={() => openAccountDialog("points")}>
+                <svg className="member-menu-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z" /></svg>
                 <span>Virtual points</span>
-                <strong>{new Intl.NumberFormat().format(Number(profile?.points_balance ?? 0) || 0)}</strong>
+                <strong className="member-points-pill">{new Intl.NumberFormat().format(Number(profile?.points_balance ?? 0) || 0)}</strong>
               </button>
               <button type="button" role="menuitem" onClick={() => openAccountDialog("tier")}>
+                <svg className="member-menu-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19h16M5 16 3.5 7.5l5 3.5L12 5l3.5 6 5-3.5L19 16z" /></svg>
                 <span>Member tier</span>
                 <strong>
                   {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
                 </strong>
               </button>
               {completion && completion.percent < 100 && (
-                <button type="button" role="menuitem" className="member-account-completion" onClick={() => openAccountDialog("settings")}>
+                <button type="button" role="menuitem" className="member-account-completion" onClick={() => openAccountDialog("account")}>
                   <span>
                     Profile {completion.percent}% complete
                     {!completion.address_ready && <small>Add a shipping address</small>}
@@ -1218,7 +1221,8 @@ export function MemberChatPage() {
                 </button>
               )}
               <button type="button" role="menuitem" onClick={() => openAccountDialog("account")}>
-                Account details
+                <svg className="member-menu-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0" /></svg>
+                <span>Account details</span>
               </button>
               <button
                 type="button"
@@ -1228,7 +1232,8 @@ export function MemberChatPage() {
                   selectMemberPanel("settings");
                 }}
               >
-                Settings
+                <svg className="member-menu-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z" /></svg>
+                <span>Settings</span>
               </button>
               <button
                 type="button"
@@ -1238,17 +1243,8 @@ export function MemberChatPage() {
                   setTourOpen(true);
                 }}
               >
-                Show me around
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setAccountOpen(false);
-                  setTourOpen(true);
-                }}
-              >
-                Take the tour
+                <svg className="member-menu-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 16.5h.01" /></svg>
+                <span>Take the tour</span>
               </button>
             </div>
           )}
@@ -1403,12 +1399,32 @@ export function MemberChatPage() {
           plan={memberPlan}
           onPlanChange={reloadPlan}
           onOpenPlan={openPlans}
+          onOpenSettings={() => {
+            closeAccountDialog();
+            selectMemberPanel("settings");
+          }}
           settings={
             <MemberSettingsPanel
               onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
               onCompletionChange={setCompletion}
               onPlanChange={reloadPlan}
+            />
+          }
+          account={
+            <MemberSettingsPanel
+              part="account"
+              onProfileChange={(next) => setProfile((current) => ({ ...(current || {}), ...next }))}
+              onCompletionChange={setCompletion}
+              onPlanChange={reloadPlan}
               focus={settingsFocus}
+              onOpenSettings={() => {
+                closeAccountDialog();
+                selectMemberPanel("settings");
+              }}
+              onComparePlans={() => {
+                closeAccountDialog();
+                selectMemberPanel("membership");
+              }}
             />
           }
         />

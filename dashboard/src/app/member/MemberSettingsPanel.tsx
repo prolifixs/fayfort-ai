@@ -16,13 +16,25 @@ import { useMemberPlan } from "./membershipApi";
 import { MemberIdentityForm } from "./MemberIdentity";
 import { CookieSettingsLink } from "../consent/CookieBanner";
 
-/** Member settings: used by the /member/settings page and by the Settings pop-up in the chat header. */
+/**
+ * Member settings, in two parts (owner decision, 29 Oct 2026):
+ *   part="account"   Account details: profile checklist, profile photo, name, plan and billing.
+ *   part="settings"  Settings: privacy, sign-in and security, emails, addresses, theme and sounds.
+ */
 export function MemberSettingsPanel({
+  part = "settings",
   onProfileChange,
   onCompletionChange,
   onPlanChange,
+  onOpenSettings,
+  onComparePlans,
   focus,
 }: {
+  part?: "account" | "settings";
+  /** Account details: open Settings (for addresses and the phone number). */
+  onOpenSettings?: () => void;
+  /** Account details: open the full plan comparison on the Membership page. */
+  onComparePlans?: () => void;
   onProfileChange?: (profile: Record<string, unknown>) => void;
   onCompletionChange?: (completion: ProfileCompletion) => void;
   /** Called after a plan change so the chat page can refresh its own copy. */
@@ -155,7 +167,7 @@ export function MemberSettingsPanel({
   useEffect(() => {
     if (focus !== "plan" || loading) return;
     const timer = window.setTimeout(
-      () => document.getElementById("member-settings-plan-section")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () => document.getElementById("member-settings-plan-section")?.scrollIntoView?.({ behavior: "smooth", block: "start" }),
       60,
     );
     return () => window.clearTimeout(timer);
@@ -167,72 +179,17 @@ export function MemberSettingsPanel({
         Sign in to your member account to open settings. <a href="/member/account">Member sign in</a>
       </p>
     );
-  return (
-    <div className="member-settings-panel">
+  if (part === "account")
+    return (
+      <div className="member-settings-panel member-settings-account">
       <ProfileCompletionCard
         completion={completion}
-        onAction={(key) =>
-          document
-            .getElementById(key === "photo" ? "member-settings-photo" : "member-settings-addresses")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
+        onAction={(key) => {
+          // The photo is here; addresses and the phone number are in Settings.
+          if (key === "photo") document.getElementById("member-settings-photo")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+          else onOpenSettings?.();
+        }}
       />
-      <section className="member-settings-section member-settings-plan" aria-labelledby="member-settings-plan" id="member-settings-plan-section">
-        <h2 id="member-settings-plan">Plan</h2>
-        <p>
-          Your plan: <strong>{formatMemberTier(profile?.member_tier)}</strong>. Paid plans lower your sourcing deposit and
-          consultation price and add supplier contacts.
-        </p>
-        <MemberPlanComparison currentTier={formatMemberTier(profile?.member_tier)} />
-        <PlanBilling accessToken={token} onChange={planChanged} />
-        <p className="member-settings-moved">
-          Consultations, the tour guide, the supplier directory and supplier contacts are in{" "}
-          <a href="/member/tools">Tools</a>.
-        </p>
-      </section>
-      <section className="member-settings-section" aria-labelledby="member-settings-privacy">
-        <h2 id="member-settings-privacy">Privacy</h2>
-        <p>
-          Choose which cookies FayFort may use on this browser. <CookieSettingsLink className="text-button" /> ·{" "}
-          <a className="text-button" href="https://www.fayfort.com/cookies" target="_blank" rel="noreferrer">
-            Cookie policy
-          </a>
-        </p>
-      </section>
-      <section className="member-settings-section" aria-labelledby="member-settings-signin">
-        <h2 id="member-settings-signin">Sign-in methods</h2>
-        <p>Link a provider to keep using the same member profile, saved products, and requests.</p>
-        <div className="member-identity-row">
-          <strong>Google</strong>
-          {providers.includes("google") ? (
-            <span role="status">Connected</span>
-          ) : (
-            <button className="secondary-button" disabled={busy} onClick={() => void linkGoogle()}>
-              {busy ? "Connecting…" : "Link Google"}
-            </button>
-          )}
-        </div>
-        <div className="member-identity-row">
-          <strong>Email and password</strong>
-          <span>{providers.includes("email") ? "Connected" : "Not set up"}</span>
-        </div>
-      </section>
-      <MemberSecuritySection email={accountEmail} hasPassword={providers.includes("email")} />
-      <MemberEmailPreferences accessToken={token} />
-      {token && (
-        <section className="member-settings-section" aria-labelledby="member-settings-name">
-          <h2 id="member-settings-name">Your name</h2>
-          <p>Your name and surname help our team know who they're helping. Your username is how you're known around FayFort.</p>
-          <MemberIdentityForm
-            accessToken={token}
-            onSaved={(identity) => {
-              setProfile((current) => ({ ...(current || {}), ...identity, identity_complete: true }));
-              onProfileChange?.({ ...identity, identity_complete: true });
-              void reloadCompletion();
-            }}
-          />
-        </section>
-      )}
       <section className="member-settings-section" aria-labelledby="member-settings-photo">
         <h2 id="member-settings-photo">Profile photo</h2>
         <p>
@@ -282,6 +239,74 @@ export function MemberSettingsPanel({
           )}
         </div>
       </section>
+      {token && (
+        <section className="member-settings-section" aria-labelledby="member-settings-name">
+          <h2 id="member-settings-name">Your name</h2>
+          <p>Your name and surname help our team know who they're helping. Your username is how you're known around FayFort.</p>
+          <MemberIdentityForm
+            accessToken={token}
+            onSaved={(identity) => {
+              setProfile((current) => ({ ...(current || {}), ...identity, identity_complete: true }));
+              onProfileChange?.({ ...identity, identity_complete: true });
+              void reloadCompletion();
+            }}
+          />
+        </section>
+      )}
+      <section className="member-settings-section member-settings-plan" aria-labelledby="member-settings-plan" id="member-settings-plan-section">
+        <h2 id="member-settings-plan">Plan</h2>
+        <p>
+          Your plan: <strong>{formatMemberTier(profile?.member_tier)}</strong>. Paid plans lower your sourcing deposit and
+          consultation price and add supplier contacts.
+        </p>
+        {onComparePlans ? (
+          <button type="button" className="secondary-button member-settings-compare" onClick={onComparePlans}>
+            Compare Free, Standard and Pro
+          </button>
+        ) : (
+          <MemberPlanComparison currentTier={formatMemberTier(profile?.member_tier)} />
+        )}
+        <PlanBilling accessToken={token} onChange={planChanged} />
+      </section>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
+        {notice && <p role="status">{notice}</p>}
+      </div>
+    );
+  return (
+    <div className="member-settings-panel">
+      <section className="member-settings-section" aria-labelledby="member-settings-privacy">
+        <h2 id="member-settings-privacy">Privacy</h2>
+        <p>
+          Choose which cookies FayFort may use on this browser. <CookieSettingsLink className="text-button" /> ·{" "}
+          <a className="text-button" href="https://www.fayfort.com/cookies" target="_blank" rel="noreferrer">
+            Cookie policy
+          </a>
+        </p>
+      </section>
+      <section className="member-settings-section" aria-labelledby="member-settings-signin">
+        <h2 id="member-settings-signin">Sign-in methods</h2>
+        <p>Link a provider to keep using the same member profile, saved products, and requests.</p>
+        <div className="member-identity-row">
+          <strong>Google</strong>
+          {providers.includes("google") ? (
+            <span role="status">Connected</span>
+          ) : (
+            <button className="secondary-button" disabled={busy} onClick={() => void linkGoogle()}>
+              {busy ? "Connecting…" : "Link Google"}
+            </button>
+          )}
+        </div>
+        <div className="member-identity-row">
+          <strong>Email and password</strong>
+          <span>{providers.includes("email") ? "Connected" : "Not set up"}</span>
+        </div>
+      </section>
+      <MemberSecuritySection email={accountEmail} hasPassword={providers.includes("email")} />
+      <MemberEmailPreferences accessToken={token} />
       <AddressBook accessToken={token} onChange={() => void reloadCompletion()} />
       <section className="member-settings-section" aria-labelledby="member-settings-theme">
         <h2 id="member-settings-theme">Theme</h2>

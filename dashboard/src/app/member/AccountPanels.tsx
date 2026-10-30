@@ -26,7 +26,7 @@ export function SettingsSection({ children }: { children: React.ReactNode }) {
     <section className="member-workspace-panel member-account-section" aria-labelledby="settings-title">
       <header className="member-account-section-head">
         <h2 id="settings-title">Settings</h2>
-        <p>Your profile, sign-in methods, addresses, notifications and theme.</p>
+        <p>Sign-in and security, emails, addresses, theme and sounds. Your photo, name and plan are in Account details.</p>
       </header>
       {children}
     </section>

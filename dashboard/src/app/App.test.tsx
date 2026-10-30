@@ -122,23 +122,24 @@ describe("authenticated dashboard workspace",()=>{
   fireEvent.click(within(menu).getByRole("menuitem",{name:/Hunter · 4/}));
   const tier=await screen.findByRole("dialog",{name:"Member tier"});
   expect(within(tier).getByRole("progressbar",{name:"Rank progress"})).toHaveAttribute("aria-valuenow","14");
-  // Plans moved to Settings → Plan: the tier pop-up has no plan table, only a way there.
+  // Plan and billing live in Account details (owner decision 2026-10-29); the full table is on Membership.
   expect(within(tier).queryByRole("table")).not.toBeInTheDocument();
-  fireEvent.click(within(tier).getByRole("button",{name:"Plans and perks in Settings"}));
-  const planSettings=await screen.findByRole("dialog",{name:"Settings"});
-  expect(await within(planSettings).findByRole("heading",{name:"Plan"})).toBeInTheDocument();
-  expect(within(planSettings).getByRole("row",{name:/Sourcing deposit/})).toBeInTheDocument();
+  fireEvent.click(within(tier).getByRole("button",{name:"Plan and billing"}));
+  const planAccount=await screen.findByRole("dialog",{name:"Account details"});
+  expect(await within(planAccount).findByRole("heading",{name:"Plan"})).toBeInTheDocument();
+  expect(within(planAccount).getByRole("heading",{name:"Profile photo"})).toBeInTheDocument();
+  expect(within(planAccount).getByRole("button",{name:"Compare Free, Standard and Pro"})).toBeInTheDocument();
   fireEvent.keyDown(window,{key:"Escape"});
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   menu=await openMenu();
   fireEvent.click(within(menu).getByRole("menuitem",{name:"Account details"}));
   const account2=await screen.findByRole("dialog",{name:"Account details"});
   expect(within(account2).getByText("Jordan Member")).toBeInTheDocument();
-  fireEvent.click(within(account2).getByRole("button",{name:"Edit in settings"}));
-  const settings=await screen.findByRole("dialog",{name:"Settings"});
-  expect(await within(settings).findByRole("heading",{name:"Sign-in methods"})).toBeInTheDocument();
-  fireEvent.click(within(settings).getByRole("button",{name:"Close Settings"}));
+  fireEvent.click(within(account2).getByRole("button",{name:"Addresses, sign-in and more in Settings"}));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(window.location.pathname).toBe("/member/settings");
+  expect(await screen.findByRole("heading",{name:"Sign-in methods"})).toBeInTheDocument();
+  expect(screen.queryByRole("heading",{name:"Profile photo"})).not.toBeInTheDocument();
   expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([input,init])=>String(input).endsWith("/members/me")&&init?.method&&init.method!=="GET")).toBe(false);
  });
