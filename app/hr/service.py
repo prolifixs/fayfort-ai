@@ -42,6 +42,8 @@ CV_TYPES = {
 }
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _URL = re.compile(r"^https?://[^\s]+$", re.I)
+CLOSE_REASONS = ["Not enough experience for this role", "Language skills", "Location or working hours",
+                 "The role was filled", "No reply from the candidate", "Other"]
 PUBLIC_JOB_FIELDS = ("id", "slug", "title", "department", "job_type", "location", "summary", "duties", "requirements",
                      "questions", "trial_task", "trial_paid", "opened_at")
 
@@ -326,6 +328,7 @@ def apply(slug: str, form: dict) -> dict:
         raise
     if not application:
         raise HrError("Your application couldn't be saved. Please try again.", 503)
+    db().table("hr_status_links").insert({"application_id": application["id"], "token_hash": hash_token(token)}).execute()
     add_event(application["id"], "applied", None, {"job": job["title"]})
     queue_candidate_email(email, received_email(name, job["title"], token))
     add_event(application["id"], "email_sent", None, {"template": "hr_received"})
@@ -356,11 +359,66 @@ def received_email(name: str, job_title: str, token: str) -> RenderedEmail:
     return RenderedEmail(subject=f"We've got your application for {job_title}", html=html, text=text)
 
 
-def queue_candidate_email(to: str, rendered: RenderedEmail) -> None:
+def queue_candidate_email(to: str, rendered: RenderedEmail, template: str = "hr_received") -> None:
     db().table("email_outbox").insert({
-        "category": "notifications", "template": "hr_received", "to_email": to,
+        "category": "notifications", "template": template, "to_email": to,
         "payload": {"subject": rendered.subject, "html": rendered.html, "text": rendered.text},
     }).execute()
+
+
+STAGE_EMAILS: dict[str, tuple[str, str, list[str]]] = {
+    "screening": ("Your application for {job} is being reviewed", "We're reviewing your application",
+                  ["Thanks for applying for {job}. Our HR team is now reviewing your application in detail.",
+                   "We'll email you about the next step. You can check where you are at any time."]),
+    "interview": ("Let's talk: {job} at FayFort", "We'd like to talk, {first}",
+                  ["Thanks for your application for {job}. We'd like to invite you to an interview with the team.",
+                   "We'll be in touch shortly to arrange a time that suits you."]),
+    "trial_task": ("A short task for {job}", "A short task for you, {first}",
+                   ["You've done well so far. The next step for {job} is a short trial task, {paid}.",
+                    "We'll send you the brief and the due date. You'll upload your work from your private link."]),
+    "offer": ("Good news about {job}", "Good news, {first}",
+              ["We're preparing an offer for {job}. You'll receive the details by email very soon."]),
+    "not_moving_forward": ("Your application for {job}", "Thank you, {first}",
+                           ["Thank you for applying for {job} and for the time you gave us. After careful thought we won't "
+                            "be moving forward with your application this time.",
+                            "We keep your details for 12 months and may contact you about other roles. You can delete them "
+                            "sooner from your private link."]),
+}
+
+
+def stage_email(stage: str, name: str, job: dict, token: str) -> RenderedEmail:
+    subject, heading, parts = STAGE_EMAILS[stage]
+    values = {"job": job["title"], "first": (name or "there").split(" ")[0],
+              "paid": "and it's paid" if job.get("trial_paid") else "unpaid"}
+    subject, heading = subject.format(**values), heading.format(**values)
+    parts = [p.format(**values) for p in parts]
+    url = status_url(token)
+    footer = "You're getting this because you applied for a role at fayfort.com/careers."
+    html = shell(heading=heading, intro_html="".join(_paragraph(p) for p in parts), button_label="See my application",
+                 button_url=url, footer_note=footer, unsubscribe_url=None)
+    text = f"{heading}\n\n" + "\n\n".join(parts) + f"\n\nSee my application: {url}\n\n{footer}"
+    return RenderedEmail(subject=subject, html=html, text=text)
+
+
+def issue_link(application_id: str) -> str:
+    token = secrets.token_urlsafe(32)
+    db().table("hr_status_links").insert({"application_id": application_id, "token_hash": hash_token(token)}).execute()
+    return token
+
+
+def notify_stage(application: dict, stage: str, actor_id: str | None) -> bool:
+    """Emails the candidate about their new stage with a fresh private link. Returns whether an email was queued."""
+    if stage not in STAGE_EMAILS:
+        return False
+    candidate = one(db().table("hr_candidates").select("email,full_name").eq("id", application["candidate_id"])
+                    .limit(1).execute()) or {}
+    if not candidate.get("email"):
+        return False
+    job = get_job(application["job_id"])
+    rendered = stage_email(stage, candidate.get("full_name") or "", job, issue_link(application["id"]))
+    queue_candidate_email(candidate["email"], rendered, f"hr_stage_{stage}")
+    add_event(application["id"], "email_sent", actor_id, {"template": f"hr_stage_{stage}"})
+    return True
 
 
 # ---- The candidate's status link -----------------------------------------------------------------------------------
@@ -380,7 +438,10 @@ NEXT_STEPS = {
 def by_token(token: str) -> dict:
     if not token or len(token) > 100:
         raise HrError("This link isn't valid.", 404)
-    application = one(db().table("hr_applications").select("*").eq("token_hash", hash_token(token)).limit(1).execute())
+    digest = hash_token(token)
+    link = one(db().table("hr_status_links").select("application_id").eq("token_hash", digest).limit(1).execute())
+    application = one(db().table("hr_applications").select("*").eq("id", link["application_id"]).limit(1).execute()) \
+        if link else one(db().table("hr_applications").select("*").eq("token_hash", digest).limit(1).execute())
     if not application:
         raise HrError("This link isn't valid or the application was deleted.", 404)
     return application
@@ -428,6 +489,7 @@ def anonymise_candidate(candidate_id: str) -> None:
             "stage": application["stage"] if application["stage"] in CLOSED + ["hired"] else "withdrew",
             "updated_at": now_iso()}).eq("id", application["id"]).execute()
         db().table("hr_application_events").delete().eq("application_id", application["id"]).eq("kind", "note").execute()
+        db().table("hr_status_links").delete().eq("application_id", application["id"]).execute()
     db().table("hr_candidates").update({"email": None, "full_name": None, "phone": None, "location": None,
                                         "languages": None, "anonymised_at": now_iso(), "updated_at": now_iso()}) \
         .eq("id", candidate_id).execute()
@@ -458,6 +520,14 @@ def anonymise_expired() -> int:
 
 
 # ---- HR staff: applications ----------------------------------------------------------------------------------------
+def _days_since(value: str | None) -> int:
+    try:
+        then = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, (now_utc() - then).days)
+
+
 def list_applications(job_id: str | None = None, stage: str | None = None) -> list[dict]:
     query = db().table("hr_applications").select("*").order("created_at", desc=True).limit(500)
     if job_id:
@@ -475,6 +545,7 @@ def list_applications(job_id: str | None = None, stage: str | None = None) -> li
         out.append({"id": application["id"], "job_id": application["job_id"],
                     "job_title": jobs.get(str(application["job_id"]), {}).get("title", ""),
                     "stage": application["stage"], "created_at": application["created_at"],
+                    "days_in_stage": _days_since(application.get("stage_changed_at") or application["created_at"]),
                     "stage_changed_at": application.get("stage_changed_at"),
                     "name": candidate.get("full_name") or "Removed candidate", "email": candidate.get("email"),
                     "location": candidate.get("location"), "languages": candidate.get("languages")})
@@ -522,12 +593,15 @@ def cv_link(application_id: str, actor_id: str) -> str:
     return url
 
 
-def move_stage(application_id: str, stage: str, reason: str | None, actor_id: str) -> dict:
+def move_stage(application_id: str, stage: str, reason: str | None, actor_id: str, notify: bool = True) -> dict:
     if stage not in STAGES + CLOSED or stage == "withdrew":
         raise HrError("Choose a stage.", 422)
-    application = one(db().table("hr_applications").select("id,stage").eq("id", application_id).limit(1).execute())
+    application = one(db().table("hr_applications").select("id,stage,job_id,candidate_id").eq("id", application_id)
+                      .limit(1).execute())
     if not application:
         raise HrError("That application doesn't exist.", 404)
+    if application["stage"] == stage:
+        return application_detail(application_id, actor_id)
     if application["stage"] in ("withdrew", "hired"):
         raise HrError("This application is closed.", 409)
     if stage == "hired":
@@ -539,6 +613,8 @@ def move_stage(application_id: str, stage: str, reason: str | None, actor_id: st
         .eq("id", application_id).execute()
     add_event(application_id, "stage_changed", actor_id, {"from": application["stage"], "to": stage})
     audit(actor_id, "hr.application.stage", {"application_id": application_id, "to": stage})
+    if notify:
+        notify_stage(application, stage, actor_id)
     return application_detail(application_id, actor_id)
 
 

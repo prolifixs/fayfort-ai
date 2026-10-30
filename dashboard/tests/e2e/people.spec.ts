@@ -22,13 +22,26 @@ for (const size of [{ n: "laptop", w: 1440, h: 900 }, { n: "phone", w: 390, h: 8
   await page.route("**/hr/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [job, job2], departments: { sourcing: "Sourcing desk", member_support: "Member support" }, job_types: { full_time: "Full time" }, locations: { guangzhou: "Guangzhou office" } } });
-    if (path === "/hr/applications") return route.fulfill({ json: { applications } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications, close_reasons: ["Language skills", "Other"], emailed_stages: ["screening", "interview", "trial_task", "offer", "not_moving_forward"] } });
+    if (path.endsWith("/stage")) { moves.push(route.request().postDataJSON()); return route.fulfill({ json: detail }); }
     if (path.startsWith("/hr/applications/")) return route.fulfill({ json: detail });
     if (path === "/hr/access") return route.fulfill({ json: { workers: [{ user_id: "w1", name: "Ada Eze", status: "active", staff_role: "staff", job_title: "HR lead", hr_access: true }, { user_id: "w2", name: "Fay", status: "active", staff_role: "ceo", job_title: "CEO", hr_access: false }] } });
     return route.fulfill({ json: {} });
   });
+  const moves: unknown[] = [];
   await page.goto("/?page=people");
   await expect(page.getByRole("region", { name: "Applied" })).toBeVisible();
+  if (size.n === "laptop") {
+    // Board on a computer: drag Kofi to Interview, choose not to email him.
+    await expect(page.getByRole("radio", { name: "Board" })).toBeChecked();
+    await page.getByRole("button", { name: /Kofi Mensah/ }).dragTo(page.getByRole("region", { name: "Interview" }));
+    const dialog = page.getByRole("dialog", { name: "Move Kofi to Interview?" });
+    await expect(dialog.getByRole("checkbox", { name: "Email Kofi about this" })).toBeChecked();
+    await page.screenshot({ path: `test-results/hr/people-board-move-${size.n}.png` });
+    await dialog.getByRole("checkbox", { name: "Email Kofi about this" }).uncheck();
+    await dialog.getByRole("button", { name: "Move" }).click();
+    await expect.poll(() => moves).toEqual([{ stage: "interview", reason: null, notify: false }]);
+  }
   await page.waitForTimeout(400);
   await page.screenshot({ path: `test-results/hr/people-hiring-${size.n}.png`, fullPage: size.n === "phone" });
   await page.getByRole("region", { name: "Applied" }).getByRole("button", { name: /Amaka Obi/ }).click();

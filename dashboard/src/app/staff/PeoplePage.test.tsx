@@ -28,7 +28,7 @@ beforeEach(() => {
     if (url.endsWith("/hr/jobs")) return ok({ jobs: [job], ...options });
     if (url.includes("/hr/applications/a1/stage")) return ok({ ...detail, application: { ...detail.application, stage: "interview" } });
     if (url.includes("/hr/applications/a1")) return ok(detail);
-    if (url.includes("/hr/applications")) return ok({ applications: [{ id: "a1", job_id: "j1", job_title: "Sourcing agent", stage: "applied",
+    if (url.includes("/hr/applications")) return ok({ close_reasons: ["Language skills", "Other"], emailed_stages: ["screening", "interview", "not_moving_forward"], applications: [{ id: "a1", job_id: "j1", job_title: "Sourcing agent", stage: "applied",
       created_at: "2026-10-30T10:00:00Z", name: "Amaka Obi", email: "amaka@example.com", location: "Lagos", languages: "English" }] });
     if (url.includes("/hr/access")) return ok({ workers: [{ user_id: "w1", name: "Ada", status: "active", staff_role: "staff", job_title: "HR lead", hr_access: false }] });
     return ok({});
@@ -50,9 +50,13 @@ describe("Control Center People", () => {
     const panel = await screen.findByRole("dialog", { name: "Amaka Obi" });
     expect(await within(panel).findByText("Worked in Baima?")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Open CV (amaka-cv.pdf)" })).toBeInTheDocument();
-    fireEvent.change(within(panel).getByLabelText("Stage"), { target: { value: "interview" } });
+    fireEvent.change(within(panel).getByLabelText("Stage"), { target: { value: "not_moving_forward" } });
+    expect(within(panel).getByRole("button", { name: "Move" })).toBeDisabled();
+    fireEvent.change(within(panel).getByLabelText(/Reason/), { target: { value: "Language skills" } });
+    fireEvent.click(within(panel).getByRole("checkbox", { name: "Email Amaka about this" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Move" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/hr/applications/a1/stage"), expect.objectContaining({ method: "POST" })));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/hr/applications/a1/stage"),
+      expect.objectContaining({ body: JSON.stringify({ stage: "not_moving_forward", reason: "Language skills", notify: false }) })));
   });
 
   it("creates a job with questions and opens a job on the careers page", async () => {

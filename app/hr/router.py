@@ -89,6 +89,7 @@ class StageMove(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stage: str = Field(max_length=30)
     reason: str | None = Field(default=None, max_length=300)
+    notify: bool = True
 
 
 class Note(BaseModel):
@@ -279,7 +280,8 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
         hiring_staff(authorization)
         try:
             return {"applications": service.list_applications(str(job_id) if job_id else None, stage),
-                    "stages": service.STAGE_LABELS}
+                    "stages": service.STAGE_LABELS, "close_reasons": service.CLOSE_REASONS,
+                    "emailed_stages": list(service.STAGE_EMAILS)}
         except Exception as exc:
             raise _fail(exc, "Applications could not be loaded.") from exc
 
@@ -303,7 +305,8 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
     def stage(application_id: UUID, payload: StageMove, authorization: str | None = Header(default=None)):
         staff = hiring_staff(authorization)
         try:
-            return service.move_stage(str(application_id), payload.stage, payload.reason, staff["user_id"])
+            return service.move_stage(str(application_id), payload.stage, payload.reason, staff["user_id"],
+                                      payload.notify)
         except Exception as exc:
             raise _fail(exc, "The application could not be moved.") from exc
 

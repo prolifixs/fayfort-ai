@@ -28,7 +28,7 @@ export type HrJob = {
 type JobsResponse = { jobs: HrJob[]; departments: Record<string, string>; job_types: Record<string, string>; locations: Record<string, string> };
 type ApplicationRow = {
   id: string; job_id: string; job_title: string; stage: string; created_at: string; stage_changed_at?: string;
-  name: string; email: string | null; location: string | null; languages: string | null;
+  name: string; email: string | null; location: string | null; languages: string | null; days_in_stage?: number;
 };
 type Detail = {
   application: { id: string; stage: string; answers: { label: string; answer: string }[]; cv_name: string | null; has_cv: boolean;
@@ -147,7 +147,7 @@ function HiringPanel({ accessToken }: { accessToken: string }) {
       </aside>
       <section className="hr-main">
         {job && <JobSummary job={job} accessToken={accessToken} onEdit={() => setEditing(job)} onChanged={() => void load()} />}
-        <ApplicationsPanel accessToken={accessToken} jobId={selected} />
+        <ApplicationsPanel accessToken={accessToken} jobId={selected} trialTask={job ? job.trial_task : data.jobs.some((item) => item.trial_task)} />
       </section>
     </div>
   );
@@ -289,16 +289,28 @@ function JobEditor({ job, accessToken, options, onDone }: { job: HrJob | null; a
   );
 }
 
-function ApplicationsPanel({ accessToken, jobId }: { accessToken: string; jobId: string | null }) {
+type ListMeta = { close_reasons: string[]; emailed_stages: string[] };
+const OPEN_STAGES = ["applied", "screening", "interview", "trial_task", "offer"];
+const CLOSED_STAGES = ["not_moving_forward", "withdrew"];
+const initials = (name: string) => (name || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+
+function ApplicationsPanel({ accessToken, jobId, trialTask }: { accessToken: string; jobId: string | null; trialTask: boolean }) {
   const [rows, setRows] = useState<ApplicationRow[] | null>(null);
+  const [meta, setMeta] = useState<ListMeta>({ close_reasons: [], emailed_stages: [] });
   const [error, setError] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const [showClosed, setShowClosed] = useState(false);
+  const [view, setView] = useState<"board" | "list">(() => (typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1100px)").matches ? "board" : "list"));
+  const [search, setSearch] = useState("");
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ row: ApplicationRow; stage: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const result = await apiRequest<{ applications: ApplicationRow[] }>(`/hr/applications${jobId ? `?job_id=${jobId}` : ""}`, accessToken);
+      const result = await apiRequest<{ applications: ApplicationRow[] } & ListMeta>(`/hr/applications${jobId ? `?job_id=${jobId}` : ""}`, accessToken);
       setRows(result.applications);
+      setMeta({ close_reasons: result.close_reasons || [], emailed_stages: result.emailed_stages || [] });
       setError("");
     } catch (reason) {
       setError(message(reason, "Applications could not be loaded."));
@@ -306,49 +318,168 @@ function ApplicationsPanel({ accessToken, jobId }: { accessToken: string; jobId:
   }, [accessToken, jobId]);
   useEffect(() => void load(), [load]);
 
-  const grouped = useMemo(() => {
-    const visible = STAGES.filter(([key]) => showClosed || !["not_moving_forward", "withdrew"].includes(key));
-    return visible.map(([key, label]) => ({ key, label, items: (rows || []).filter((row) => row.stage === key) })).filter((group) => group.items.length);
-  }, [rows, showClosed]);
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return (rows || []).filter((row) => !needle || `${row.name} ${row.location || ""} ${row.languages || ""}`.toLowerCase().includes(needle));
+  }, [rows, search]);
+  const stages = [...OPEN_STAGES.filter((key) => key !== "trial_task" || trialTask), ...(showClosed ? CLOSED_STAGES : [])];
+  const groups = stages.map((key) => ({ key, label: STAGE_LABEL[key], items: filtered.filter((row) => row.stage === key) }));
+  const closedCount = (rows || []).filter((row) => CLOSED_STAGES.includes(row.stage)).length;
+
+  function drop(stage: string) {
+    const row = filtered.find((item) => item.id === dragging);
+    setDragging(null);
+    setOver(null);
+    if (!row || row.stage === stage || stage === "withdrew") return;
+    setPending({ row, stage });
+  }
+
+  const card = (row: ApplicationRow) => (
+    <button
+      type="button"
+      className={`hr-candidate${dragging === row.id ? " is-dragging" : ""}`}
+      draggable={view === "board"}
+      onDragStart={(event) => { event.dataTransfer.setData("text/plain", row.id); event.dataTransfer.effectAllowed = "move"; setDragging(row.id); }}
+      onDragEnd={() => { setDragging(null); setOver(null); }}
+      onClick={() => setOpen(row.id)}
+    >
+      <span className="hr-initials" aria-hidden="true">{initials(row.name)}</span>
+      <span><strong>{row.name}</strong><small>{[row.location, !jobId ? row.job_title : null].filter(Boolean).join(" · ")}</small></span>
+      <small className={`hr-when${(row.days_in_stage || 0) >= 7 && OPEN_STAGES.includes(row.stage) ? " is-late" : ""}`}
+        title={`${row.days_in_stage || 0} days in this stage`}>{row.days_in_stage ? `${row.days_in_stage}d` : "New"}</small>
+    </button>
+  );
 
   return (
     <div className="control-panel hr-applications">
       <div className="hr-applications-head">
         <h2>Applications</h2>
-        <label className="hr-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Show closed</label>
+        <div className="hr-tools">
+          <input type="search" aria-label="Search applications" placeholder="Name, country or language" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="hr-segment" role="radiogroup" aria-label="View">
+            {(["board", "list"] as const).map((key) => (
+              <label key={key} className={view === key ? "is-active" : ""}>
+                <input type="radio" name="hr-view" checked={view === key} onChange={() => setView(key)} />{key === "board" ? "Board" : "List"}
+              </label>
+            ))}
+          </div>
+          <label className="hr-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Closed ({closedCount})</label>
+        </div>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {!rows ? <p className="muted">Loading…</p> : grouped.length === 0 ? (
+      {!rows ? <p className="muted">Loading…</p> : rows.length === 0 ? (
         <p className="muted">No applications yet. They appear here as soon as someone applies on fayfort.com/careers.</p>
+      ) : view === "board" ? (
+        <div className="hr-board" style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(200px, 1fr))` }}>
+          {groups.map((group) => (
+            <section
+              key={group.key}
+              className={`hr-column${over === group.key ? " is-over" : ""}`}
+              aria-label={group.label}
+              onDragOver={(event) => { if (dragging) { event.preventDefault(); setOver(group.key); } }}
+              onDragLeave={() => setOver((current) => (current === group.key ? null : current))}
+              onDrop={(event) => { event.preventDefault(); drop(group.key); }}
+            >
+              <h3>{group.label} <span>{group.items.length}</span></h3>
+              <ul>{group.items.map((row) => <li key={row.id}>{card(row)}</li>)}</ul>
+              {group.items.length === 0 && <p className="hr-column-empty">{dragging ? "Drop here" : "Nobody here"}</p>}
+            </section>
+          ))}
+        </div>
       ) : (
-        grouped.map((group) => (
+        groups.filter((group) => group.items.length).map((group) => (
           <section key={group.key} className="hr-stage" aria-label={group.label}>
             <h3>{group.label} <span>{group.items.length}</span></h3>
-            <ul>
-              {group.items.map((row) => (
-                <li key={row.id}>
-                  <button type="button" className="hr-candidate" onClick={() => setOpen(row.id)}>
-                    <span className="hr-initials" aria-hidden="true">{(row.name || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}</span>
-                    <span><strong>{row.name}</strong><small>{[row.location, !jobId ? row.job_title : null].filter(Boolean).join(" · ")}</small></span>
-                    <small className="hr-when">{day(row.created_at)}</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ul>{group.items.map((row) => <li key={row.id}>{card(row)}</li>)}</ul>
           </section>
         ))
       )}
-      {open && <CandidatePanel accessToken={accessToken} applicationId={open} onClose={() => setOpen(null)} onChanged={() => void load()} />}
+      {pending && (
+        <MoveDialog
+          accessToken={accessToken}
+          row={pending.row}
+          stage={pending.stage}
+          meta={meta}
+          onClose={() => setPending(null)}
+          onMoved={() => { setPending(null); void load(); }}
+        />
+      )}
+      {open && <CandidatePanel accessToken={accessToken} applicationId={open} meta={meta} onClose={() => setOpen(null)} onChanged={() => void load()} />}
     </div>
   );
 }
 
-function CandidatePanel({ accessToken, applicationId, onClose, onChanged }: { accessToken: string; applicationId: string; onClose: () => void; onChanged: () => void }) {
+/** Asked after a card is dropped on another stage: email the candidate or not, and a reason when closing. */
+function MoveDialog({ accessToken, row, stage, meta, onClose, onMoved }: {
+  accessToken: string; row: ApplicationRow; stage: string; meta: ListMeta; onClose: () => void; onMoved: () => void;
+}) {
+  const emails = meta.emailed_stages.includes(stage);
+  const [notify, setNotify] = useState(emails);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  async function move() {
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/hr/applications/${row.id}/stage`, accessToken, { method: "POST", body: JSON.stringify({ stage, reason: reason || null, notify: emails && notify }) });
+      onMoved();
+    } catch (reason) {
+      setError(message(reason, "The application could not be moved."));
+      setBusy(false);
+    }
+  }
+  const first = row.name.split(" ")[0];
+  return (
+    <>
+      <div className="hr-scrim" onClick={onClose} aria-hidden="true" />
+      <div className="hr-move-dialog" role="dialog" aria-modal="true" aria-labelledby="hr-move-title">
+        <h2 id="hr-move-title">Move {first} to {STAGE_LABEL[stage]}?</h2>
+        {stage === "not_moving_forward" && (
+          <ReasonPicker reasons={meta.close_reasons} value={reason} onChange={setReason} />
+        )}
+        {emails && (
+          <label className="hr-check"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Email {first} about this</label>
+        )}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="hr-editor-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
+          <button type="button" className="primary-button" disabled={busy || (stage === "not_moving_forward" && !reason.trim())} onClick={() => void move()}>{busy ? "Moving…" : "Move"}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReasonPicker({ reasons, value, onChange }: { reasons: string[]; value: string; onChange: (value: string) => void }) {
+  const preset = reasons.includes(value) && value !== "Other" ? value : value ? "Other" : "";
+  return (
+    <div className="hr-reason">
+      <label>Reason (stays inside FayFort)
+        <select value={preset} onChange={(e) => onChange(e.target.value === "Other" ? " " : e.target.value)}>
+          <option value="">Choose a reason</option>
+          {reasons.map((item) => <option key={item}>{item}</option>)}
+        </select>
+      </label>
+      {preset === "Other" && (
+        <input aria-label="Other reason" maxLength={300} placeholder="Write the reason" value={value.trim() === "" ? "" : value} onChange={(e) => onChange(e.target.value || " ")} />
+      )}
+    </div>
+  );
+}
+
+function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }: { accessToken: string; applicationId: string; meta: ListMeta; onClose: () => void; onChanged: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [stage, setStage] = useState("");
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
+  const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -426,11 +557,12 @@ function CandidatePanel({ accessToken, applicationId, onClose, onChanged }: { ac
                 <select aria-label="Stage" value={stage} onChange={(e) => setStage(e.target.value)}>
                   {STAGES.filter(([key]) => !["hired", "withdrew"].includes(key) && (key !== "trial_task" || detail.job.trial_task)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
-                {stage === "not_moving_forward" && (
-                  <input aria-label="Reason (internal)" placeholder="Reason, kept inside FayFort" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+                {stage === "not_moving_forward" && <ReasonPicker reasons={meta.close_reasons} value={reason} onChange={setReason} />}
+                {meta.emailed_stages.includes(stage) && stage !== detail.application.stage && (
+                  <label className="hr-check"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Email {(c?.full_name || "the candidate").split(" ")[0]} about this</label>
                 )}
-                <button type="button" className="primary-button" disabled={busy || stage === detail.application.stage}
-                  onClick={() => void run(`/hr/applications/${applicationId}/stage`, { stage, reason: reason || null })}>Move</button>
+                <button type="button" className="primary-button" disabled={busy || stage === detail.application.stage || (stage === "not_moving_forward" && !reason.trim())}
+                  onClick={() => void run(`/hr/applications/${applicationId}/stage`, { stage, reason: reason.trim() || null, notify: meta.emailed_stages.includes(stage) && notify })}>Move</button>
               </section>
             )}
             {detail.application.close_reason && <p className="muted">Reason: {detail.application.close_reason}</p>}
@@ -444,7 +576,7 @@ function CandidatePanel({ accessToken, applicationId, onClose, onChanged }: { ac
                   <li key={event.id}>
                     <span>{event.kind === "note" ? event.detail.text
                       : event.kind === "stage_changed" ? `Moved from ${STAGE_LABEL[event.detail.from] || event.detail.from} to ${STAGE_LABEL[event.detail.to] || event.detail.to}`
-                      : event.kind === "applied" ? "Applied" : event.kind === "email_sent" ? "Emailed the status link"
+                      : event.kind === "applied" ? "Applied" : event.kind === "email_sent" ? (event.detail.template === "hr_received" ? "Emailed the status link" : `Emailed: ${STAGE_LABEL[(event.detail.template || "").replace("hr_stage_", "")] || "update"}`)
                       : event.kind === "withdrawn" ? "Withdrew" : event.kind === "cv_viewed" ? "CV opened" : event.kind}</span>
                     <small>{new Date(event.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small>
                   </li>

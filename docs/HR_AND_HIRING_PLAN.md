@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1 built 30 Oct 2026 (section 10).** H2 is next.
+30 Oct 2026 (section 9). H1 and H2 built 30 Oct 2026 (section 10).** H3 is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -241,5 +241,16 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
 - **Control Center:** "FayFort Workers" is now **People** with Hiring, Team and HR access tabs. HR staff and the CEO
   see People with the Hiring tab only. Old ?page=workforce links open Team.
 - **Emails:** "We've got your application" with the private status link (template `hr_received`).
-- **Not yet:** the drag-and-drop board, stage emails and closing emails (H2); interviews and scorecards (H3); offers
-  and the Hire button (H4).
+
+### H2 Pipeline (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261101090000_hr_hiring_h2.sql` adds `hr_status_links`, so every email can carry a
+  fresh private link while earlier links keep working (only hashes are stored; all are removed with the person's details).
+- **Board:** applications as columns per stage on a computer (drag a card to move it), a list grouped by stage on phones,
+  a Board or List switch, search by name, country or language, closed applications on request, and days in stage on
+  each card (amber after 7 days).
+- **Moving a candidate:** a short confirmation asks whether to email them. Emails go for Screening, Interview, Trial task
+  (says paid or unpaid), Offer and Not moving forward, each with a fresh status link.
+- **Closing reasons:** Not moving forward needs a reason from a list (or Other with your own words). The reason stays
+  inside FayFort; the candidate gets a kind, general email.
+- **Not yet:** interviews with time picking and scorecards (H3); offers and the Hire button (H4).

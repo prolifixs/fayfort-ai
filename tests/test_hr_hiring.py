@@ -189,7 +189,7 @@ class PipelineAndPrivacyTests(HrCase):
         self.client.post(f"/hr/applications/{application_id}/notes", headers=self.auth("hr"), json={"text": "Strong call"})
         kinds = [e["kind"] for e in self.client.get(f"/hr/applications/{application_id}",
                                                     headers=self.auth("hr")).json()["events"]]
-        self.assertEqual(kinds, ["applied", "email_sent", "stage_changed", "note"])
+        self.assertEqual(kinds, ["applied", "email_sent", "stage_changed", "email_sent", "note"])
 
     def test_opening_a_cv_is_recorded(self):
         _token, application_id = self.applied()
@@ -218,6 +218,43 @@ class PipelineAndPrivacyTests(HrCase):
         self.assertEqual(hr.anonymise_expired(), 1)
         self.assertIsNone(self.db.rows["hr_candidates"][0]["email"])
         self.assertEqual(hr.anonymise_expired(), 0)
+
+
+class StageEmailTests(HrCase):
+    def applied(self) -> tuple[str, str]:
+        job = self.open_job(trial_task=True, trial_paid=True)
+        token = self.client.post(f"/public/careers/jobs/{job['slug']}/apply", json=self.application()).json()["status_token"]
+        return token, self.db.rows["hr_applications"][0]["id"]
+
+    def test_moving_a_candidate_emails_them_a_fresh_link_and_old_links_keep_working(self):
+        token, application_id = self.applied()
+        self.client.post(f"/hr/applications/{application_id}/stage", headers=self.auth("hr"), json={"stage": "trial_task"})
+        email = self.db.rows["email_outbox"][-1]
+        self.assertEqual((email["template"], email["to_email"]), ("hr_stage_trial_task", "amaka@example.com"))
+        self.assertIn("and it's paid", email["payload"]["text"])
+        fresh = email["payload"]["text"].split("/careers/status/")[1].split()[0]
+        self.assertNotEqual(fresh, token)
+        for link in (token, fresh):
+            self.assertEqual(self.client.get(f"/public/careers/status/{link}").json()["application"]["stage"], "trial_task")
+
+    def test_staff_can_move_without_emailing_and_closing_sends_a_kind_note(self):
+        _token, application_id = self.applied()
+        self.client.post(f"/hr/applications/{application_id}/stage", headers=self.auth("hr"),
+                         json={"stage": "screening", "notify": False})
+        self.assertEqual(len(self.db.rows["email_outbox"]), 1)
+        reasons = self.client.get("/hr/applications", headers=self.auth("hr")).json()["close_reasons"]
+        self.client.post(f"/hr/applications/{application_id}/stage", headers=self.auth("hr"),
+                         json={"stage": "not_moving_forward", "reason": reasons[0]})
+        email = self.db.rows["email_outbox"][-1]
+        self.assertEqual(email["template"], "hr_stage_not_moving_forward")
+        self.assertNotIn(reasons[0], email["payload"]["text"])  # the reason stays inside FayFort
+        self.assertEqual(self.db.rows["hr_applications"][0]["close_reason"], reasons[0])
+
+    def test_deleting_details_removes_every_link(self):
+        token, application_id = self.applied()
+        self.client.post(f"/hr/applications/{application_id}/stage", headers=self.auth("hr"), json={"stage": "screening"})
+        self.client.post(f"/public/careers/status/{token}/delete")
+        self.assertEqual(self.db.rows["hr_status_links"], [])
 
 
 if __name__ == "__main__":

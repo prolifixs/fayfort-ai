@@ -77,3 +77,35 @@
   .hr-question { grid-template-columns: minmax(0, 1fr); }
   .hr-question input[aria-label^="Choices"] { grid-column: auto; }
 }
+
+/* H2: the board, the move dialog and closing reasons */
+.hr-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.hr-tools input[type=search] { min-width: 200px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; }
+.hr-board { display: grid; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-2); }
+.hr-column { display: grid; align-content: start; gap: 8px; min-height: 220px; padding: var(--space-2); border: 1px dashed transparent; border-radius: var(--radius-md); background: var(--color-surface); transition: border-color .15s, background .15s; }
+.hr-column.is-over { border-color: var(--accent); background: var(--accent-soft); }
+.hr-column h3 { display: flex; align-items: center; gap: 8px; margin: 2px 2px 4px; color: var(--color-muted); font-size: var(--text-xs); letter-spacing: .08em; text-transform: uppercase; }
+.hr-column h3 span { padding: 0 7px; border-radius: 999px; background: var(--color-bg); color: var(--color-text); }
+.hr-column ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hr-column-empty { margin: 0; padding: var(--space-3) 0; color: var(--color-muted); font-size: var(--text-xs); text-align: center; }
+.hr-board .hr-candidate { cursor: grab; }
+.hr-board .hr-candidate:active { cursor: grabbing; }
+.hr-candidate.is-dragging { opacity: .45; }
+.hr-when.is-late { color: var(--color-warning); font-weight: var(--weight-strong); }
+.hr-move-dialog { position: fixed; top: 50%; left: 50%; z-index: 82; display: grid; gap: var(--space-3); width: min(440px, calc(100vw - 32px)); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--color-bg); box-shadow: 0 24px 60px rgb(2 20 78 / 25%); transform: translate(-50%, -50%); }
+.hr-move-dialog h2 { margin: 0; font-size: 1.125rem; }
+.hr-reason { display: grid; gap: var(--space-2); }
+.hr-reason label { display: grid; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.hr-reason select, .hr-reason input { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 400; }
+.hr-applications-head { flex-wrap: wrap; }
+.hr-board .hr-candidate { grid-template-columns: 32px minmax(0, 1fr) auto; }
+.hr-board .hr-initials { width: 32px; height: 32px; }
+/* Below wide desktops the jobs become a row of cards above the board, so the board gets the full width. */
+@media (max-width: 1599px) {
+  .hr-hiring { grid-template-columns: minmax(0, 1fr); }
+  .hr-jobs ul { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  .hr-jobs li { flex: none; }
+  .hr-job { min-width: 200px; border-color: var(--color-border-subtle); }
+}
+.hr-applications, .hr-job-summary { min-width: 0; }
+.hr-board { max-width: 100%; }
