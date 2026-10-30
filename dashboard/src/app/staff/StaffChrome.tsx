@@ -19,7 +19,7 @@ const ICONS: Record<string, string> = {
   Settings: "M4 7h10M18 7h2M4 17h4M12 17h8M14 4.5v5M8 14.5v5",
   "Member Requests": "M4 13.5 6.5 5h11l2.5 8.5V19H4zM4 13.5h4.5a3.5 3.5 0 0 0 7 0H20",
   "Operations Center": "M12 3 3 7.5 12 12l9-4.5zM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5",
-  "FayFort Workers": "M7 4h10v17H7zM10 4v2.5h4V4M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm-3 4.5a3 3 0 0 1 6 0",
+  People: "M7 4h10v17H7zM10 4v2.5h4V4M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm-3 4.5a3 3 0 0 1 6 0",
   Shop: "M5 8h14l-1 12.5H6zM9 8V6.5a3 3 0 0 1 6 0V8",
   Emails: "M4 6h16v12H4zM4 7l8 6 8-6",
   Website: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9M12 3C9.5 5.5 8.5 8.5 8.5 12s1 6.5 3.5 9",

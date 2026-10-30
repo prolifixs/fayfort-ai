@@ -1,0 +1,117 @@
+/* Careers (docs/HR_AND_HIRING_PLAN.md section 5): navy hero, role cards, a role page with a sticky Apply card, and the
+   candidate's private status page. Fraunces headings, Inter text, FayFort Navy. */
+.careers-hero { background: var(--ink); color: #fff; padding: clamp(64px, 9vw, 120px) 0 clamp(56px, 7vw, 96px); }
+.careers-hero .overline { color: var(--pink-light); }
+.careers-hero h1 { color: #fff; font-family: Fraunces, var(--serif); font-size: clamp(40px, 6vw, 76px); font-weight: 450; letter-spacing: -0.02em; line-height: 1.02; margin: 14px 0 18px; max-width: 760px; }
+.careers-lede { color: var(--on-dark); font-size: clamp(17px, 1.5vw, 20px); line-height: 1.55; margin: 0 0 30px; max-width: 620px; }
+.careers-roles { padding: clamp(48px, 7vw, 88px) 0 24px; }
+.careers-roles-head { align-items: baseline; display: flex; justify-content: space-between; margin-bottom: 20px; }
+.careers-roles-head h2, .careers-steps h2 { font-family: Fraunces, var(--serif); font-size: clamp(28px, 3vw, 40px); font-weight: 450; margin: 0; }
+.careers-roles-head span { color: var(--muted); font-size: 14px; }
+.careers-list { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); list-style: none; margin: 0; padding: 0; }
+.careers-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; color: var(--ink); display: grid; gap: 10px; height: 100%; padding: 24px; transition: border-color .2s, box-shadow .2s, transform .2s; }
+.careers-card:hover { border-color: var(--blue); box-shadow: 0 14px 34px rgba(2, 20, 78, .1); transform: translateY(-2px); }
+.careers-card:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.careers-card-desk, .role-desk { color: var(--magenta); font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.careers-card strong { font-family: Fraunces, var(--serif); font-size: 26px; font-weight: 500; line-height: 1.15; }
+.careers-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.careers-tags span { background: var(--mist); border-radius: 999px; color: var(--ink); font-size: 13px; padding: 5px 12px; }
+.careers-card-cta { color: var(--blue); font-size: 14px; font-weight: 700; margin-top: 6px; }
+.careers-empty { background: #fff; border: 1px dashed var(--line); border-radius: 20px; padding: 36px 28px; text-align: center; }
+.careers-empty h3 { font-family: Fraunces, var(--serif); font-size: 26px; font-weight: 450; margin: 0 0 8px; }
+.careers-empty p { color: var(--muted); margin: 0 auto; max-width: 520px; }
+.careers-steps { padding: clamp(40px, 6vw, 80px) 0 clamp(56px, 8vw, 96px); }
+.careers-steps ol { counter-reset: step; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); list-style: none; margin: 22px 0 0; padding: 0; }
+.careers-steps li { border-top: 2px solid var(--ink); display: grid; gap: 6px; padding-top: 16px; }
+.careers-steps li b { color: var(--pink); font-family: Fraunces, var(--serif); font-size: 28px; font-weight: 500; }
+.careers-steps li strong { font-size: 17px; }
+.careers-steps li p { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0; }
+
+/* Role page */
+.role-page { align-items: start; display: grid; gap: clamp(28px, 4vw, 56px); grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); padding: clamp(32px, 5vw, 64px) 0 clamp(64px, 8vw, 104px); }
+.role-copy { display: grid; gap: 18px; }
+.role-back { color: var(--blue); font-size: 14px; font-weight: 700; }
+.role-back::before { content: "← "; }
+.role-copy h1 { font-family: Fraunces, var(--serif); font-size: clamp(38px, 5vw, 60px); font-weight: 450; letter-spacing: -0.02em; line-height: 1.04; margin: 0; }
+.role-summary { color: var(--muted); font-size: 18px; line-height: 1.6; margin: 0; white-space: pre-line; }
+.role-copy h2 { font-family: Fraunces, var(--serif); font-size: 26px; font-weight: 450; margin: 10px 0 8px; }
+.role-copy ul { color: var(--muted); display: grid; list-style: disc; font-size: 16px; gap: 8px; line-height: 1.6; margin: 0; padding-left: 20px; }
+.role-copy section p { color: var(--muted); line-height: 1.6; margin: 0; }
+
+/* Apply card */
+.apply-card { background: #fff; border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 12px 32px rgba(2, 20, 78, .08); display: grid; gap: 14px; padding: clamp(20px, 2.5vw, 28px); position: sticky; scroll-margin-top: 90px; top: 96px; }
+.apply-head { display: grid; gap: 8px; }
+.apply-head h2 { font-family: Fraunces, var(--serif); font-size: 28px; font-weight: 450; margin: 0; }
+.apply-progress { display: grid; gap: 6px; grid-template-columns: repeat(3, 1fr); }
+.apply-progress span { background: var(--mist); border-radius: 3px; height: 5px; transition: background .3s; }
+.apply-progress span.is-done { background: var(--blue); }
+.apply-steps { color: var(--muted); font-size: 12px; margin: 0; }
+.apply-steps .is-current { color: var(--ink); font-weight: 700; }
+.apply-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.apply-card label, .apply-question legend { color: var(--ink); display: grid; font-size: 13px; font-weight: 650; gap: 6px; }
+.apply-card input:not([type=checkbox]):not([type=radio]):not([type=file]), .apply-card select, .apply-card textarea {
+  background: #fff; border: 1px solid #7a84a6; border-radius: 10px; color: var(--ink); font: inherit; font-size: 16px; font-weight: 400; min-height: 46px; padding: 10px 12px; width: 100%;
+}
+.apply-card input:focus-visible, .apply-card select:focus-visible, .apply-card textarea:focus-visible { border-color: var(--blue); outline: 2px solid var(--blue); outline-offset: 1px; }
+.apply-drop { align-items: center; background: #f4f5fa; border: 1.5px dashed #7a84a6; border-radius: 14px; cursor: pointer; justify-items: center; min-height: 112px; padding: 16px; position: relative; text-align: center; transition: border-color .2s, background .2s; }
+.apply-drop svg { fill: none; height: 24px; stroke: var(--blue); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.75; width: 24px; }
+.apply-drop small { color: var(--muted); font-weight: 400; }
+.apply-drop.is-dragging, .apply-drop:focus-within { background: var(--mist); border-color: var(--blue); }
+.apply-drop.has-file { background: #eef8f3; border-color: #147964; border-style: solid; }
+.apply-drop input { cursor: pointer; inset: 0; opacity: 0; position: absolute; }
+.apply-question { border: 0; display: grid; gap: 8px; margin: 0; padding: 0; }
+.apply-question legend { margin-bottom: 8px; }
+.apply-question legend small { color: var(--muted); font-weight: 400; }
+.apply-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.apply-choices label { align-items: center; border: 1px solid rgba(2, 20, 78, .25); border-radius: 12px; cursor: pointer; display: flex; font-weight: 500; gap: 8px; min-height: 44px; padding: 0 14px; }
+.apply-choices label.is-chosen { background: var(--mist); border: 2px solid var(--blue); }
+.apply-choices input { accent-color: var(--blue); margin: 0; }
+.apply-consent { align-items: start; color: var(--muted) !important; display: flex !important; font-weight: 400 !important; gap: 10px; line-height: 1.5; }
+.apply-consent input { accent-color: var(--blue); flex: none; height: 20px; margin: 2px 0 0; width: 20px; }
+.apply-hidden { height: 1px; left: -9999px; overflow: hidden; position: absolute; width: 1px; }
+.apply-robot:empty { display: none; }
+.apply-error { background: #fdecec; border-radius: 10px; color: #b42318; font-size: 14px; margin: 0; padding: 10px 12px; }
+.apply-actions { display: flex; gap: 10px; }
+.apply-button { align-items: center; background: var(--blue); border: 0; border-radius: 12px; color: #fff; cursor: pointer; display: inline-flex; flex: 1; font: inherit; font-size: 16px; font-weight: 650; justify-content: center; min-height: 50px; padding: 0 20px; transition: background .2s; }
+.apply-button:hover { background: var(--ink); }
+.apply-button:disabled { cursor: progress; opacity: .7; }
+.apply-back { background: #fff; border: 1px solid rgba(2, 20, 78, .25); border-radius: 12px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; min-height: 50px; padding: 0 18px; }
+.apply-done { display: grid; gap: 12px; }
+.apply-done p { color: var(--muted); line-height: 1.6; margin: 0; }
+
+/* Candidate status page */
+.status-page { background: var(--ink); min-height: 70vh; }
+.status-head { color: #fff; padding: 36px 0 26px; }
+.status-head .overline { color: var(--pink-light); }
+.status-head h1 { color: #fff; font-family: Fraunces, var(--serif); font-size: clamp(28px, 4vw, 44px); font-weight: 450; margin: 10px 0 0; }
+.status-body { background: #f4f5fa; border-radius: 24px 24px 0 0; display: grid; gap: 14px; max-width: 720px; padding: 22px 16px 64px; }
+.status-card { background: #fff; border-radius: 18px; box-shadow: 0 6px 20px rgba(2, 20, 78, .07); display: grid; gap: 12px; margin: 0; padding: 20px; }
+.status-card h2 { font-family: Fraunces, var(--serif); font-size: 22px; font-weight: 450; margin: 0; }
+.status-card p { color: var(--muted); line-height: 1.6; margin: 0; }
+.status-title { align-items: baseline; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.status-title strong { font-size: 17px; }
+.status-title span, .status-small { color: var(--muted); font-size: 13px; }
+.status-steps { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { align-items: center; color: var(--muted); display: flex; font-size: 15px; gap: 10px; }
+.status-steps li > span { border: 2px solid #c3cae3; border-radius: 50%; display: grid; flex: none; font-size: 12px; height: 24px; place-items: center; width: 24px; }
+.status-steps li.is-done { color: var(--ink); }
+.status-steps li.is-done > span { background: var(--blue); border-color: var(--blue); color: #fff; }
+.status-steps li.is-current { color: var(--ink); font-weight: 700; }
+.status-steps li.is-current > span { border-color: var(--pink); box-shadow: 0 0 0 4px rgba(242, 7, 137, .15); }
+.status-closed { background: var(--mist); border-radius: 10px; color: var(--ink) !important; font-weight: 650; padding: 10px 12px; }
+.status-actions { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; }
+.status-actions button { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 14px; min-height: 44px; text-decoration: underline; }
+.status-confirm { border: 2px solid var(--pink); }
+
+@media (max-width: 860px) {
+  .role-page { grid-template-columns: minmax(0, 1fr); }
+  .apply-card { position: static; }
+}
+@media (max-width: 520px) {
+  .apply-grid { grid-template-columns: minmax(0, 1fr); }
+  .careers-card strong { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .careers-card, .apply-progress span, .apply-drop { transition: none; }
+  .careers-card:hover { transform: none; }
+}

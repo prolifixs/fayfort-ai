@@ -102,6 +102,7 @@ _billing_task: asyncio.Task | None = None
 _operations_sweep_task: asyncio.Task | None = None
 _bookings_task: asyncio.Task | None = None
 _finds_task: asyncio.Task | None = None
+_hr_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
@@ -130,6 +131,11 @@ async def start_automation_scheduler() -> None:
         # Weekly Finds drops: plan ahead, open for Pro then Standard, move into the catalog (app/finds/service.py).
         from app.finds.service import finds_loop
         _finds_task = asyncio.create_task(finds_loop(), name="fayfort-finds")
+    global _hr_task
+    if _hr_task is None or _hr_task.done():
+        # Applications kept 12 months, then anonymised and the CV deleted (app/hr/service.py).
+        from app.hr.service import hr_loop
+        _hr_task = asyncio.create_task(hr_loop(), name="fayfort-hr")
     if _billing_task is None or _billing_task.done():
         from app.billing.service import billing_loop  # idle until STRIPE_SECRET_KEY is set
         _billing_task = asyncio.create_task(billing_loop(), name="fayfort-billing")
@@ -864,6 +870,8 @@ from app.commerce.member_router import verified_member as _site_chat_member  # n
 app.include_router(create_site_chat_router(_site_chat_member))
 from app.site.reviews import create_reviews_router  # noqa: E402
 app.include_router(create_reviews_router(_site_chat_member))
+from app.hr.router import create_hr_router  # noqa: E402
+app.include_router(create_hr_router(trusted_fayfort_staff))
 from app.workforce.team import create_team_router  # noqa: E402
 app.include_router(create_team_router(_site_chat_member))
 from app.commerce.revenue import create_revenue_router  # noqa: E402

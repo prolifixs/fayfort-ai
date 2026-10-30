@@ -6,7 +6,7 @@ import { NavIcon, PageErrorBoundary, readable } from "../staff/StaffChrome";
 import { DESKTOP, useDismiss, useMediaQuery } from "../ui/useDismiss";
 import type { Business, ConversationRow, EventRecord, WorkspaceProps } from "./types";
 import { PlatformRequestAssignmentPage } from "../staff/WorkerPages";
-import { WorkforcePage } from "../staff/WorkforcePage";
+import { PeoplePage } from "../staff/PeoplePage";
 import { StaffAccountPage } from "../staff/StaffAccountPage";
 import { EmailCenterPage } from "../staff/EmailCenterPage";
 import { CommercePage } from "../staff/CommercePage";
@@ -64,7 +64,7 @@ export const descriptions: Record<string, string> = {
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
-  "FayFort Workers": "Add staff (from an existing account or by email), roles, who is online, and each worker's account.",
+  People: "Hiring (jobs and candidates), the team directory, roles, who is online and HR access.",
   "My account": "Your password, sign-in email, sessions and two-step verification.",
   Emails: "What FayFort emails customers, what was sent, and the newsletter.",
 };
@@ -82,7 +82,7 @@ export function DashboardWorkspace({
   eventStreaming = true,
 }: WorkspaceProps) {
   const linkedPage = new URLSearchParams(window.location.search).get("page");
-  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" ? "FayFort Workers" : linkedPage === "infrastructure" ? "Infrastructure" : linkedPage === "account" ? "My account" : linkedPage === "conversations" ? "Conversations" : "Overview");
+  const [active, setActive] = useState(linkedPage === "shop" ? "Shop" : linkedPage === "website" ? "Website" : linkedPage === "workforce" || linkedPage === "people" ? "People" : linkedPage === "infrastructure" ? "Infrastructure" : linkedPage === "account" ? "My account" : linkedPage === "conversations" ? "Conversations" : "Overview");
   const [conversationTarget, setConversationTarget] = useState<ConversationRow | null>(null);
   const [requestTargetId, setRequestTargetId] = useState<string | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -91,6 +91,7 @@ export function DashboardWorkspace({
   const [invalidSession, setInvalidSession] = useState(false);
   const [businessLoading, setBusinessLoading] = useState(true);
   const [activeWorker, setActiveWorker] = useState(false);
+  const [canHire, setCanHire] = useState(false);
   const [workerChecked, setWorkerChecked] = useState(false);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventStatus, setEventStatus] = useState("Connecting");
@@ -123,6 +124,14 @@ export function DashboardWorkspace({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", beat);
     };
+  }, [activeWorker, platformAdmin, accessToken]);
+
+  useEffect(() => {
+    // HR staff and the CEO see People -> Hiring (docs/HR_AND_HIRING_PLAN.md).
+    if (!activeWorker || platformAdmin) return;
+    apiRequest<{ can_hire: boolean }>("/hr/me", accessToken)
+      .then((result) => setCanHire(result.can_hire === true))
+      .catch(() => setCanHire(false));
   }, [activeWorker, platformAdmin, accessToken]);
 
   const loadBusinesses = useCallback(async () => {
@@ -414,6 +423,7 @@ export function DashboardWorkspace({
             <section aria-label="Worker requests">
               <h2>{platformAdmin ? "Member work" : "Worker tools"}</h2>
               {platformAdmin && navButton("Member Requests")}
+              {!platformAdmin && canHire && navButton("People")}
               <a className="nav-item" href="/operations">
                 <NavIcon name="Operations Center" />
                 <span className="nav-label">Operations Center</span>
@@ -432,7 +442,7 @@ export function DashboardWorkspace({
           {platformAdmin && (
             <section aria-label="Platform administration">
               <h2>Platform admin</h2>
-              {["FayFort Workers", "Shop", "Ads", "Website", "Emails", "Theme Studio", "Infrastructure"].map((label) => navButton(label))}
+              {["People", "Shop", "Ads", "Website", "Emails", "Theme Studio", "Infrastructure"].map((label) => navButton(label))}
             </section>
           )}
         </nav>
@@ -505,8 +515,8 @@ export function DashboardWorkspace({
             <ThemeStudioPage accessToken={accessToken} /> 
           ) : active === "Infrastructure" && platformAdmin ? (
             <InfrastructurePage accessToken={accessToken} />
-          ) : active === "FayFort Workers" && platformAdmin ? (
-            <WorkforcePage accessToken={accessToken} />
+          ) : active === "People" && (platformAdmin || canHire) ? (
+            <PeoplePage accessToken={accessToken} platformAdmin={platformAdmin} />
           ) : active === "Emails" && platformAdmin ? (
             <EmailCenterPage accessToken={accessToken} />
           ) : active === "My account" ? (

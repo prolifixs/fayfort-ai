@@ -17,6 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ['/how-it-works', 0.85],
     ['/services', 0.8],
     ['/about-us', 0.7],
+    ['/careers', 0.6],
     ['/terms', 0.3],
     ['/terms-ebooks', 0.3],
     ['/cookies', 0.2],

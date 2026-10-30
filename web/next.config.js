@@ -11,14 +11,15 @@ const PRODUCT_MEDIA = 'https://lirauxdhnknfiqjnulxb.supabase.co'
 const contentSecurityPolicy = [
   "default-src 'self'",
   // Meta Pixel and TikTok Pixel load only after the visitor accepts marketing cookies (src/consent).
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com https://connect.facebook.net https://analytics.tiktok.com`,
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https://sdks.shopifycdn.com https://connect.facebook.net https://analytics.tiktok.com https://challenges.cloudflare.com`,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https://cdn.shopify.com ${PRODUCT_MEDIA} https://www.facebook.com`,
   "font-src 'self' data:",
   // FayFort AI chat help talks to the FayFort API from the browser.
-  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API} https://www.facebook.com https://connect.facebook.net https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokw.us`,
+  `connect-src 'self' ${SHOPIFY_STORE} https://monorail-edge.shopifysvc.com ${CHAT_API} https://challenges.cloudflare.com https://www.facebook.com https://connect.facebook.net https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokw.us`,
+  // Cloudflare Turnstile: the robot check on the careers application form.
   // Instagram's own player for the posts and reels on the home page (Control Center → Website).
-  `frame-src ${SHOPIFY_STORE} https://www.instagram.com`,
+  `frame-src ${SHOPIFY_STORE} https://www.instagram.com https://challenges.cloudflare.com`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

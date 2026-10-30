@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9).** Ready to build H1.
+30 Oct 2026 (section 9). H1 built 30 Oct 2026 (section 10).** H2 is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -221,3 +221,25 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
 6. **Candidate data:** kept for 12 months, then anonymised and the CV deleted, unless hired.
 7. **Trial tasks:** decided per job (paid or unpaid is a setting on the job).
 8. **Leave allowances:** set and changed in People → Settings, not fixed in code.
+
+## 10. Built
+
+### H1 Careers and applications (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261031090000_hr_hiring_h1.sql` adds `hr_access` on `fayfort_workers`, the tables
+  `hr_jobs`, `hr_candidates`, `hr_applications` and `hr_application_events` (service role only), and the private
+  `hr-cvs` bucket (PDF or Word, 5 MB).
+- **API** (`app/hr`): public open roles and role pages, applying with the CV, the private status link (withdraw, delete
+  my details), HR staff jobs and applications (move stage, notes, open the CV through a 5 minute signed link, every
+  opening recorded), and the owner's HR access switch. Candidates are anonymised and their CVs deleted after 12 months
+  unless hired (checked every 6 hours).
+- **Spam protection:** per-address limits, a hidden field, and Cloudflare Turnstile when `TURNSTILE_SECRET_KEY` is set
+  in the API environment (the same secret as Supabase Auth's captcha). Without it the form still works.
+- **Website:** fayfort.com/careers (open roles, how hiring works), /careers/{role} (description and the three-step
+  Apply card with a CV drop zone), /careers/status/{token} (steps, what happens next, withdraw, delete my details).
+  Careers is in the footer and the sitemap; the content security policy allows Turnstile.
+- **Control Center:** "FayFort Workers" is now **People** with Hiring, Team and HR access tabs. HR staff and the CEO
+  see People with the Hiring tab only. Old ?page=workforce links open Team.
+- **Emails:** "We've got your application" with the private status link (template `hr_received`).
+- **Not yet:** the drag-and-drop board, stage emails and closing emails (H2); interviews and scorecards (H3); offers
+  and the Hire button (H4).

@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # the Supabase Free project is never paused for inactivity while real traffic is low.
     DATABASE_KEEPALIVE_ENABLED: bool = True
     DATABASE_KEEPALIVE_INTERVAL_SECONDS: int = 21600
+    # Cloudflare Turnstile secret for public forms on fayfort.com (careers applications). The same secret as in
+    # Supabase Auth -> Attack Protection. When empty the form still works, protected by rate limits and a hidden field.
+    TURNSTILE_SECRET_KEY: str = ""
     # Member plan billing through Stripe (app/billing). Only STRIPE_SECRET_KEY is required: on start the API creates
     # the Standard/Pro products and monthly prices, the customer portal and the webhook endpoint in Stripe by itself.
     STRIPE_SECRET_KEY: str = ""
