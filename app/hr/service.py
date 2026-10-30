@@ -11,6 +11,7 @@ import hashlib
 import logging
 import re
 import secrets
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -134,6 +135,8 @@ def job_values(fields: dict) -> dict:
     for key in ("duties", "requirements"):
         if key in fields:
             values[key] = clean_list(fields[key])
+    if "skills" in fields:
+        values["skills"] = clean_list(fields["skills"], 6, 60)
     if "questions" in fields:
         values["questions"] = clean_questions(fields["questions"])
     for key in ("show_pay", "trial_task", "trial_paid"):
@@ -457,9 +460,17 @@ def status_view(token: str) -> dict:
     steps = [{"key": key, "label": STAGE_LABELS[key],
               "state": "done" if index < reached or stage == "hired" else "current" if index == reached else "todo"}
              for index, key in enumerate(STAGES) if key != "trial_task" or job.get("trial_task")]
-    return {"first_name": (candidate.get("full_name") or "").split(" ")[0], "job_title": job["title"],
+    from app.hr import interviews
+    interview = interviews.public_view(application) if stage not in CLOSED else None
+    next_step = NEXT_STEPS[stage]
+    if interview and interview["status"] == "proposed":
+        next_step = "Pick a time for your interview above. We'll confirm it by email."
+    elif interview and interview["status"] == "scheduled":
+        next_step = "Your interview is booked. We'll remind you the day before and an hour before."
+    return {"interview": interview,
+            "first_name": (candidate.get("full_name") or "").split(" ")[0], "job_title": job["title"],
             "applied_at": application["created_at"], "stage": stage, "stage_label": STAGE_LABELS[stage],
-            "closed": stage in CLOSED, "steps": steps, "next": NEXT_STEPS[stage],
+            "closed": stage in CLOSED, "steps": steps, "next": next_step,
             "kept_until": candidate.get("retain_until")}
 
 
@@ -484,6 +495,20 @@ def anonymise_candidate(candidate_id: str) -> None:
         except Exception:
             logger.warning("CVs could not be removed for an anonymised candidate", exc_info=True)
     for application in applications:
+        for interview in rows(db().table("hr_interviews").select("id,status").eq("application_id", application["id"])
+                              .limit(20).execute()):
+            slots_ = rows(db().table("hr_interview_interviewers").select("id,booking_id").eq("interview_id", interview["id"])
+                          .limit(20).execute())
+            booking_ids = [str(r["booking_id"]) for r in slots_ if r.get("booking_id")]
+            if booking_ids:
+                db().table("bookings").update({"topic": "Candidate (details deleted)", "member_time_zone": None}) \
+                    .in_("id", booking_ids).execute()
+                db().table("bookings").update({"status": "cancelled", "cancelled_by": "system",
+                                               "cancel_reason": "The candidate's details were deleted."}) \
+                    .in_("id", booking_ids).in_("status", ["held", "confirmed"]).execute()
+            if interview["status"] in ("proposed", "scheduled"):
+                db().table("hr_interviews").update({"status": "cancelled"}).eq("id", interview["id"]).execute()
+            db().table("hr_interviews").update({"candidate_time_zone": None}).eq("id", interview["id"]).execute()
         db().table("hr_applications").update({
             "cv_path": None, "cv_name": None, "cv_type": None, "answers": [], "portfolio_url": None, "token_hash": None,
             "stage": application["stage"] if application["stage"] in CLOSED + ["hired"] else "withdrew",
@@ -564,10 +589,13 @@ def application_detail(application_id: str, actor_id: str) -> dict:
                   .order("created_at").limit(200).execute())
     job = get_job(application["job_id"])
     application.pop("token_hash", None)
+    from app.hr import interviews
     return {"application": {**application, "has_cv": bool(application.get("cv_path"))},
+            "interviews": interviews.for_application(application_id),
             "candidate": {k: candidate.get(k) for k in ("id", "full_name", "email", "phone", "location", "languages",
                                                         "retain_until", "anonymised_at")},
-            "job": {"id": job["id"], "title": job["title"], "trial_task": job.get("trial_task")},
+            "job": {"id": job["id"], "title": job["title"], "trial_task": job.get("trial_task"),
+                    "skills": interviews.skills_for(job)},
             "other_applications": others, "events": events}
 
 
@@ -649,13 +677,22 @@ def set_hr_access(worker_id: str, allowed: bool, actor_id: str) -> None:
 
 
 async def hr_loop() -> None:
-    """Every 6 hours: anonymise candidates whose keep-until date has passed."""
+    """Every 5 minutes: interview reminders and finishing (app/hr/interviews.py). Every 6 hours: anonymise candidates
+    whose keep-until date has passed."""
     import asyncio
+    from app.hr import interviews
+    await asyncio.sleep(60)
+    last_retention = 0.0
     while True:
         try:
-            await asyncio.to_thread(anonymise_expired)
+            counts = await asyncio.to_thread(interviews.sweep)
+            if any(counts.values()):
+                logger.info("Interview sweep: %s", counts)
+            if time.monotonic() - last_retention > 6 * 3600:
+                await asyncio.to_thread(anonymise_expired)
+                last_retention = time.monotonic()
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("HR retention pass failed")
-        await asyncio.sleep(6 * 3600)
+            logger.exception("HR sweep failed; will retry")
+        await asyncio.sleep(300)

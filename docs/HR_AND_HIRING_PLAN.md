@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1 and H2 built 30 Oct 2026 (section 10).** H3 is next.
+30 Oct 2026 (section 9). H1, H2 and H3 built 30 Oct 2026 (section 10).** H4 is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -253,4 +253,26 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
   (says paid or unpaid), Offer and Not moving forward, each with a fresh status link.
 - **Closing reasons:** Not moving forward needs a reason from a list (or Other with your own words). The reason stays
   inside FayFort; the candidate gets a kind, general email.
-- **Not yet:** interviews with time picking and scorecards (H3); offers and the Hire button (H4).
+
+### H3 Interviews and scorecards (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261102090000_hr_hiring_h3.sql` adds `hr_interviews`,
+  `hr_interview_interviewers`, `hr_scorecards`, skills on jobs, and the `interview` kind in the booking engine.
+- **Arranging:** in the candidate panel HR chooses one to four interviewers, the length (30, 45, 60 or 90 minutes), how
+  many days the candidate can choose within, an optional video link and a message. FayFort checks there is common free
+  time first. The candidate is emailed a link to pick a time.
+- **Picking:** the status page offers only times when every interviewer is free (their weekly hours in Bookings, minus
+  time off and other bookings, from 24 hours ahead), shown in the candidate's time zone with Guangzhou time in brackets.
+  Each interviewer then gets a confirmed interview booking, so the engine's no-double-booking rule protects them.
+- **Changes:** the candidate can pick another time up to 24 hours before, twice. If an interviewer presses "I can't make
+  this time" in Bookings, everyone's time is released and the candidate is asked to pick again. Interviews can't be
+  moved from Bookings, only from People, so all interviewers move together.
+- **Reminders:** email to the candidate and a notice to each interviewer 24 hours and 1 hour before. An hour after the
+  end the interview is marked done and interviewers are asked for their scorecards (checked every 5 minutes).
+- **Scorecards:** 1 to 4 on each of the job's skills (up to 6, or four standard ones) and Yes, Maybe or No with a note.
+  An interviewer sees the others' scorecards only after submitting their own; HR who didn't interview sees all with the
+  averages.
+- **Interviewers without HR access** get People → My interviews, and can open their candidates (answers, CV, activity,
+  no contact details or HR notes) from there or from the interview booking.
+- **Deleting details** cancels open interviews and replaces the candidate's name on bookings.
+- **Not yet:** offers, accept by link and the Hire button (H4).

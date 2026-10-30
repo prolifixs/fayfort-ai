@@ -41,7 +41,9 @@ FIELDS = ("id,host_id,kind,member_id,starts_at,ends_at,blocked_until,status,hold
 # time is blocked or booked.
 NORMAL_HOURS: dict[str, Any] = {"weekdays": [0, 1, 2, 3, 4], "start_time": "09:00", "end_time": "18:00",
                                 "time_zone": "Asia/Shanghai"}
-KIND_LABEL = {"consultation": "Consultation", "session": "Session", "tour": "Tour"}
+KIND_LABEL = {"consultation": "Consultation", "session": "Session", "tour": "Tour", "interview": "Interview"}
+# Job interviews (docs/HR_AND_HIRING_PLAN.md, H3): booked by app/hr, one booking per interviewer, any weekly hours.
+INTERVIEW_SOURCE = "hr_interview_interviewers"
 
 
 class BookingError(ValueError):
@@ -110,7 +112,9 @@ def settings_row() -> dict[str, Any]:
     return merged
 
 
-def minutes_for(kind: str, rules: dict[str, Any]) -> int:
+def minutes_for(kind: str, rules: dict[str, Any], minutes: int | None = None) -> int:
+    if minutes:
+        return int(minutes)
     return int(rules["session_minutes"] if kind == "session" else rules["consultation_minutes"])
 
 
@@ -210,18 +214,19 @@ def _clock(value: Any) -> time:
 
 def free_slots(host_id: str, kind: str, start: datetime, end: datetime, *, now: datetime | None = None,
                rules: dict[str, Any] | None = None, ignore_booking: str | None = None,
-               busy: Iterable[tuple[datetime, datetime]] = ()) -> list[dict]:
+               busy: Iterable[tuple[datetime, datetime]] = (), minutes: int | None = None) -> list[dict]:
     """Bookable times for a host between start and end (UTC), following the rules. `busy` adds outside busy times
     (Google Calendar, later)."""
     rules = rules or settings_row()
     now = now or now_utc()
-    length = timedelta(minutes=minutes_for(kind, rules))
+    length = timedelta(minutes=minutes_for(kind, rules, minutes))
     gap = timedelta(minutes=int(rules["buffer_minutes"]))
     earliest = max(start, now + timedelta(hours=int(rules["min_notice_hours"])))
     latest = min(end, now + timedelta(days=int(rules["horizon_days"])))
     if earliest >= latest:
         return []
-    weekly = [r for r in weekly_hours(host_id) if kind in (r.get("kinds") or [])]
+    # Interviews fit in any of the person's weekly hours, whatever the hours are open for.
+    weekly = [r for r in weekly_hours(host_id) if kind == "interview" or kind in (r.get("kinds") or [])]
     if not weekly:
         return []
     blocked: list[tuple[datetime, datetime]] = []
@@ -443,6 +448,8 @@ def move(booking: dict, starts: datetime, *, by: str, reason: str | None = None)
             raise BookingError(f"A booking can be moved {rules['max_member_moves']} times. Message us in the chat to change it again.")
     elif booking.get("status") not in LIVE:
         raise BookingError("Only a held or confirmed booking can be moved.")
+    if booking.get("kind") == "interview":
+        raise BookingError("Interviews are moved from Control Center, People, Hiring, so every interviewer moves together.")
     if starts <= now_utc():
         raise BookingError("Pick a time in the future.")
     if not is_free(str(booking["host_id"]), booking["kind"], starts, rules=rules, ignore_booking=str(booking["id"]),
@@ -558,6 +565,12 @@ def _withdraw_invoice(booking: dict) -> None:
 
 
 def _source_cancelled(booking: dict) -> None:
+    if booking.get("source_table") == INTERVIEW_SOURCE and booking.get("source_id"):
+        try:
+            from app.hr import interviews
+            interviews.booking_cancelled(str(booking["source_id"]), booking.get("cancelled_by") or "staff")
+        except Exception:
+            logger.exception("Could not update the interview behind a booking")
     if booking.get("source_table") == "member_consultations" and booking.get("source_id"):
         try:
             db().table("member_consultations").update({"status": "cancelled", "updated_at": now_utc().isoformat()}) \

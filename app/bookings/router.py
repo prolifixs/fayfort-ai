@@ -214,7 +214,8 @@ def present(found: list[dict]) -> list[dict]:
             "host": {"user_id": str(booking["host_id"]), "name": host.get("name") or "FayFort team",
                      "photo_url": host.get("photo_url"),
                      "staff_role": (roles.get(str(booking["host_id"])) or {}).get("staff_role") or "staff"},
-            "member_name": member.get("display_name") or (f"@{member['username']}" if member.get("username") else "Member"),
+            "member_name": (booking.get("topic") or "Candidate") if booking.get("kind") == "interview" else
+            member.get("display_name") or (f"@{member['username']}" if member.get("username") else "Member"),
             "conversation_id": consultation.get("conversation_id"),
             "payment": {"status": invoice.get("status"), "amount": invoice.get("amount"), "currency": invoice.get("currency")}
             if invoice else None,

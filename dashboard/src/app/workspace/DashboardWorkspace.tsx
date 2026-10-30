@@ -92,6 +92,7 @@ export function DashboardWorkspace({
   const [businessLoading, setBusinessLoading] = useState(true);
   const [activeWorker, setActiveWorker] = useState(false);
   const [canHire, setCanHire] = useState(false);
+  const [hasInterviews, setHasInterviews] = useState(false);
   const [workerChecked, setWorkerChecked] = useState(false);
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventStatus, setEventStatus] = useState("Connecting");
@@ -129,8 +130,8 @@ export function DashboardWorkspace({
   useEffect(() => {
     // HR staff and the CEO see People -> Hiring (docs/HR_AND_HIRING_PLAN.md).
     if (!activeWorker || platformAdmin) return;
-    apiRequest<{ can_hire: boolean }>("/hr/me", accessToken)
-      .then((result) => setCanHire(result.can_hire === true))
+    apiRequest<{ can_hire: boolean; has_interviews?: boolean }>("/hr/me", accessToken)
+      .then((result) => { setCanHire(result.can_hire === true); setHasInterviews(result.has_interviews === true); })
       .catch(() => setCanHire(false));
   }, [activeWorker, platformAdmin, accessToken]);
 
@@ -423,7 +424,7 @@ export function DashboardWorkspace({
             <section aria-label="Worker requests">
               <h2>{platformAdmin ? "Member work" : "Worker tools"}</h2>
               {platformAdmin && navButton("Member Requests")}
-              {!platformAdmin && canHire && navButton("People")}
+              {!platformAdmin && (canHire || hasInterviews) && navButton("People")}
               <a className="nav-item" href="/operations">
                 <NavIcon name="Operations Center" />
                 <span className="nav-label">Operations Center</span>
@@ -515,8 +516,8 @@ export function DashboardWorkspace({
             <ThemeStudioPage accessToken={accessToken} /> 
           ) : active === "Infrastructure" && platformAdmin ? (
             <InfrastructurePage accessToken={accessToken} />
-          ) : active === "People" && (platformAdmin || canHire) ? (
-            <PeoplePage accessToken={accessToken} platformAdmin={platformAdmin} />
+          ) : active === "People" && (platformAdmin || canHire || hasInterviews) ? (
+            <PeoplePage accessToken={accessToken} platformAdmin={platformAdmin} canHire={platformAdmin || canHire} hasInterviews={hasInterviews} />
           ) : active === "Emails" && platformAdmin ? (
             <EmailCenterPage accessToken={accessToken} />
           ) : active === "My account" ? (

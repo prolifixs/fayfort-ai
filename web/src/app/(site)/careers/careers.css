@@ -115,3 +115,19 @@
   .careers-card, .apply-progress span, .apply-drop { transition: none; }
   .careers-card:hover { transform: none; }
 }
+
+/* Interview time picker on the candidate's status page */
+.status-interview { border: 2px solid var(--pink); }
+.status-message { background: var(--mist); border-radius: 10px; color: var(--ink) !important; padding: 10px 12px; }
+.status-days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.status-days button { background: #fff; border: 1px solid rgba(2, 20, 78, .2); border-radius: 12px; color: var(--ink); cursor: pointer; display: grid; flex: none; font: inherit; gap: 2px; min-height: 56px; min-width: 76px; padding: 6px 10px; }
+.status-days button span { color: var(--muted); font-size: 12px; }
+.status-days button[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.status-days button[aria-pressed=true] span { color: var(--on-dark); }
+.status-times { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.status-times button { background: #fff; border: 1px solid rgba(2, 20, 78, .2); border-radius: 12px; color: var(--ink); cursor: pointer; font: inherit; font-size: 15px; min-height: 48px; }
+.status-times button small { color: var(--muted); }
+.status-times button[aria-pressed=true] { background: var(--mist); border: 2px solid var(--blue); font-weight: 650; }
+.status-when { display: grid; gap: 4px; }
+.status-when strong { color: var(--ink); font-family: Fraunces, var(--serif); font-size: 22px; font-weight: 450; }
+.status-text-button { background: none; border: 0; color: var(--blue); cursor: pointer; font: inherit; font-weight: 600; justify-self: start; min-height: 44px; padding: 0; text-decoration: underline; }

@@ -29,3 +29,16 @@ describe('careers (HR and hiring H1)', () => {
     expect(await getJob('../etc')).toBeNull()
   })
 })
+
+import { groupSlots } from '../src/app/(site)/careers/status/[token]/InterviewPicker'
+
+describe('interview time picker', () => {
+  it('groups offered times by day in the candidate’s own time zone', () => {
+    const slots = [
+      { starts_at: '2026-11-03T08:00:00Z', ends_at: '2026-11-03T08:45:00Z' }, // 16:00 China, 09:00 Lagos
+      { starts_at: '2026-11-03T23:30:00Z', ends_at: '2026-11-04T00:15:00Z' }, // 07:30 China on the 4th, 00:30 Lagos on the 4th
+    ]
+    expect(groupSlots(slots, 'Africa/Lagos').map((d) => [d.key, d.items.length])).toEqual([['2026-11-03', 1], ['2026-11-04', 1]])
+    expect(groupSlots(slots, 'America/Los_Angeles').map((d) => d.key)).toEqual(['2026-11-03'])
+  })
+})

@@ -109,3 +109,28 @@
 }
 .hr-applications, .hr-job-summary { min-width: 0; }
 .hr-board { max-width: 100%; }
+
+/* H3: interviews and scorecards */
+.hr-interviews, .hr-scorecards { display: grid; gap: var(--space-2); }
+.hr-interview-card { display: grid; gap: 8px; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
+.hr-interview-card p { margin: 0; }
+.hr-inline { display: flex; gap: var(--space-2); }
+.hr-inline input { flex: 1; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; }
+.hr-arrange { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-md); }
+.hr-arrange fieldset { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.hr-arrange legend { margin-bottom: 6px; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.hr-arrange label { display: grid; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.hr-arrange select, .hr-arrange input[type=url], .hr-arrange textarea, .hr-scorecard-form textarea { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 400; }
+.hr-scorecard-form { display: grid; gap: var(--space-2); }
+.hr-scorecard-form p { margin: 0; }
+.hr-rating { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.hr-rating > span { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.hr-score-summary { margin: 0; font-size: var(--text-sm); }
+.hr-score-summary b, .hr-decision { padding: 1px 8px; border-radius: 999px; font-size: var(--text-xs); }
+.is-yes { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
+.is-maybe { background: color-mix(in srgb, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+.is-no { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
+.hr-cards { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.hr-cards li { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
+.hr-cards p { margin: 0; font-size: var(--text-sm); }
+.hr-my-interviews ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

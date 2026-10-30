@@ -64,3 +64,27 @@ test("old workforce links open the Team tab", async ({ page }) => {
   await page.goto("/?page=workforce");
   await expect(page.getByRole("tab", { name: "Team" })).toHaveAttribute("aria-selected", "true");
 });
+
+test("a candidate with a booked interview and scorecards", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signedInStaff(page);
+  const soon = new Date(Date.now() - 2 * 3600000).toISOString();
+  const withInterview = { ...detail, can_manage: true,
+    interviews: [{ id: "i1", status: "completed", minutes: 45, window_days: 14, starts_at: soon, ends_at: soon, candidate_time_zone: "Africa/Lagos",
+      call_link: "https://meet.google.com/abc-defg-hij", message: null, reschedule_count: 0, interviewers: [{ worker_id: "w1", name: "Ada Eze", booking_id: "b1" }, { worker_id: "w2", name: "Ben Li", booking_id: "b2" }] }],
+    scorecards: { skills: ["Mandarin", "Market knowledge", "Attention to detail"], count: 1, hidden: 1, can_score: true, mine: null, cards: [], summary: null } };
+  await page.route("**/hr/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [job], departments: { sourcing: "Sourcing desk" }, job_types: { full_time: "Full time" }, locations: { guangzhou: "Guangzhou office" } } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications, close_reasons: [], emailed_stages: [] } });
+    if (path.startsWith("/hr/applications/")) return route.fulfill({ json: withInterview });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?page=people");
+  await page.getByRole("region", { name: "Applied" }).getByRole("button", { name: /Amaka Obi/ }).click();
+  const panel = page.getByRole("dialog", { name: "Amaka Obi" });
+  await expect(panel.getByText("1 scorecard hidden until you submit yours.")).toBeVisible();
+  await panel.getByRole("radio", { name: "Mandarin: 4" }).check({ force: true });
+  await panel.getByRole("heading", { name: "Interview" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/hr/people-interview-scorecard-laptop.png" });
+});

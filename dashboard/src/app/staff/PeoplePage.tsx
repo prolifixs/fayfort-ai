@@ -22,6 +22,7 @@ export type HrJob = {
   questions: Question[];
   trial_task: boolean;
   trial_paid: boolean;
+  skills?: string[];
   status: "draft" | "open" | "paused" | "closed";
   counts?: Record<string, number>;
 };
@@ -34,9 +35,12 @@ type Detail = {
   application: { id: string; stage: string; answers: { label: string; answer: string }[]; cv_name: string | null; has_cv: boolean;
     portfolio_url: string | null; heard_from: string | null; close_reason: string | null; created_at: string };
   candidate: { full_name: string | null; email: string | null; phone: string | null; location: string | null; languages: string | null; retain_until: string | null };
-  job: { id: string; title: string; trial_task: boolean };
+  job: { id: string; title: string; trial_task: boolean; skills?: string[] };
   other_applications: { id: string; stage: string }[];
   events: { id: string; kind: string; detail: Record<string, string>; created_at: string }[];
+  interviews?: InterviewView[];
+  scorecards?: Scorecards;
+  can_manage?: boolean;
 };
 
 export const STAGES: [string, string][] = [
@@ -50,13 +54,29 @@ const day = (value?: string | null) => (value ? new Date(value).toLocaleDateStri
 const lines = (text: string) => text.split("\n").map((line) => line.trim()).filter(Boolean);
 const message = (reason: unknown, fallback: string) => (reason instanceof Error ? reason.message : fallback);
 
-export function PeoplePage({ accessToken, platformAdmin }: { accessToken: string; platformAdmin: boolean }) {
-  const [tab, setTab] = useState<"hiring" | "team" | "access">(() => {
+export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInterviews = false }: {
+  accessToken: string; platformAdmin: boolean; canHire?: boolean; hasInterviews?: boolean;
+}) {
+  const hiring = platformAdmin || canHire;
+  const [tab, setTab] = useState<"hiring" | "team" | "access" | "interviews">(() => {
     // Old links (?page=workforce, a worker profile, #timesheets) open the Team tab.
     const query = new URLSearchParams(window.location.search);
-    return platformAdmin && (query.get("page") === "workforce" || query.get("worker") || window.location.hash === "#timesheets") ? "team" : "hiring";
+    if (platformAdmin && (query.get("page") === "workforce" || query.get("worker") || window.location.hash === "#timesheets")) return "team";
+    return hiring ? "hiring" : "interviews";
   });
-  const tabs = platformAdmin ? ([["hiring", "Hiring"], ["team", "Team"], ["access", "HR access"]] as const) : ([["hiring", "Hiring"]] as const);
+  // A link from an interview booking (?booking=…) opens that candidate.
+  const [opened, setOpened] = useState<string | null>(null);
+  useEffect(() => {
+    const booking = new URLSearchParams(window.location.search).get("booking");
+    if (!booking) return;
+    apiRequest<{ application_id: string }>(`/hr/interviews/by-booking/${booking}`, accessToken)
+      .then((r) => setOpened(r.application_id)).catch(() => undefined);
+  }, [accessToken]);
+  const tabs = [
+    ...(hiring ? [["hiring", "Hiring"]] : []),
+    ...(hasInterviews || !hiring ? [["interviews", "My interviews"]] : []),
+    ...(platformAdmin ? [["team", "Team"], ["access", "HR access"]] : []),
+  ] as [typeof tab, string][];
   return (
     <div className="people-page">
       {tabs.length > 1 && (
@@ -68,7 +88,9 @@ export function PeoplePage({ accessToken, platformAdmin }: { accessToken: string
           ))}
         </div>
       )}
-      {tab === "hiring" && <HiringPanel accessToken={accessToken} />}
+      {tab === "hiring" && hiring && <HiringPanel accessToken={accessToken} />}
+      {tab === "interviews" && <MyInterviews accessToken={accessToken} onOpen={setOpened} />}
+      {opened && <CandidatePanel accessToken={accessToken} applicationId={opened} meta={{ close_reasons: [], emailed_stages: [] }} onClose={() => setOpened(null)} onChanged={() => undefined} />}
       {tab === "team" && platformAdmin && <WorkforcePage accessToken={accessToken} />}
       {tab === "access" && platformAdmin && <HrAccessPanel accessToken={accessToken} />}
     </div>
@@ -195,7 +217,7 @@ function JobEditor({ job, accessToken, options, onDone }: { job: HrJob | null; a
     title: job?.title || "", department: job?.department || "sourcing", job_type: job?.job_type || "full_time",
     location: job?.location || "guangzhou", pay_range: job?.pay_range || "", show_pay: job?.show_pay || false,
     summary: job?.summary || "", duties: (job?.duties || []).join("\n"), requirements: (job?.requirements || []).join("\n"),
-    trial_task: job?.trial_task || false, trial_paid: job?.trial_paid || false,
+    trial_task: job?.trial_task || false, trial_paid: job?.trial_paid || false, skills: (job?.skills || []).join("\n"),
   }));
   const [questions, setQuestions] = useState<Question[]>(job?.questions || []);
   const [busy, setBusy] = useState(false);
@@ -208,7 +230,7 @@ function JobEditor({ job, accessToken, options, onDone }: { job: HrJob | null; a
     setError("");
     try {
       const body = JSON.stringify({
-        ...form, pay_range: form.pay_range.trim() || null, duties: lines(form.duties), requirements: lines(form.requirements),
+        ...form, pay_range: form.pay_range.trim() || null, duties: lines(form.duties), requirements: lines(form.requirements), skills: lines(form.skills).slice(0, 6),
         questions: questions.filter((q) => q.label.trim()).map((q) => ({ ...q, options: q.kind === "choice" ? q.options.filter(Boolean) : [] })),
       });
       const saved = job
@@ -247,6 +269,7 @@ function JobEditor({ job, accessToken, options, onDone }: { job: HrJob | null; a
         <label>What you&apos;ll do (one per line)<textarea rows={5} value={form.duties} onChange={(e) => set("duties", e.target.value)} /></label>
         <label>What we&apos;re looking for (one per line)<textarea rows={5} value={form.requirements} onChange={(e) => set("requirements", e.target.value)} /></label>
       </div>
+      <label>Skills interviewers score (one per line, up to 6; left empty, four standard ones are used)<textarea rows={3} value={form.skills} onChange={(e) => set("skills", e.target.value)} placeholder={"Mandarin\nMarket knowledge"} /></label>
       <fieldset className="hr-questions">
         <legend>Screening questions (up to 5)</legend>
         {questions.map((question, index) => (
@@ -517,7 +540,13 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
   }
 
   const c = detail?.candidate;
-  const closed = detail ? ["withdrew", "hired"].includes(detail.application.stage) : true;
+  const manage = detail?.can_manage !== false;
+  const closed = detail ? ["withdrew", "hired"].includes(detail.application.stage) || !manage : true;
+  const reload = (fresh?: Detail) => {
+    onChanged();
+    if (fresh?.application) setDetail(fresh);
+    else apiRequest<Detail>(`/hr/applications/${applicationId}`, accessToken).then(setDetail).catch(() => undefined);
+  };
   return (
     <>
       <div className="hr-scrim" onClick={onClose} aria-hidden="true" />
@@ -552,6 +581,9 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
                 <dl className="hr-answers">{detail.application.answers.map((a) => <div key={a.label}><dt>{a.label}</dt><dd>{a.answer || "No answer"}</dd></div>)}</dl>
               </section>
             )}
+            <InterviewSection accessToken={accessToken} detail={detail} canManage={manage} onChanged={reload} />
+            <ScorecardSection key={detail.scorecards?.count ?? 0} accessToken={accessToken} detail={detail}
+              onSaved={(cards) => { setDetail((d) => (d ? { ...d, scorecards: cards } : d)); onChanged(); }} />
             {!closed && (
               <section className="hr-move"><h3>Move to</h3>
                 <select aria-label="Stage" value={stage} onChange={(e) => setStage(e.target.value)}>
@@ -566,18 +598,22 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
               </section>
             )}
             {detail.application.close_reason && <p className="muted">Reason: {detail.application.close_reason}</p>}
-            <section><h3>Notes and activity</h3>
-              <form className="hr-note" onSubmit={async (e) => { e.preventDefault(); if (await run(`/hr/applications/${applicationId}/notes`, { text: note })) setNote(""); }}>
+            <section><h3>{manage ? "Notes and activity" : "Activity"}</h3>
+              {manage && <form className="hr-note" onSubmit={async (e) => { e.preventDefault(); if (await run(`/hr/applications/${applicationId}/notes`, { text: note })) setNote(""); }}>
                 <textarea aria-label="Add a note" rows={2} maxLength={2000} placeholder="Add a note for the hiring team" value={note} onChange={(e) => setNote(e.target.value)} />
                 <button type="submit" className="secondary-button" disabled={busy || !note.trim()}>Add note</button>
-              </form>
+              </form>}
               <ol className="hr-activity">
                 {[...detail.events].reverse().map((event) => (
                   <li key={event.id}>
                     <span>{event.kind === "note" ? event.detail.text
                       : event.kind === "stage_changed" ? `Moved from ${STAGE_LABEL[event.detail.from] || event.detail.from} to ${STAGE_LABEL[event.detail.to] || event.detail.to}`
-                      : event.kind === "applied" ? "Applied" : event.kind === "email_sent" ? (event.detail.template === "hr_received" ? "Emailed the status link" : `Emailed: ${STAGE_LABEL[(event.detail.template || "").replace("hr_stage_", "")] || "update"}`)
-                      : event.kind === "withdrawn" ? "Withdrew" : event.kind === "cv_viewed" ? "CV opened" : event.kind}</span>
+                      : event.kind === "applied" ? "Applied" : event.kind === "email_sent" ? (event.detail.template === "hr_received" ? "Emailed the status link" : `Emailed: ${STAGE_LABEL[(event.detail.template || "").replace("hr_stage_", "")] || (event.detail.template || "").replace("hr_interview_", "interview ").replace("_", " ")}`)
+                      : event.kind === "withdrawn" ? "Withdrew" : event.kind === "cv_viewed" ? "CV opened"
+                      : event.kind === "interview_proposed" ? "Interview invitation sent" : event.kind === "interview_scheduled" ? "Interview time booked"
+                      : event.kind === "interview_cancelled" ? (event.detail.again ? "Interview time released, picking again" : "Interview cancelled")
+                      : event.kind === "interview_done" ? (event.detail.status === "no_show" ? "Interview: no-show" : "Interview done")
+                      : event.kind === "scorecard" ? `Scorecard: ${DECISION[event.detail.decision] || ""}` : event.kind}</span>
                     <small>{new Date(event.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small>
                   </li>
                 ))}
@@ -587,6 +623,230 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
         )}
       </aside>
     </>
+  );
+}
+
+// ---- Interviews and scorecards (H3) ------------------------------------------------------------------------------------
+type InterviewView = {
+  id: string; status: "proposed" | "scheduled" | "completed" | "no_show" | "cancelled"; minutes: number; window_days: number;
+  starts_at: string | null; ends_at: string | null; candidate_time_zone: string | null; call_link: string | null; message: string | null;
+  reschedule_count: number; interviewers?: { worker_id: string; name: string; booking_id: string | null }[];
+};
+type Scorecards = {
+  skills: string[]; count: number; hidden: number; can_score: boolean;
+  mine: { ratings: Record<string, number>; decision: string; note: string | null } | null;
+  cards: { interviewer: string; ratings: Record<string, number>; decision: string; note: string | null; submitted_at: string; is_mine: boolean }[];
+  summary: { averages: Record<string, number>; yes: number; maybe: number; no: number } | null;
+};
+const INTERVIEW_STATUS: Record<InterviewView["status"], string> = {
+  proposed: "Waiting for the candidate to pick a time", scheduled: "Booked", completed: "Done", no_show: "No-show", cancelled: "Cancelled",
+};
+const DECISION: Record<string, string> = { yes: "Yes", maybe: "Maybe", no: "No" };
+const chinaTime = (iso: string) =>
+  new Intl.DateTimeFormat(undefined, { timeZone: "Asia/Shanghai", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) + " China time";
+
+function InterviewSection({ accessToken, detail, canManage, onChanged }: {
+  accessToken: string; detail: Detail; canManage: boolean; onChanged: (detail?: Detail) => void;
+}) {
+  const open = (detail.interviews || []).find((i) => i.status === "proposed" || i.status === "scheduled") || null;
+  const past = (detail.interviews || []).filter((i) => i !== open && i.status !== "cancelled");
+  const [arranging, setArranging] = useState(false);
+  const [team, setTeam] = useState<{ user_id: string; name: string; job_title: string | null }[] | null>(null);
+  const [plan, setPlan] = useState({ interviewer_ids: [] as string[], minutes: 30, window_days: 14, call_link: "", message: "" });
+  const [link, setLink] = useState(open?.call_link || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => setLink(open?.call_link || ""), [open?.call_link]);
+  useEffect(() => {
+    if (!arranging || team) return;
+    apiRequest<{ workers: { user_id: string; name: string; job_title: string | null }[] }>("/hr/interviewers", accessToken)
+      .then((r) => setTeam(r.workers)).catch((reason) => setError(message(reason, "The team could not be loaded.")));
+  }, [arranging, team, accessToken]);
+
+  async function call(path: string, init: RequestInit, after?: (result: unknown) => void) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<unknown>(path, accessToken, init);
+      after?.(result);
+      onChanged(path.endsWith("/interviews") ? (result as Detail) : undefined);
+    } catch (reason) {
+      setError(message(reason, "That didn't work."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="hr-interviews"><h3>Interview</h3>
+      {open ? (
+        <div className="hr-interview-card">
+          <p><span className={`hr-status is-${open.status === "scheduled" ? "open" : "paused"}`}>{INTERVIEW_STATUS[open.status]}</span></p>
+          {open.starts_at && <p><strong>{chinaTime(open.starts_at)}</strong>{open.candidate_time_zone && open.candidate_time_zone !== "Asia/Shanghai" ? ` · the candidate is in ${open.candidate_time_zone.replace(/_/g, " ")}` : ""}</p>}
+          <p className="muted">{open.minutes} minutes with {(open.interviewers || []).map((i) => i.name).join(", ") || "the team"}
+            {open.status === "proposed" && ` · the candidate chooses within ${open.window_days} days`}{open.reschedule_count > 0 && ` · moved ${open.reschedule_count}×`}</p>
+          {open.call_link && <a className="secondary-button" href={open.call_link} target="_blank" rel="noreferrer noopener">Join the video call</a>}
+          {canManage && (
+            <>
+              <form className="hr-inline" onSubmit={(e) => { e.preventDefault(); void call(`/hr/interviews/${open.id}/link`, { method: "PUT", body: JSON.stringify({ call_link: link || null }) }); }}>
+                <input aria-label="Video link" type="url" placeholder="https://meet.google.com/…" value={link} onChange={(e) => setLink(e.target.value)} />
+                <button type="submit" className="secondary-button" disabled={busy || link === (open.call_link || "")}>Save link</button>
+              </form>
+              <div className="hr-links">
+                {open.status === "scheduled" && open.starts_at && new Date(open.starts_at) < new Date() && (
+                  <>
+                    <button type="button" className="secondary-button" disabled={busy} onClick={() => void call(`/hr/interviews/${open.id}/finish`, { method: "POST", body: JSON.stringify({ status: "completed" }) })}>Mark done</button>
+                    <button type="button" className="secondary-button" disabled={busy} onClick={() => void call(`/hr/interviews/${open.id}/finish`, { method: "POST", body: JSON.stringify({ status: "no_show" }) })}>No-show</button>
+                  </>
+                )}
+                <button type="button" className="text-link-button" disabled={busy} onClick={() => void call(`/hr/interviews/${open.id}/cancel`, { method: "POST", body: JSON.stringify({ notify: true }) })}>Cancel the interview</button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : canManage && !["withdrew", "hired", "not_moving_forward", "offer"].includes(detail.application.stage) ? (
+        arranging ? (
+          <form className="hr-arrange" onSubmit={(e) => { e.preventDefault(); void call(`/hr/applications/${detail.application.id}/interviews`, { method: "POST", body: JSON.stringify({ ...plan, call_link: plan.call_link || null, message: plan.message || null }) }, () => setArranging(false)); }}>
+            <fieldset><legend>Interviewers (up to 4)</legend>
+              {!team ? <p className="muted">Loading the team…</p> : team.map((w) => (
+                <label key={w.user_id} className="hr-check">
+                  <input type="checkbox" checked={plan.interviewer_ids.includes(w.user_id)} disabled={!plan.interviewer_ids.includes(w.user_id) && plan.interviewer_ids.length >= 4}
+                    onChange={(e) => setPlan((p) => ({ ...p, interviewer_ids: e.target.checked ? [...p.interviewer_ids, w.user_id] : p.interviewer_ids.filter((id) => id !== w.user_id) }))} />
+                  {w.name}{w.job_title ? <small className="muted"> · {w.job_title}</small> : null}
+                </label>
+              ))}
+            </fieldset>
+            <div className="hr-grid">
+              <label>Length<select value={plan.minutes} onChange={(e) => setPlan((p) => ({ ...p, minutes: Number(e.target.value) }))}>
+                {[30, 45, 60, 90].map((m) => <option key={m} value={m}>{m} minutes</option>)}</select></label>
+              <label>Candidate picks within<select value={plan.window_days} onChange={(e) => setPlan((p) => ({ ...p, window_days: Number(e.target.value) }))}>
+                {[7, 14, 21, 30].map((d) => <option key={d} value={d}>{d} days</option>)}</select></label>
+            </div>
+            <label>Video link (optional, you can add it later)<input type="url" placeholder="https://meet.google.com/…" value={plan.call_link} onChange={(e) => setPlan((p) => ({ ...p, call_link: e.target.value }))} /></label>
+            <label>Message to the candidate (optional)<textarea rows={2} maxLength={1000} value={plan.message} onChange={(e) => setPlan((p) => ({ ...p, message: e.target.value }))} /></label>
+            <p className="muted">The candidate is emailed a link to pick a time when everyone is free. Each interviewer gets it in Bookings.</p>
+            <div className="hr-editor-actions">
+              <button type="button" className="secondary-button" onClick={() => setArranging(false)}>Cancel</button>
+              <button type="submit" className="primary-button" disabled={busy || plan.interviewer_ids.length === 0}>{busy ? "Sending…" : "Send interview invitation"}</button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" className="primary-button" onClick={() => setArranging(true)}>Arrange an interview</button>
+        )
+      ) : (
+        <p className="muted">No interview arranged.</p>
+      )}
+      {past.length > 0 && <p className="muted">Earlier: {past.map((i) => `${INTERVIEW_STATUS[i.status]}${i.starts_at ? ` on ${day(i.starts_at)}` : ""}`).join(", ")}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+function ScorecardSection({ accessToken, detail, onSaved }: { accessToken: string; detail: Detail; onSaved: (cards: Scorecards) => void }) {
+  const cards = detail.scorecards;
+  const interview = (detail.interviews || []).find((i) => ["scheduled", "completed"].includes(i.status) && i.starts_at && new Date(i.starts_at) <= new Date());
+  const [ratings, setRatings] = useState<Record<string, number>>(cards?.mine?.ratings || {});
+  const [decision, setDecision] = useState(cards?.mine?.decision || "");
+  const [note, setNote] = useState(cards?.mine?.note || "");
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!cards) return null;
+  const showForm = cards.can_score && interview && (!cards.mine || editing);
+  if (!showForm && cards.count === 0) return null;
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiRequest<{ scorecards: Scorecards }>(`/hr/interviews/${interview!.id}/scorecard`, accessToken,
+        { method: "POST", body: JSON.stringify({ ratings, decision, note: note.trim() || null }) });
+      setEditing(false);
+      onSaved(result.scorecards);
+    } catch (reason) {
+      setError(message(reason, "The scorecard couldn't be saved."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="hr-scorecards"><h3>Scorecards</h3>
+      {showForm ? (
+        <form className="hr-scorecard-form" onSubmit={(e) => { e.preventDefault(); void save(); }} aria-label="Your scorecard">
+          <p className="muted">1 is weak, 4 is excellent. You'll see the others' scorecards after you submit yours.</p>
+          {cards.skills.map((skill) => (
+            <div key={skill} className="hr-rating" role="radiogroup" aria-label={skill}>
+              <span>{skill}</span>
+              <div className="hr-segment">
+                {[1, 2, 3, 4].map((n) => (
+                  <label key={n} className={ratings[skill] === n ? "is-active" : ""}>
+                    <input type="radio" name={`rate-${skill}`} checked={ratings[skill] === n} onChange={() => setRatings((r) => ({ ...r, [skill]: n }))} aria-label={`${skill}: ${n}`} />{n}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="hr-rating" role="radiogroup" aria-label="Your decision">
+            <span>Hire?</span>
+            <div className="hr-segment">
+              {(["yes", "maybe", "no"] as const).map((key) => (
+                <label key={key} className={decision === key ? "is-active" : ""}><input type="radio" name="decision" checked={decision === key} onChange={() => setDecision(key)} />{DECISION[key]}</label>
+              ))}
+            </div>
+          </div>
+          <textarea aria-label="Scorecard note" rows={3} maxLength={2000} placeholder="What stood out? Any concerns?" value={note} onChange={(e) => setNote(e.target.value)} />
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button type="submit" className="primary-button" disabled={busy || !decision || cards.skills.some((s) => !ratings[s])}>{busy ? "Saving…" : "Submit scorecard"}</button>
+        </form>
+      ) : (
+        cards.can_score && cards.mine && <button type="button" className="text-link-button" onClick={() => setEditing(true)}>Change my scorecard</button>
+      )}
+      {cards.hidden > 0 && <p className="muted">{cards.hidden} scorecard{cards.hidden > 1 ? "s" : ""} hidden until you submit yours.</p>}
+      {cards.summary && (
+        <p className="hr-score-summary"><b className="is-yes">{cards.summary.yes} yes</b> <b className="is-maybe">{cards.summary.maybe} maybe</b> <b className="is-no">{cards.summary.no} no</b>
+          {" · "}{Object.entries(cards.summary.averages).map(([skill, value]) => `${skill} ${value}`).join(" · ")}</p>
+      )}
+      <ul className="hr-cards">
+        {cards.cards.map((card) => (
+          <li key={card.interviewer + card.submitted_at}>
+            <div><strong>{card.is_mine ? "You" : card.interviewer}</strong> <b className={`hr-decision is-${card.decision}`}>{DECISION[card.decision]}</b></div>
+            <small className="muted">{Object.entries(card.ratings).map(([skill, value]) => `${skill} ${value}/4`).join(" · ")}</small>
+            {card.note && <p>{card.note}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function MyInterviews({ accessToken, onOpen }: { accessToken: string; onOpen: (applicationId: string) => void }) {
+  const [items, setItems] = useState<(InterviewView & { application_id: string; candidate: string; job_title: string; scorecard_done: boolean })[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    apiRequest<{ interviews: NonNullable<typeof items> }>("/hr/my-interviews", accessToken)
+      .then((r) => setItems(r.interviews)).catch((reason) => setError(message(reason, "Your interviews could not be loaded.")));
+  }, [accessToken]);
+  return (
+    <div className="control-panel hr-my-interviews">
+      <div className="panel-heading"><h2>My interviews</h2><p className="muted">Candidates you interview. Open one to read their application and fill in your scorecard.</p></div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {!items ? <p className="muted">Loading…</p> : items.length === 0 ? <p className="muted">You have no interviews.</p> : (
+        <ul>
+          {items.map((item) => (
+            <li key={item.id}>
+              <button type="button" className="hr-candidate" onClick={() => onOpen(item.application_id)}>
+                <span className="hr-initials" aria-hidden="true">{initials(item.candidate)}</span>
+                <span><strong>{item.candidate}</strong><small>{item.job_title} · {item.starts_at ? chinaTime(item.starts_at) : INTERVIEW_STATUS[item.status]}</small></span>
+                <small className={item.status === "completed" && !item.scorecard_done ? "hr-when is-late" : "hr-when"}>
+                  {item.status === "completed" ? (item.scorecard_done ? "Scored" : "Score now") : INTERVIEW_STATUS[item.status].split(" ")[0]}
+                </small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

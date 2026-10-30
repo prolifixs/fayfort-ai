@@ -8,7 +8,7 @@ import "./bookings.css";
  * The assistant and administrators see everything and manage the CEO's calendar; everyone else sees what they host
  * and keeps their own hours. Tours keep their own tab here until they move onto the calendar.
  */
-export type BookingKind = "consultation" | "session" | "tour";
+export type BookingKind = "consultation" | "session" | "tour" | "interview";
 export type BookingStatus = "held" | "confirmed" | "completed" | "no_show" | "cancelled";
 export type Booking = {
   id: string;
@@ -41,7 +41,7 @@ type Me = { user_id: string; staff_role: string; sees_all: boolean; admin: boole
 type Tab = "list" | "calendar" | "hours" | "tours";
 type ListView = "needs_action" | "today" | "upcoming" | "past";
 
-export const KIND_LABEL: Record<BookingKind, string> = { consultation: "Consultation", session: "Session", tour: "Tour" };
+export const KIND_LABEL: Record<BookingKind, string> = { consultation: "Consultation", session: "Session", tour: "Tour", interview: "Interview" };
 export const STATUS_LABEL: Record<BookingStatus, string> = {
   held: "Waiting for payment",
   confirmed: "Confirmed",
@@ -290,7 +290,7 @@ export function BookingDetail({
         )}
         {booking.topic && (
           <div className="booking-full">
-            <dt>What they want to discuss</dt>
+            <dt>{booking.kind === "interview" ? "Candidate" : "What they want to discuss"}</dt>
             <dd>{booking.topic}</dd>
           </div>
         )}
@@ -304,7 +304,13 @@ export function BookingDetail({
         </ul>
       )}
 
-      {manages && live && (
+      {booking.kind === "interview" && (
+        <p className="booking-interview-note">
+          A job interview. Open it in People to read the application and fill in your scorecard.{" "}
+          <a className="secondary-button" href={`/?page=people&booking=${booking.id}`}>Open the candidate</a>
+        </p>
+      )}
+      {manages && live && booking.kind !== "interview" && (
         <form
           className="booking-row"
           onSubmit={(event: FormEvent) => {
@@ -321,7 +327,7 @@ export function BookingDetail({
           </button>
         </form>
       )}
-      {!manages && booking.call_link && (
+      {(!manages || booking.kind === "interview") && booking.call_link && (
         <p>
           <a className="primary-button" href={booking.call_link} target="_blank" rel="noreferrer">
             Join the call
@@ -378,15 +384,17 @@ export function BookingDetail({
         )}
         {manages && live && (
           <>
-            <button type="button" className="secondary-button" onClick={() => setMode(mode === "move" ? "" : "move")}>
-              Move
-            </button>
+            {booking.kind !== "interview" && (
+              <button type="button" className="secondary-button" onClick={() => setMode(mode === "move" ? "" : "move")}>
+                Move
+              </button>
+            )}
             <button type="button" className="secondary-button danger" onClick={() => setMode(mode === "cancel" ? "" : "cancel")}>
-              Cancel booking
+              {booking.kind === "interview" ? "I can't make this time" : "Cancel booking"}
             </button>
           </>
         )}
-        {manages && booking.status === "confirmed" && started && (
+        {manages && booking.status === "confirmed" && started && booking.kind !== "interview" && (
           <>
             <button type="button" className="secondary-button" disabled={busy} onClick={() => void call("finish", { status: "completed" }, "Marked done.")}>
               Mark done

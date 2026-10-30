@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { PUBLIC_API } from '../../careers'
+import InterviewPicker, { type Interview } from './InterviewPicker'
 
 type Step = { key: string; label: string; state: 'done' | 'current' | 'todo' }
 type Status = {
   first_name: string; job_title: string; applied_at: string; stage: string; stage_label: string; closed: boolean
-  steps: Step[]; next: string; kept_until: string | null
+  steps: Step[]; next: string; kept_until: string | null; interview: Interview | null
 }
 
 const day = (value: string | null) =>
@@ -29,6 +30,26 @@ export default function ApplicationStatus({ token }: { token: string }) {
       })
       .catch(() => setState('missing'))
   }, [token])
+
+  async function interview(path: 'interview' | 'interview/change', body?: object) {
+    setBusy(true)
+    setError('')
+    try {
+      const response = await fetch(`${PUBLIC_API}/public/careers/status/${encodeURIComponent(token)}/${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'That didn’t work. Please try again.')
+      setStatus(result.application)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'That didn’t work. Please try again.')
+      // Times may have changed: load them again.
+      fetch(`${PUBLIC_API}/public/careers/status/${encodeURIComponent(token)}`, { cache: 'no-store' })
+        .then(async (r) => r.ok && setStatus(((await r.json()) as { application: Status }).application)).catch(() => undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function act(kind: 'withdraw' | 'delete') {
     setBusy(true)
@@ -84,6 +105,12 @@ export default function ApplicationStatus({ token }: { token: string }) {
                 </ol>
               )}
             </section>
+            {status.interview && (
+              <InterviewPicker interview={status.interview} busy={busy}
+                onPick={(startsAt, zone) => void interview('interview', { starts_at: startsAt, time_zone: zone })}
+                onChange={() => void interview('interview/change')} />
+            )}
+            {error && !confirm && <p className="apply-error" role="alert">{error}</p>}
             <section className="status-card">
               <h2>What happens next</h2>
               <p>{status.next}</p>

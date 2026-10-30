@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.settings import settings
-from app.hr import service
+from app.hr import interviews, service
 from app.hr.service import HrError
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class JobFields(BaseModel):
     questions: list[Question] | None = Field(default=None, max_length=5)
     trial_task: bool | None = None
     trial_paid: bool | None = None
+    skills: list[str] | None = Field(default=None, max_length=6)
 
 
 class JobStatus(BaseModel):
@@ -95,6 +96,43 @@ class StageMove(BaseModel):
 class Note(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1, max_length=2000)
+
+
+class InterviewPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interviewer_ids: list[UUID] = Field(min_length=1, max_length=4)
+    minutes: Literal[30, 45, 60, 90] = 30
+    window_days: int = Field(default=14, ge=3, le=30)
+    call_link: str | None = Field(default=None, max_length=500)
+    message: str | None = Field(default=None, max_length=1000)
+
+
+class InterviewPick(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    starts_at: str = Field(max_length=40)
+    time_zone: str | None = Field(default=None, max_length=60)
+
+
+class CancelInterview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    notify: bool = True
+
+
+class CallLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    call_link: str | None = Field(default=None, max_length=500)
+
+
+class Finish(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["completed", "no_show"]
+
+
+class Scorecard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ratings: dict[str, int] = Field(max_length=6)
+    decision: Literal["yes", "maybe", "no"]
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class Access(BaseModel):
@@ -160,6 +198,24 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
         if staff.get("role") != "platform_admin" and not service.worker_can_hire(staff["user_id"]):
             raise HTTPException(status_code=403, detail="Hiring is for HR staff. Ask the owner to give you HR access.")
         return staff
+
+    def can_hire(staff: dict) -> bool:
+        return staff.get("role") == "platform_admin" or service.worker_can_hire(staff["user_id"])
+
+    def staff_only(authorization: str | None) -> dict:
+        staff = trusted_fayfort_staff(authorization)
+        if not staff:
+            raise HTTPException(status_code=403, detail="Active FayFort staff access is required.")
+        return staff
+
+    def reader(authorization: str | None, application_id: str) -> tuple[dict, bool]:
+        """HR staff, or an interviewer of this application. Returns (staff, is_hr)."""
+        staff = staff_only(authorization)
+        if can_hire(staff):
+            return staff, True
+        if interviews.interviewer_of_application(application_id, staff["user_id"]):
+            return staff, False
+        raise HTTPException(status_code=403, detail="Only HR and this candidate's interviewers can open this.")
 
     def owner(authorization: str | None) -> dict:
         staff = trusted_fayfort_staff(authorization)
@@ -228,6 +284,22 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             raise _fail(exc, "That didn't work. Please try again.") from exc
         return {"deleted": True}
 
+    @router.post("/public/careers/status/{token}/interview")
+    def pick_time(token: str, payload: InterviewPick, request: Request):
+        status_limit.check(client_address(request))
+        try:
+            return {"application": interviews.pick(token, payload.starts_at, payload.time_zone)}
+        except Exception as exc:
+            raise _fail(exc, "That time couldn't be booked. Please try again.") from exc
+
+    @router.post("/public/careers/status/{token}/interview/change")
+    def change_time(token: str, request: Request):
+        status_limit.check(client_address(request))
+        try:
+            return {"application": interviews.candidate_change(token)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work. Please try again.") from exc
+
     # ---- HR staff ------------------------------------------------------------------------------------------------
     @router.get("/hr/me")
     def me(authorization: str | None = Header(default=None)):
@@ -237,9 +309,10 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
         is_owner = staff.get("role") == "platform_admin"
         try:
             can_hire = is_owner or service.worker_can_hire(staff["user_id"])
+            has_interviews = bool(interviews.my_interviews(staff["user_id"]))
         except Exception:
-            can_hire = False
-        return {"can_hire": can_hire, "is_owner": is_owner}
+            can_hire, has_interviews = is_owner, False
+        return {"can_hire": can_hire, "is_owner": is_owner, "has_interviews": has_interviews}
 
     @router.get("/hr/jobs")
     def jobs(authorization: str | None = Header(default=None)):
@@ -287,15 +360,23 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
 
     @router.get("/hr/applications/{application_id}")
     def application(application_id: UUID, authorization: str | None = Header(default=None)):
-        staff = hiring_staff(authorization)
+        staff, is_hr = reader(authorization, str(application_id))
         try:
-            return service.application_detail(str(application_id), staff["user_id"])
+            detail = service.application_detail(str(application_id), staff["user_id"])
+            detail["scorecards"] = interviews.scorecards_for(str(application_id), staff["user_id"], sees_all=is_hr)
+            detail["can_manage"] = is_hr
+            if not is_hr:
+                # Interviewers see the application, not HR's notes or the candidate's contact details.
+                detail["events"] = [e for e in detail["events"] if e["kind"] != "note"]
+                detail["candidate"] = {k: detail["candidate"].get(k) for k in ("full_name", "location", "languages")}
+                detail["other_applications"] = []
+            return detail
         except Exception as exc:
             raise _fail(exc, "The application could not be loaded.") from exc
 
     @router.get("/hr/applications/{application_id}/cv")
     def cv(application_id: UUID, authorization: str | None = Header(default=None)):
-        staff = hiring_staff(authorization)
+        staff, _is_hr = reader(authorization, str(application_id))
         try:
             return {"url": service.cv_link(str(application_id), staff["user_id"])}
         except Exception as exc:
@@ -317,6 +398,81 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             return service.add_note(str(application_id), payload.text, staff["user_id"])
         except Exception as exc:
             raise _fail(exc, "The note could not be saved.") from exc
+
+    # ---- Interviews and scorecards -------------------------------------------------------------------------------
+    @router.get("/hr/interviewers")
+    def interviewer_options(authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return {"workers": [w for w in service.hr_team() if w["status"] == "active"]}
+        except Exception as exc:
+            raise _fail(exc, "The team could not be loaded.") from exc
+
+    @router.post("/hr/applications/{application_id}/interviews", status_code=201)
+    def propose(application_id: UUID, payload: InterviewPlan, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            fields = payload.model_dump()
+            fields["interviewer_ids"] = [str(i) for i in payload.interviewer_ids]
+            interviews.propose(str(application_id), fields, staff["user_id"])
+            return service.application_detail(str(application_id), staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "The interview couldn't be arranged.") from exc
+
+    @router.post("/hr/interviews/{interview_id}/cancel")
+    def cancel_interview(interview_id: UUID, payload: CancelInterview, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"interview": interviews.view(interviews.cancel(str(interview_id), staff["user_id"], payload.notify))}
+        except Exception as exc:
+            raise _fail(exc, "The interview couldn't be cancelled.") from exc
+
+    @router.put("/hr/interviews/{interview_id}/link")
+    def interview_link(interview_id: UUID, payload: CallLink, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"interview": interviews.view(interviews.set_link(str(interview_id), payload.call_link, staff["user_id"]))}
+        except Exception as exc:
+            raise _fail(exc, "The link couldn't be saved.") from exc
+
+    @router.post("/hr/interviews/{interview_id}/finish")
+    def finish_interview(interview_id: UUID, payload: Finish, authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            if not can_hire(staff) and not interviews.is_interviewer(str(interview_id), staff["user_id"]):
+                raise HTTPException(status_code=403, detail="Only HR and the interviewers can mark this interview.")
+            return {"interview": interviews.view(interviews.finish(str(interview_id), payload.status, staff["user_id"]))}
+        except Exception as exc:
+            raise _fail(exc, "The interview couldn't be marked.") from exc
+
+    @router.post("/hr/interviews/{interview_id}/scorecard")
+    def scorecard(interview_id: UUID, payload: Scorecard, authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            interviews.submit_scorecard(str(interview_id), staff["user_id"], payload.ratings, payload.decision, payload.note)
+            interview = interviews.get(str(interview_id))
+            return {"scorecards": interviews.scorecards_for(str(interview["application_id"]), staff["user_id"],
+                                                            sees_all=can_hire(staff))}
+        except Exception as exc:
+            raise _fail(exc, "The scorecard couldn't be saved.") from exc
+
+    @router.get("/hr/my-interviews")
+    def my_interviews(authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            return {"interviews": interviews.my_interviews(staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "Your interviews could not be loaded.") from exc
+
+    @router.get("/hr/interviews/by-booking/{booking_id}")
+    def by_booking(booking_id: UUID, authorization: str | None = Header(default=None)):
+        staff = staff_only(authorization)
+        try:
+            found = interviews.by_booking(str(booking_id))
+            reader(authorization, str(found["application_id"]))
+            return found
+        except Exception as exc:
+            raise _fail(exc, "That interview could not be found.") from exc
 
     # ---- Owner ---------------------------------------------------------------------------------------------------
     @router.get("/hr/access")

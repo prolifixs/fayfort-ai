@@ -18,6 +18,8 @@ const detail = {
   candidate: { full_name: "Amaka Obi", email: "amaka@example.com", phone: null, location: "Lagos", languages: "English", retain_until: "2027-10-30" },
   job: { id: "j1", title: "Sourcing agent", trial_task: false }, other_applications: [],
   events: [{ id: "e1", kind: "applied", detail: {}, created_at: "2026-10-30T10:00:00Z" }],
+  interviews: [], can_manage: true,
+  scorecards: { skills: ["Mandarin", "Market knowledge"], count: 0, hidden: 0, can_score: false, mine: null, cards: [], summary: null },
 };
 
 beforeEach(() => {
@@ -26,6 +28,15 @@ beforeEach(() => {
     if (url.endsWith("/hr/jobs") && init?.method === "POST") return ok({ job: { ...job, id: "j2", title: JSON.parse(String(init.body)).title } }, 201);
     if (url.includes("/hr/jobs/j1/status")) return ok({ job: { ...job, status: "open" } });
     if (url.endsWith("/hr/jobs")) return ok({ jobs: [job], ...options });
+    if (url.includes("/hr/interviewers")) return ok({ workers: [{ user_id: "w1", name: "Ada", job_title: "HR lead" }, { user_id: "w2", name: "Ben", job_title: null }] });
+    if (url.includes("/hr/applications/a1/interviews")) return ok({ ...detail, interviews: [{ id: "i1", status: "proposed", minutes: 45, window_days: 14,
+      starts_at: null, ends_at: null, candidate_time_zone: null, call_link: null, message: null, reschedule_count: 0, interviewers: [{ worker_id: "w1", name: "Ada", booking_id: null }] }] }, 201);
+    if (url.includes("/hr/my-interviews")) return ok({ interviews: [{ id: "i9", status: "completed", minutes: 30, window_days: 14, starts_at: "2026-10-29T03:00:00Z",
+      ends_at: "2026-10-29T03:30:00Z", candidate_time_zone: null, call_link: null, message: null, reschedule_count: 0, application_id: "a1",
+      candidate: "Amaka Obi", job_title: "Sourcing agent", scorecard_done: false }] });
+    if (url.includes("/hr/interviews/i9/scorecard")) return ok({ scorecards: { ...detail.scorecards, count: 1, can_score: true,
+      mine: { ratings: { Mandarin: 4, "Market knowledge": 3 }, decision: "yes", note: null },
+      cards: [{ interviewer: "You", ratings: { Mandarin: 4, "Market knowledge": 3 }, decision: "yes", note: null, submitted_at: "2026-10-29T04:00:00Z", is_mine: true }], summary: null } });
     if (url.includes("/hr/applications/a1/stage")) return ok({ ...detail, application: { ...detail.application, stage: "interview" } });
     if (url.includes("/hr/applications/a1")) return ok(detail);
     if (url.includes("/hr/applications")) return ok({ close_reasons: ["Language skills", "Other"], emailed_stages: ["screening", "interview", "not_moving_forward"], applications: [{ id: "a1", job_id: "j1", job_title: "Sourcing agent", stage: "applied",
@@ -41,6 +52,40 @@ afterEach(() => {
 });
 
 describe("Control Center People", () => {
+  it("arranges an interview with chosen interviewers", async () => {
+    render(<PeoplePage accessToken="t" platformAdmin={false} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Applied" })).getByRole("button", { name: /Amaka Obi/ }));
+    const panel = await screen.findByRole("dialog", { name: "Amaka Obi" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Arrange an interview" }));
+    fireEvent.click(await within(panel).findByRole("checkbox", { name: /Ada/ }));
+    fireEvent.change(within(panel).getByLabelText("Length"), { target: { value: "45" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Send interview invitation" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/hr/applications/a1/interviews"),
+      expect.objectContaining({ body: JSON.stringify({ interviewer_ids: ["w1"], minutes: 45, window_days: 14, call_link: null, message: null }) })));
+    expect(await within(panel).findByText("Waiting for the candidate to pick a time")).toBeInTheDocument();
+  });
+
+  it("lets an interviewer without HR access score a candidate from My interviews", async () => {
+    detail.can_manage = false;
+    detail.scorecards = { ...detail.scorecards, can_score: true };
+    detail.interviews = [{ id: "i9", status: "completed", minutes: 30, window_days: 14, starts_at: "2026-10-29T03:00:00Z", ends_at: "2026-10-29T03:30:00Z",
+      candidate_time_zone: null, call_link: null, message: null, reschedule_count: 0 }] as never;
+    render(<PeoplePage accessToken="t" platformAdmin={false} canHire={false} hasInterviews />);
+    expect(screen.queryByRole("tab", { name: "Hiring" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Amaka Obi.*Score now/ }));
+    const panel = await screen.findByRole("dialog", { name: "Amaka Obi" });
+    expect(within(panel).queryByRole("button", { name: "Arrange an interview" })).not.toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Stage")).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("radio", { name: "Mandarin: 4" }));
+    fireEvent.click(within(panel).getByRole("radio", { name: "Market knowledge: 3" }));
+    fireEvent.click(within(panel).getByRole("radio", { name: "Yes" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Submit scorecard" }));
+    expect(await within(panel).findByText("You")).toBeInTheDocument();
+    detail.can_manage = true;
+    detail.interviews = [];
+    detail.scorecards = { ...detail.scorecards, can_score: false };
+  });
+
   it("lists jobs and applications by stage, opens a candidate and moves them on", async () => {
     render(<PeoplePage accessToken="t" platformAdmin={false} />);
     expect(screen.queryByRole("tab", { name: "HR access" })).not.toBeInTheDocument();
