@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1, H2 and H3 built 30 Oct 2026 (section 10).** H4 is next.
+30 Oct 2026 (section 9). H1 to H4 built 30 Oct 2026 (section 10): a complete hiring flow.** H5 (people records) is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -275,4 +275,21 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
 - **Interviewers without HR access** get People → My interviews, and can open their candidates (answers, CV, activity,
   no contact details or HR notes) from there or from the interview booking.
 - **Deleting details** cancels open interviews and replaces the candidate's name on bookings.
-- **Not yet:** offers, accept by link and the Hire button (H4).
+
+### H4 Offers and hiring (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261103090000_hr_hiring_h4.sql` adds `hr_offers`, `hr_settings` (offer letter
+  template, usual probation, how long offers stay open), `hr_employment`, `hired_worker_id` on applications and the
+  `hiring` staff notice.
+- **Making an offer:** job title, desks, role (team member or the CEO's assistant), type, location, start date,
+  probation, hours a week, extra terms and how many days it stays open. "Preview the letter" fills the template; HR can
+  edit the letter before sending. Pay is never part of it: the letter says pay is agreed separately.
+- **Answering:** the candidate reads the letter on their private page, ticks that they accept and types their full name
+  (it must match their application). The name, time and internet address are kept as the signature. They can decline
+  with an optional reason. HR staff and administrators get a notice either way. Unanswered offers expire.
+- **Hire:** opens once the offer is accepted. It sends the existing staff invitation (a new account, or a link to join
+  for someone who already has a FayFort account) with the role, desks and job title from the offer, starts the
+  employment record (start date, probation end, hours) and marks the application Hired. Hired people are never
+  anonymised. The welcome tour and first-week checklist start when they first open the Operations Center.
+- **HR settings:** People → Settings holds the offer letter template (with its placeholders), the usual probation and
+  how long offers stay open.

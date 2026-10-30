@@ -28,6 +28,12 @@ beforeEach(() => {
     if (url.endsWith("/hr/jobs") && init?.method === "POST") return ok({ job: { ...job, id: "j2", title: JSON.parse(String(init.body)).title } }, 201);
     if (url.includes("/hr/jobs/j1/status")) return ok({ job: { ...job, status: "open" } });
     if (url.endsWith("/hr/jobs")) return ok({ jobs: [job], ...options });
+    if (url.includes("/offer-preview")) return ok({ letter: "Dear Amaka Obi,\n\nWe are delighted…", offer: {} });
+    if (url.includes("/hr/applications/a1/offers")) return ok({ ...detail, application: { ...detail.application, stage: "offer" },
+      offers: [{ id: "o1", status: "sent", job_title: "Sourcing agent", departments: ["sourcing"], staff_role: "staff", start_date: "2026-11-16",
+        expires_on: "2026-11-06", letter: "Dear Amaka Obi", signature_name: null, responded_at: null, decline_reason: null }] }, 201);
+    if (url.includes("/hr/applications/a1/hire")) return ok({ ...detail, invitation: "new_account", application: { ...detail.application, stage: "hired" } });
+    if (url.includes("/hr/settings")) return ok({ settings: { offer_template: "Dear {name}", is_default_template: false, probation_months: 3, offer_days: 7, placeholders: ["name", "job_title"] } });
     if (url.includes("/hr/interviewers")) return ok({ workers: [{ user_id: "w1", name: "Ada", job_title: "HR lead" }, { user_id: "w2", name: "Ben", job_title: null }] });
     if (url.includes("/hr/applications/a1/interviews")) return ok({ ...detail, interviews: [{ id: "i1", status: "proposed", minutes: 45, window_days: 14,
       starts_at: null, ends_at: null, candidate_time_zone: null, call_link: null, message: null, reschedule_count: 0, interviewers: [{ worker_id: "w1", name: "Ada", booking_id: null }] }] }, 201);
@@ -52,6 +58,30 @@ afterEach(() => {
 });
 
 describe("Control Center People", () => {
+  it("writes an offer, previews the letter and sends it", async () => {
+    render(<PeoplePage accessToken="t" platformAdmin={false} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Applied" })).getByRole("button", { name: /Amaka Obi/ }));
+    const panel = await screen.findByRole("dialog", { name: "Amaka Obi" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Make an offer" }));
+    fireEvent.click(within(panel).getByRole("checkbox", { name: "Sourcing desk" }));
+    fireEvent.change(within(panel).getByLabelText("Hours a week"), { target: { value: "40" } });
+    expect(within(panel).getByRole("button", { name: "Send the offer" })).toBeDisabled();
+    fireEvent.click(within(panel).getByRole("button", { name: "Preview the letter" }));
+    expect(await within(panel).findByLabelText(/Offer letter/)).toHaveValue("Dear Amaka Obi,\n\nWe are delighted…");
+    fireEvent.click(within(panel).getByRole("button", { name: "Send the offer" }));
+    expect(await within(panel).findByText("Sent, waiting for an answer")).toBeInTheDocument();
+    const sent = fetchMock.mock.calls.find(([url]) => String(url).includes("/hr/applications/a1/offers"));
+    expect(JSON.parse(String(sent?.[1]?.body))).toMatchObject({ departments: ["sourcing"], hours_per_week: 40, staff_role: "staff", letter: "Dear Amaka Obi,\n\nWe are delighted…" });
+  });
+
+  it("shows the HR settings with the offer letter template", async () => {
+    render(<PeoplePage accessToken="t" platformAdmin={false} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    expect(await screen.findByLabelText("Offer letter template")).toHaveValue("Dear {name}");
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/hr/settings"), expect.objectContaining({ method: "PUT" })));
+  });
+
   it("arranges an interview with chosen interviewers", async () => {
     render(<PeoplePage accessToken="t" platformAdmin={false} />);
     fireEvent.click(within(await screen.findByRole("region", { name: "Applied" })).getByRole("button", { name: /Amaka Obi/ }));

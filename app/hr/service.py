@@ -460,14 +460,21 @@ def status_view(token: str) -> dict:
     steps = [{"key": key, "label": STAGE_LABELS[key],
               "state": "done" if index < reached or stage == "hired" else "current" if index == reached else "todo"}
              for index, key in enumerate(STAGES) if key != "trial_task" or job.get("trial_task")]
-    from app.hr import interviews
-    interview = interviews.public_view(application) if stage not in CLOSED else None
+    from app.hr import interviews, offers
+    interview = interviews.public_view(application) if stage not in CLOSED + ["offer", "hired"] else None
+    offer = offers.public_view(application) if stage in ("offer", "hired") else None
     next_step = NEXT_STEPS[stage]
+    if offer and offer["status"] == "sent" and not offer["expired"]:
+        next_step = "Read your offer above. To accept it, type your full name and press Accept."
+    elif offer and offer["status"] == "accepted" and stage != "hired":
+        next_step = "Thank you for accepting. Your FayFort staff invitation will arrive by email."
+    elif offer and offer["status"] == "declined":
+        next_step = "You declined this offer. Thank you for letting us know."
     if interview and interview["status"] == "proposed":
         next_step = "Pick a time for your interview above. We'll confirm it by email."
     elif interview and interview["status"] == "scheduled":
         next_step = "Your interview is booked. We'll remind you the day before and an hour before."
-    return {"interview": interview,
+    return {"interview": interview, "offer": offer,
             "first_name": (candidate.get("full_name") or "").split(" ")[0], "job_title": job["title"],
             "applied_at": application["created_at"], "stage": stage, "stage_label": STAGE_LABELS[stage],
             "closed": stage in CLOSED, "steps": steps, "next": next_step,
@@ -509,6 +516,12 @@ def anonymise_candidate(candidate_id: str) -> None:
             if interview["status"] in ("proposed", "scheduled"):
                 db().table("hr_interviews").update({"status": "cancelled"}).eq("id", interview["id"]).execute()
             db().table("hr_interviews").update({"candidate_time_zone": None}).eq("id", interview["id"]).execute()
+        if application["stage"] != "hired":
+            db().table("hr_offers").update({"letter": "(Removed when the candidate's details were deleted.)",
+                                            "signature_name": None, "signature_ip": None, "extra_terms": None}) \
+                .eq("application_id", application["id"]).execute()
+            db().table("hr_offers").update({"status": "withdrawn"}).eq("application_id", application["id"]) \
+                .in_("status", ["sent", "accepted"]).execute()
         db().table("hr_applications").update({
             "cv_path": None, "cv_name": None, "cv_type": None, "answers": [], "portfolio_url": None, "token_hash": None,
             "stage": application["stage"] if application["stage"] in CLOSED + ["hired"] else "withdrew",
@@ -589,9 +602,10 @@ def application_detail(application_id: str, actor_id: str) -> dict:
                   .order("created_at").limit(200).execute())
     job = get_job(application["job_id"])
     application.pop("token_hash", None)
-    from app.hr import interviews
+    from app.hr import interviews, offers
     return {"application": {**application, "has_cv": bool(application.get("cv_path"))},
             "interviews": interviews.for_application(application_id),
+            "offers": offers.for_application(application_id),
             "candidate": {k: candidate.get(k) for k in ("id", "full_name", "email", "phone", "location", "languages",
                                                         "retain_until", "anonymised_at")},
             "job": {"id": job["id"], "title": job["title"], "trial_task": job.get("trial_task"),
@@ -633,7 +647,7 @@ def move_stage(application_id: str, stage: str, reason: str | None, actor_id: st
     if application["stage"] in ("withdrew", "hired"):
         raise HrError("This application is closed.", 409)
     if stage == "hired":
-        raise HrError("Hiring opens with offers in the next HR release.", 409)
+        raise HrError("Hire someone with the Hire button once they have accepted the offer.", 409)
     if stage == "not_moving_forward" and not clean(reason, 300):
         raise HrError("Add a short reason. It stays inside FayFort.", 422)
     db().table("hr_applications").update({"stage": stage, "close_reason": clean(reason, 300) if stage in CLOSED else None,
@@ -686,6 +700,8 @@ async def hr_loop() -> None:
     while True:
         try:
             counts = await asyncio.to_thread(interviews.sweep)
+            from app.hr import offers
+            counts["offers_expired"] = await asyncio.to_thread(offers.expire)
             if any(counts.values()):
                 logger.info("Interview sweep: %s", counts)
             if time.monotonic() - last_retention > 6 * 3600:

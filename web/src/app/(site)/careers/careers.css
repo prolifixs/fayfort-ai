@@ -131,3 +131,11 @@
 .status-when { display: grid; gap: 4px; }
 .status-when strong { color: var(--ink); font-family: Fraunces, var(--serif); font-size: 22px; font-weight: 450; }
 .status-text-button { background: none; border: 0; color: var(--blue); cursor: pointer; font: inherit; font-weight: 600; justify-self: start; min-height: 44px; padding: 0; text-decoration: underline; }
+
+/* The offer letter */
+.status-offer { border: 2px solid var(--blue); }
+.offer-letter { background: #fbfbfd; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); font-family: Fraunces, var(--serif); font-size: 16px; line-height: 1.65; max-height: 420px; overflow-y: auto; padding: 18px; white-space: pre-wrap; }
+.offer-letter:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.offer-accept { display: grid; gap: 12px; }
+.offer-accept label:not(.apply-consent) { color: var(--ink); display: grid; font-size: 13px; font-weight: 650; gap: 6px; }
+.offer-accept input:not([type=checkbox]), .offer-accept textarea { border: 1px solid #7a84a6; border-radius: 10px; color: var(--ink); font: inherit; font-size: 16px; font-weight: 400; min-height: 46px; padding: 10px 12px; width: 100%; }

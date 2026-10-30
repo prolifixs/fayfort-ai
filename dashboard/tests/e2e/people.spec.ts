@@ -88,3 +88,30 @@ test("a candidate with a booked interview and scorecards", async ({ page }) => {
   await panel.getByRole("heading", { name: "Interview" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/hr/people-interview-scorecard-laptop.png" });
 });
+
+test("an accepted offer and the Hire button", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signedInStaff(page);
+  const offer = { id: "o1", status: "accepted", job_title: "Sourcing agent", departments: ["sourcing"], staff_role: "staff", start_date: "2026-11-16",
+    expires_on: "2026-11-06", letter: "Dear Amaka Obi,\n\nWe are delighted to offer you the role of Sourcing agent at FAYFORT International Trading.",
+    signature_name: "Amaka Obi", responded_at: new Date().toISOString(), decline_reason: null };
+  const withOffer = { ...detail, can_manage: true, application: { ...detail.application, stage: "offer" }, interviews: [], offers: [offer],
+    scorecards: { skills: [], count: 2, hidden: 0, can_score: false, mine: null, cards: [], summary: null } };
+  let hired = false;
+  await page.route("**/hr/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [job], departments: {}, job_types: {}, locations: {} } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications: applications.map((a, i) => (i === 0 ? { ...a, stage: "offer" } : a)), close_reasons: [], emailed_stages: [] } });
+    if (path.endsWith("/hire")) { hired = true; return route.fulfill({ json: { ...withOffer, invitation: "new_account", application: { ...withOffer.application, stage: "hired" } } }); }
+    if (path.startsWith("/hr/applications/")) return route.fulfill({ json: withOffer });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?page=people");
+  await page.getByRole("region", { name: "Offer" }).getByRole("button", { name: /Amaka Obi/ }).click();
+  const panel = page.getByRole("dialog", { name: "Amaka Obi" });
+  await panel.getByRole("heading", { name: "Offer" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/hr/people-offer-accepted-laptop.png" });
+  await panel.getByRole("button", { name: "Hire Amaka" }).click();
+  await expect(panel.getByText("Hired. Their staff invitation is on its way by email.")).toBeVisible();
+  expect(hired).toBe(true);
+});

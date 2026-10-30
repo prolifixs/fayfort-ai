@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.settings import settings
-from app.hr import interviews, service
+from app.hr import interviews, offers, service
 from app.hr.service import HrError
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,34 @@ class Scorecard(BaseModel):
     ratings: dict[str, int] = Field(max_length=6)
     decision: Literal["yes", "maybe", "no"]
     note: str | None = Field(default=None, max_length=2000)
+
+
+class OfferFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_title: str | None = Field(default=None, max_length=80)
+    departments: list[str] = Field(default_factory=list, max_length=6)
+    staff_role: Literal["staff", "assistant"] = "staff"
+    job_type: str | None = Field(default=None, max_length=20)
+    location: str | None = Field(default=None, max_length=20)
+    start_date: str = Field(max_length=10)
+    probation_months: int | None = Field(default=None, ge=0, le=12)
+    hours_per_week: int | None = Field(default=None, ge=1, le=60)
+    extra_terms: str | None = Field(default=None, max_length=2000)
+    expires_in_days: int | None = Field(default=None, ge=1, le=30)
+    letter: str | None = Field(default=None, max_length=12000)
+
+
+class OfferAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    signature: str | None = Field(default=None, max_length=120)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class HrSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    offer_template: str | None = Field(default=None, max_length=8000)
+    probation_months: int | None = Field(default=None, ge=0, le=12)
+    offer_days: int | None = Field(default=None, ge=1, le=30)
 
 
 class Access(BaseModel):
@@ -297,6 +325,23 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
         status_limit.check(client_address(request))
         try:
             return {"application": interviews.candidate_change(token)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work. Please try again.") from exc
+
+    @router.post("/public/careers/status/{token}/offer/accept")
+    def accept_offer(token: str, payload: OfferAnswer, request: Request):
+        address = client_address(request)
+        status_limit.check(address)
+        try:
+            return {"application": offers.accept(token, payload.signature or "", address)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work. Please try again.") from exc
+
+    @router.post("/public/careers/status/{token}/offer/decline")
+    def decline_offer(token: str, payload: OfferAnswer, request: Request):
+        status_limit.check(client_address(request))
+        try:
+            return {"application": offers.decline(token, payload.reason)}
         except Exception as exc:
             raise _fail(exc, "That didn't work. Please try again.") from exc
 
@@ -473,6 +518,58 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             return found
         except Exception as exc:
             raise _fail(exc, "That interview could not be found.") from exc
+
+    # ---- Offers and hiring ---------------------------------------------------------------------------------------
+    @router.get("/hr/settings")
+    def hr_settings(authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return {"settings": offers.settings()}
+        except Exception as exc:
+            raise _fail(exc, "HR settings could not be loaded.") from exc
+
+    @router.put("/hr/settings")
+    def save_hr_settings(payload: HrSettings, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"settings": offers.save_settings(payload.model_dump(exclude_unset=True), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "HR settings could not be saved.") from exc
+
+    @router.post("/hr/applications/{application_id}/offer-preview")
+    def offer_preview(application_id: UUID, payload: OfferFields, authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return offers.preview(str(application_id), payload.model_dump())
+        except Exception as exc:
+            raise _fail(exc, "The offer letter couldn't be prepared.") from exc
+
+    @router.post("/hr/applications/{application_id}/offers", status_code=201)
+    def send_offer(application_id: UUID, payload: OfferFields, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            offers.send(str(application_id), payload.model_dump(), staff["user_id"])
+            return service.application_detail(str(application_id), staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "The offer couldn't be sent.") from exc
+
+    @router.post("/hr/offers/{offer_id}/withdraw")
+    def withdraw_offer(offer_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            offer = offers.withdraw(str(offer_id), staff["user_id"])
+            return service.application_detail(str(offer["application_id"]), staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "The offer couldn't be withdrawn.") from exc
+
+    @router.post("/hr/applications/{application_id}/hire")
+    def hire(application_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            result = offers.hire(str(application_id), staff["user_id"])
+            return {**result, **service.application_detail(str(application_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The hire couldn't be completed.") from exc
 
     # ---- Owner ---------------------------------------------------------------------------------------------------
     @router.get("/hr/access")

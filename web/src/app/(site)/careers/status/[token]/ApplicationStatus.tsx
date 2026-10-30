@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { PUBLIC_API } from '../../careers'
 import InterviewPicker, { type Interview } from './InterviewPicker'
+import OfferCard, { type Offer } from './OfferCard'
 
 type Step = { key: string; label: string; state: 'done' | 'current' | 'todo' }
 type Status = {
   first_name: string; job_title: string; applied_at: string; stage: string; stage_label: string; closed: boolean
-  steps: Step[]; next: string; kept_until: string | null; interview: Interview | null
+  steps: Step[]; next: string; kept_until: string | null; interview: Interview | null; offer: Offer | null
 }
 
 const day = (value: string | null) =>
@@ -31,7 +32,7 @@ export default function ApplicationStatus({ token }: { token: string }) {
       .catch(() => setState('missing'))
   }, [token])
 
-  async function interview(path: 'interview' | 'interview/change', body?: object) {
+  async function interview(path: 'interview' | 'interview/change' | 'offer/accept' | 'offer/decline', body?: object) {
     setBusy(true)
     setError('')
     try {
@@ -105,6 +106,11 @@ export default function ApplicationStatus({ token }: { token: string }) {
                 </ol>
               )}
             </section>
+            {status.offer && (
+              <OfferCard offer={status.offer} name={status.first_name} busy={busy}
+                onAccept={(signature) => void interview('offer/accept', { signature })}
+                onDecline={(reason) => void interview('offer/decline', { reason: reason || null })} />
+            )}
             {status.interview && (
               <InterviewPicker interview={status.interview} busy={busy}
                 onPick={(startsAt, zone) => void interview('interview', { starts_at: startsAt, time_zone: zone })}

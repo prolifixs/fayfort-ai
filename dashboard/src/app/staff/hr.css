@@ -134,3 +134,16 @@
 .hr-cards li { display: grid; gap: 4px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
 .hr-cards p { margin: 0; font-size: var(--text-sm); }
 .hr-my-interviews ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+/* H4: offers, hiring and HR settings */
+.hr-offer { display: grid; gap: var(--space-2); }
+.hr-chips { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.hr-chips .hr-check { font-weight: var(--weight-medium); }
+.hr-arrange input[type=date], .hr-arrange input[type=number], .hr-arrange input:not([type]) { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 400; }
+.hr-letter { margin: 8px 0 0; padding: var(--space-3); max-height: 320px; overflow: auto; border-radius: var(--radius-sm); background: var(--color-surface); font-family: var(--font-display, Georgia), serif; font-size: var(--text-sm); white-space: pre-wrap; }
+.hr-letter-edit { font-family: var(--font-display, Georgia), serif; line-height: 1.55; }
+.hr-hired { margin: 0; padding: var(--space-3); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); font-weight: var(--weight-strong); }
+.people-page .text-link-button { justify-self: start; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; text-align: left; }
+.people-page .text-link-button:hover { text-decoration: underline; }
+.hr-panel .text-link-button { justify-self: start; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; text-align: left; }
+.hr-panel .text-link-button:hover { text-decoration: underline; }

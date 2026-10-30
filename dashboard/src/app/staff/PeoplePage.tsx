@@ -39,6 +39,7 @@ type Detail = {
   other_applications: { id: string; stage: string }[];
   events: { id: string; kind: string; detail: Record<string, string>; created_at: string }[];
   interviews?: InterviewView[];
+  offers?: OfferRow[];
   scorecards?: Scorecards;
   can_manage?: boolean;
 };
@@ -58,7 +59,7 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
   accessToken: string; platformAdmin: boolean; canHire?: boolean; hasInterviews?: boolean;
 }) {
   const hiring = platformAdmin || canHire;
-  const [tab, setTab] = useState<"hiring" | "team" | "access" | "interviews">(() => {
+  const [tab, setTab] = useState<"hiring" | "team" | "access" | "interviews" | "settings">(() => {
     // Old links (?page=workforce, a worker profile, #timesheets) open the Team tab.
     const query = new URLSearchParams(window.location.search);
     if (platformAdmin && (query.get("page") === "workforce" || query.get("worker") || window.location.hash === "#timesheets")) return "team";
@@ -75,7 +76,9 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
   const tabs = [
     ...(hiring ? [["hiring", "Hiring"]] : []),
     ...(hasInterviews || !hiring ? [["interviews", "My interviews"]] : []),
-    ...(platformAdmin ? [["team", "Team"], ["access", "HR access"]] : []),
+    ...(platformAdmin ? [["team", "Team"]] : []),
+    ...(hiring ? [["settings", "Settings"]] : []),
+    ...(platformAdmin ? [["access", "HR access"]] : []),
   ] as [typeof tab, string][];
   return (
     <div className="people-page">
@@ -89,6 +92,7 @@ export function PeoplePage({ accessToken, platformAdmin, canHire = true, hasInte
         </div>
       )}
       {tab === "hiring" && hiring && <HiringPanel accessToken={accessToken} />}
+      {tab === "settings" && hiring && <HrSettingsPanel accessToken={accessToken} />}
       {tab === "interviews" && <MyInterviews accessToken={accessToken} onOpen={setOpened} />}
       {opened && <CandidatePanel accessToken={accessToken} applicationId={opened} meta={{ close_reasons: [], emailed_stages: [] }} onClose={() => setOpened(null)} onChanged={() => undefined} />}
       {tab === "team" && platformAdmin && <WorkforcePage accessToken={accessToken} />}
@@ -581,9 +585,10 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
                 <dl className="hr-answers">{detail.application.answers.map((a) => <div key={a.label}><dt>{a.label}</dt><dd>{a.answer || "No answer"}</dd></div>)}</dl>
               </section>
             )}
-            <InterviewSection accessToken={accessToken} detail={detail} canManage={manage} onChanged={reload} />
+            {(detail.application.stage !== "hired" && (detail.application.stage !== "offer" || (detail.interviews || []).length > 0)) && <InterviewSection accessToken={accessToken} detail={detail} canManage={manage} onChanged={reload} />}
             <ScorecardSection key={detail.scorecards?.count ?? 0} accessToken={accessToken} detail={detail}
               onSaved={(cards) => { setDetail((d) => (d ? { ...d, scorecards: cards } : d)); onChanged(); }} />
+            {manage && <OfferSection accessToken={accessToken} detail={detail} onChanged={reload} />}
             {!closed && (
               <section className="hr-move"><h3>Move to</h3>
                 <select aria-label="Stage" value={stage} onChange={(e) => setStage(e.target.value)}>
@@ -613,7 +618,10 @@ function CandidatePanel({ accessToken, applicationId, meta, onClose, onChanged }
                       : event.kind === "interview_proposed" ? "Interview invitation sent" : event.kind === "interview_scheduled" ? "Interview time booked"
                       : event.kind === "interview_cancelled" ? (event.detail.again ? "Interview time released, picking again" : "Interview cancelled")
                       : event.kind === "interview_done" ? (event.detail.status === "no_show" ? "Interview: no-show" : "Interview done")
-                      : event.kind === "scorecard" ? `Scorecard: ${DECISION[event.detail.decision] || ""}` : event.kind}</span>
+                      : event.kind === "scorecard" ? `Scorecard: ${DECISION[event.detail.decision] || ""}`
+                      : event.kind === "offer_sent" ? "Offer sent" : event.kind === "offer_accepted" ? "Offer accepted"
+                      : event.kind === "offer_declined" ? "Offer declined" : event.kind === "offer_withdrawn" ? "Offer withdrawn"
+                      : event.kind === "offer_expired" ? "Offer expired" : event.kind === "hired" ? "Hired: staff invitation sent" : event.kind}</span>
                     <small>{new Date(event.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small>
                   </li>
                 ))}
@@ -847,6 +855,156 @@ function MyInterviews({ accessToken, onOpen }: { accessToken: string; onOpen: (a
         </ul>
       )}
     </div>
+  );
+}
+
+// ---- Offers and hiring (H4) --------------------------------------------------------------------------------------------
+type OfferRow = {
+  id: string; status: "sent" | "accepted" | "declined" | "withdrawn" | "expired"; job_title: string; departments: string[];
+  staff_role: string; start_date: string; expires_on: string; letter: string; signature_name: string | null;
+  responded_at: string | null; decline_reason: string | null;
+};
+const DESKS: [string, string][] = [["conversation_intake", "Conversation intake"], ["sourcing", "Sourcing desk"], ["fulfillment", "Fulfillment"],
+  ["disputes", "Disputes"], ["member_support", "Member support"], ["store_team", "Store team"]];
+const OFFER_STATUS: Record<OfferRow["status"], string> = { sent: "Sent, waiting for an answer", accepted: "Accepted", declined: "Declined", withdrawn: "Withdrawn", expired: "Expired" };
+const inDays = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+
+function OfferSection({ accessToken, detail, onChanged }: { accessToken: string; detail: Detail; onChanged: (detail?: Detail) => void }) {
+  const offersList = detail.offers || [];
+  const current = offersList.find((o) => o.status === "sent" || o.status === "accepted") || null;
+  const hired = detail.application.stage === "hired";
+  const [writing, setWriting] = useState(false);
+  const [form, setForm] = useState({ job_title: detail.job.title, departments: [] as string[], staff_role: "staff", job_type: "", location: "",
+    start_date: inDays(14), probation_months: "", hours_per_week: "", extra_terms: "", expires_in_days: "7" });
+  const [letter, setLetter] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
+  const set = (key: keyof typeof form, value: string | string[]) => setForm((f) => ({ ...f, [key]: value }));
+  const body = () => ({
+    job_title: form.job_title, departments: form.departments, staff_role: form.staff_role, job_type: form.job_type || null, location: form.location || null,
+    start_date: form.start_date, probation_months: form.probation_months === "" ? null : Number(form.probation_months),
+    hours_per_week: form.hours_per_week === "" ? null : Number(form.hours_per_week), extra_terms: form.extra_terms || null,
+    expires_in_days: Number(form.expires_in_days) || null,
+  });
+  async function call<T>(path: string, payload: object | null, after: (result: T) => void) {
+    setBusy(true);
+    setError("");
+    try {
+      after(await apiRequest<T>(path, accessToken, { method: "POST", body: payload ? JSON.stringify(payload) : undefined }));
+    } catch (reason) {
+      setError(message(reason, "That didn't work."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (["withdrew", "not_moving_forward"].includes(detail.application.stage) && !current) return null;
+
+  return (
+    <section className="hr-offer"><h3>Offer</h3>
+      {hired ? (
+        <p className="hr-hired">Hired. Their staff invitation was sent{current ? ` for ${current.job_title}, starting ${new Date(current.start_date).toLocaleDateString(undefined, { day: "numeric", month: "long" })}` : ""}.</p>
+      ) : current ? (
+        <div className="hr-interview-card">
+          <p><span className={`hr-status is-${current.status === "accepted" ? "open" : "paused"}`}>{OFFER_STATUS[current.status]}</span>
+            {current.status === "sent" && <span className="muted"> · open until {new Date(current.expires_on).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>}
+            {current.signature_name && <span className="muted"> · signed “{current.signature_name}”</span>}</p>
+          <details><summary>Read the offer letter</summary><pre className="hr-letter">{current.letter}</pre></details>
+          {current.status === "accepted" && (
+            <>
+              <p className="muted">Hire sends their FayFort staff invitation with the role, desks and job title from the offer, and starts their employment record.</p>
+              <button type="button" className="primary-button" disabled={busy}
+                onClick={() => void call<Detail & { invitation?: string }>(`/hr/applications/${detail.application.id}/hire`, null, (result) => {
+                  setDone(result.invitation === "existing_account" ? "Hired. They already had a FayFort account, so they were emailed a link to join the team." : "Hired. Their staff invitation is on its way by email.");
+                  onChanged(result);
+                })}>Hire {(detail.candidate.full_name || "").split(" ")[0]}</button>
+            </>
+          )}
+          <button type="button" className="text-link-button" disabled={busy} onClick={() => void call<Detail>(`/hr/offers/${current.id}/withdraw`, null, (result) => onChanged(result))}>Withdraw the offer</button>
+        </div>
+      ) : writing ? (
+        <form className="hr-arrange" onSubmit={(e) => { e.preventDefault(); void call<Detail>(`/hr/applications/${detail.application.id}/offers`, { ...body(), letter: letter || null }, (result) => { setWriting(false); onChanged(result); }); }}>
+          <label>Job title<input value={form.job_title} maxLength={80} onChange={(e) => set("job_title", e.target.value)} /></label>
+          <fieldset><legend>Desks</legend>
+            <div className="hr-chips">{DESKS.map(([key, label]) => (
+              <label key={key} className="hr-check"><input type="checkbox" checked={form.departments.includes(key)}
+                onChange={(e) => set("departments", e.target.checked ? [...form.departments, key] : form.departments.filter((d) => d !== key))} />{label}</label>
+            ))}</div>
+          </fieldset>
+          <div className="hr-grid">
+            <label>Role<select value={form.staff_role} onChange={(e) => set("staff_role", e.target.value)}><option value="staff">Team member</option><option value="assistant">Personal assistant to the CEO</option></select></label>
+            <label>Start date<input type="date" value={form.start_date} min={inDays(0)} onChange={(e) => set("start_date", e.target.value)} /></label>
+            <label>Job type<select value={form.job_type} onChange={(e) => set("job_type", e.target.value)}><option value="">As the job</option><option value="full_time">Full time</option><option value="part_time">Part time</option><option value="contract">Contract</option><option value="internship">Internship</option></select></label>
+            <label>Location<select value={form.location} onChange={(e) => set("location", e.target.value)}><option value="">As the job</option><option value="guangzhou">Guangzhou office</option><option value="remote">Remote</option><option value="both">Guangzhou or remote</option></select></label>
+            <label>Probation (months)<input type="number" min={0} max={12} placeholder="Usual" value={form.probation_months} onChange={(e) => set("probation_months", e.target.value)} /></label>
+            <label>Hours a week<input type="number" min={1} max={60} placeholder="As agreed" value={form.hours_per_week} onChange={(e) => set("hours_per_week", e.target.value)} /></label>
+            <label>Open for (days)<input type="number" min={1} max={30} value={form.expires_in_days} onChange={(e) => set("expires_in_days", e.target.value)} /></label>
+          </div>
+          <label>Extra terms (optional)<textarea rows={2} maxLength={2000} value={form.extra_terms} onChange={(e) => set("extra_terms", e.target.value)} /></label>
+          <p className="muted">Pay isn't part of the online offer: agree it with the person separately.</p>
+          {letter ? (
+            <label>Offer letter (you can edit it before sending)<textarea className="hr-letter-edit" rows={14} value={letter} onChange={(e) => setLetter(e.target.value)} /></label>
+          ) : (
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => void call<{ letter: string }>(`/hr/applications/${detail.application.id}/offer-preview`, body(), (r) => setLetter(r.letter))}>Preview the letter</button>
+          )}
+          <div className="hr-editor-actions">
+            <button type="button" className="secondary-button" onClick={() => setWriting(false)}>Cancel</button>
+            <button type="submit" className="primary-button" disabled={busy || !letter}>{busy ? "Sending…" : "Send the offer"}</button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" className="secondary-button" onClick={() => setWriting(true)}>Make an offer</button>
+      )}
+      {offersList.filter((o) => o !== current && !hired).length > 0 && (
+        <p className="muted">Earlier offers: {offersList.filter((o) => o !== current).map((o) => `${OFFER_STATUS[o.status]}${o.decline_reason ? ` (“${o.decline_reason}”)` : ""}`).join(", ")}</p>
+      )}
+      {done && <p className="email-delivery ok" role="status">{done}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+function HrSettingsPanel({ accessToken }: { accessToken: string }) {
+  const [data, setData] = useState<{ offer_template: string; is_default_template: boolean; probation_months: number; offer_days: number; placeholders: string[] } | null>(null);
+  const [template, setTemplate] = useState("");
+  const [probation, setProbation] = useState(3);
+  const [days, setDays] = useState(7);
+  const [state, setState] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    apiRequest<{ settings: NonNullable<typeof data> }>("/hr/settings", accessToken).then((r) => {
+      setData(r.settings); setTemplate(r.settings.offer_template); setProbation(r.settings.probation_months); setDays(r.settings.offer_days);
+    }).catch((reason) => setError(message(reason, "HR settings could not be loaded.")));
+  }, [accessToken]);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setState("Saving…");
+    setError("");
+    try {
+      const r = await apiRequest<{ settings: NonNullable<typeof data> }>("/hr/settings", accessToken, { method: "PUT", body: JSON.stringify({ offer_template: template, probation_months: probation, offer_days: days }) });
+      setData(r.settings);
+      setState("Saved.");
+    } catch (reason) {
+      setState("");
+      setError(message(reason, "HR settings could not be saved."));
+    }
+  }
+  if (!data) return error ? <p className="form-error" role="alert">{error}</p> : <p className="muted">Loading…</p>;
+  return (
+    <form className="control-panel hr-editor" onSubmit={save} aria-label="HR settings">
+      <div className="panel-heading"><h2>HR settings</h2><p className="muted">Used for every new offer. Leave allowances come with time off.</p></div>
+      <div className="hr-grid">
+        <label>Usual probation (months)<input type="number" min={0} max={12} value={probation} onChange={(e) => setProbation(Number(e.target.value))} /></label>
+        <label>Offers stay open for (days)<input type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} /></label>
+      </div>
+      <label>Offer letter template<textarea className="hr-letter-edit" rows={18} value={template} onChange={(e) => setTemplate(e.target.value)} /></label>
+      <p className="muted">Words in curly brackets are filled in: {data.placeholders.map((p) => `{${p}}`).join(" ")}</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="hr-editor-actions">
+        {state && <span className="muted" role="status">{state}</span>}
+        <button type="submit" className="primary-button">Save settings</button>
+      </div>
+    </form>
   );
 }
 
