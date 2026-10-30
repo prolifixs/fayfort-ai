@@ -1,3 +1,4 @@
+import { MyHr } from "./PeopleRecords";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
 import { AccountSecuritySection } from "../auth/MemberSecuritySection";
@@ -78,6 +79,7 @@ export function StaffAccountPage({
         </section>
       )}
       {isWorker && <MyTeamProfile accessToken={accessToken} />}
+      {isWorker && <MyHr accessToken={accessToken} />}
       <div className="control-panel">
         <AccountSecuritySection audience="staff" email={email} hasPassword />
       </div>

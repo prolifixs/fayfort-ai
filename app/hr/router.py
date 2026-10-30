@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config.settings import settings
-from app.hr import interviews, offers, service
+from app.hr import interviews, offers, people, service
 from app.hr.service import HrError
 
 logger = logging.getLogger(__name__)
@@ -161,6 +161,59 @@ class HrSettings(BaseModel):
     offer_template: str | None = Field(default=None, max_length=8000)
     probation_months: int | None = Field(default=None, ge=0, le=12)
     offer_days: int | None = Field(default=None, ge=1, le=30)
+
+
+class PersonFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_title: str | None = Field(default=None, max_length=80)
+    job_type: str | None = Field(default=None, max_length=20)
+    location: str | None = Field(default=None, max_length=20)
+    start_date: str | None = Field(default=None, max_length=10)
+    probation_end: str | None = Field(default=None, max_length=10)
+    hours_per_week: int | None = Field(default=None, ge=1, le=60)
+    manager_id: UUID | None = None
+    status: Literal["starting", "active"] | None = None
+    legal_name: str | None = Field(default=None, max_length=120)
+    preferred_name: str | None = Field(default=None, max_length=80)
+    phone: str | None = Field(default=None, max_length=40)
+    country: str | None = Field(default=None, max_length=80)
+    city: str | None = Field(default=None, max_length=80)
+    date_of_birth: str | None = Field(default=None, max_length=10)
+    emergency_name: str | None = Field(default=None, max_length=120)
+    emergency_relationship: str | None = Field(default=None, max_length=60)
+    emergency_phone: str | None = Field(default=None, max_length=40)
+
+
+class MyDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    legal_name: str | None = Field(default=None, max_length=120)
+    preferred_name: str | None = Field(default=None, max_length=80)
+    phone: str | None = Field(default=None, max_length=40)
+    country: str | None = Field(default=None, max_length=80)
+    city: str | None = Field(default=None, max_length=80)
+    date_of_birth: str | None = Field(default=None, max_length=10)
+    emergency_name: str | None = Field(default=None, max_length=120)
+    emergency_relationship: str | None = Field(default=None, max_length=60)
+    emergency_phone: str | None = Field(default=None, max_length=40)
+
+
+class Probation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["pass", "extend"]
+    months: int | None = Field(default=None, ge=1, le=6)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class PolicyFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(max_length=120)
+    summary: str | None = Field(default=None, max_length=300)
+    body: str = Field(default="", max_length=30000)
+
+
+class PolicyAccept(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
 
 
 class Access(BaseModel):
@@ -570,6 +623,177 @@ def create_hr_router(trusted_fayfort_staff: Callable[[str | None], dict | None])
             return {**result, **service.application_detail(str(application_id), staff["user_id"])}
         except Exception as exc:
             raise _fail(exc, "The hire couldn't be completed.") from exc
+
+    # ---- People records, documents and policies (H5) -------------------------------------------------------------
+    @router.get("/hr/people")
+    def team(authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return {"people": people.team()}
+        except Exception as exc:
+            raise _fail(exc, "The team could not be loaded.") from exc
+
+    @router.get("/hr/people/{worker_id}")
+    def person(worker_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The record could not be loaded.") from exc
+
+    @router.put("/hr/people/{worker_id}")
+    def update_person(worker_id: UUID, payload: PersonFields, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            fields = payload.model_dump(exclude_unset=True)
+            if fields.get("manager_id"):
+                fields["manager_id"] = str(fields["manager_id"])
+            people.update(str(worker_id), fields, staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The record could not be saved.") from exc
+
+    @router.post("/hr/people/{worker_id}/probation")
+    def probation(worker_id: UUID, payload: Probation, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            people.probation(str(worker_id), payload.decision, payload.months, payload.note, staff["user_id"])
+            return {"person": people.person(str(worker_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "Probation could not be updated.") from exc
+
+    @router.post("/hr/people/{worker_id}/documents", status_code=201)
+    async def add_document(worker_id: UUID, request: Request, kind: str = Query(max_length=20),
+                           title: str = Query(max_length=120), name: str | None = Query(default=None, max_length=160),
+                           visible: bool = Query(default=True), authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        content = bytearray()
+        async for chunk in request.stream():
+            content.extend(chunk)
+            if len(content) > people.MAX_BYTES:
+                raise HTTPException(status_code=413, detail="Documents must be 10 MB or smaller.")
+        try:
+            people.add_document(str(worker_id), kind, title, name, content_type, bytes(content), staff["user_id"], visible)
+            return {"documents": people.documents_for(str(worker_id))}
+        except Exception as exc:
+            raise _fail(exc, "The document could not be saved.") from exc
+
+    @router.get("/hr/documents/{document_id}")
+    def open_document(document_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return people.document_link(str(document_id), staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "The document could not be opened.") from exc
+
+    @router.delete("/hr/documents/{document_id}")
+    def remove_document(document_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            people.remove_document(str(document_id), staff["user_id"])
+            return {"removed": True}
+        except Exception as exc:
+            raise _fail(exc, "The document could not be removed.") from exc
+
+    @router.get("/hr/policies")
+    def list_policies(authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return {"policies": people.policies()}
+        except Exception as exc:
+            raise _fail(exc, "Policies could not be loaded.") from exc
+
+    @router.post("/hr/policies", status_code=201)
+    def new_policy(payload: PolicyFields, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"policy": people.save_policy(None, payload.model_dump(), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The policy could not be saved.") from exc
+
+    @router.put("/hr/policies/{policy_id}")
+    def edit_policy(policy_id: UUID, payload: PolicyFields, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"policy": people.save_policy(str(policy_id), payload.model_dump(), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The policy could not be saved.") from exc
+
+    @router.post("/hr/policies/{policy_id}/publish")
+    def publish_policy(policy_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"policy": people.publish(str(policy_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The policy could not be published.") from exc
+
+    @router.post("/hr/policies/{policy_id}/archive")
+    def archive_policy(policy_id: UUID, authorization: str | None = Header(default=None)):
+        staff = hiring_staff(authorization)
+        try:
+            return {"policy": people.archive(str(policy_id), staff["user_id"])}
+        except Exception as exc:
+            raise _fail(exc, "The policy could not be archived.") from exc
+
+    @router.get("/hr/policies/{policy_id}/acknowledgements")
+    def policy_acks(policy_id: UUID, authorization: str | None = Header(default=None)):
+        hiring_staff(authorization)
+        try:
+            return people.acknowledgements(str(policy_id))
+        except Exception as exc:
+            raise _fail(exc, "Could not load who has read it.") from exc
+
+    # ---- My HR (every active team member) -----------------------------------------------------------------------
+    def team_member(authorization: str | None) -> dict:
+        staff = staff_only(authorization)
+        if staff.get("role") == "platform_admin":
+            worker = service.one(service.db().table("fayfort_workers").select("user_id,status").eq("user_id", staff["user_id"])
+                                 .limit(1).execute())
+            if not worker:
+                raise HTTPException(status_code=404, detail="My HR is for people on the FayFort team.")
+        return staff
+
+    @router.get("/hr/my")
+    def my_hr(authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            return people.mine(staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "My HR could not be loaded.") from exc
+
+    @router.put("/hr/my/details")
+    def my_details(payload: MyDetails, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            people.update(staff["user_id"], payload.model_dump(exclude_unset=True), staff["user_id"], own=True)
+            return people.mine(staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "Your details could not be saved.") from exc
+
+    @router.get("/hr/my/documents/{document_id}")
+    def my_document(document_id: UUID, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            return people.document_link(str(document_id), staff["user_id"], own_worker=staff["user_id"])
+        except Exception as exc:
+            raise _fail(exc, "The document could not be opened.") from exc
+
+    @router.get("/hr/my/policies/{policy_id}")
+    def my_policy(policy_id: UUID, authorization: str | None = Header(default=None)):
+        team_member(authorization)
+        try:
+            return {"policy": people.read_policy(str(policy_id))}
+        except Exception as exc:
+            raise _fail(exc, "The policy could not be loaded.") from exc
+
+    @router.post("/hr/my/policies/{policy_id}/accept")
+    def accept_policy(policy_id: UUID, payload: PolicyAccept, authorization: str | None = Header(default=None)):
+        staff = team_member(authorization)
+        try:
+            return {"policies": people.accept_policy(str(policy_id), staff["user_id"], payload.version)}
+        except Exception as exc:
+            raise _fail(exc, "That didn't work. Please try again.") from exc
 
     # ---- Owner ---------------------------------------------------------------------------------------------------
     @router.get("/hr/access")

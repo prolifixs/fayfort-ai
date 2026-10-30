@@ -1,7 +1,7 @@
 # HR and hiring: structure and design plan
 
 Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
-30 Oct 2026 (section 9). H1 to H4 built 30 Oct 2026 (section 10): a complete hiring flow.** H5 (people records) is next.
+30 Oct 2026 (section 9). H1 to H5 built 30 Oct 2026 (section 10).** H6 (time off) is next.
 
 Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
 link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
@@ -293,3 +293,22 @@ to this document and the system map. H1 to H4 give you a working hiring flow; H5
   anonymised. The welcome tour and first-week checklist start when they first open the Operations Center.
 - **HR settings:** People → Settings holds the offer letter template (with its placeholders), the usual probation and
   how long offers stay open.
+
+### H5 People records, documents and policies (30 Oct 2026)
+
+- **Database:** `supabase/migrations/20261104090000_hr_people_h5.sql` adds personal details and an emergency contact to
+  `hr_employment`, the timeline `hr_employment_events`, `hr_documents` with the private `hr-documents` bucket (PDF,
+  Word or images, 10 MB), `hr_policies` with versions and `hr_policy_acknowledgements`. It also adds three starter
+  policy drafts (code of conduct, customer data handling, working hours) for HR to check and publish.
+- **Records (People → Records):** everyone on the team with their status (starting, active), probation reviews that are
+  due and policies they still have to read. A record opens automatically for people who joined before HR existed. HR
+  edits the job (title, manager, type, location, start date, probation end, hours) and personal details; changing the
+  job title also updates it on the worker. Probation: pass, or extend by 1 to 3 months. A timeline shows what happened.
+- **Documents:** HR uploads contracts, certificates and other files, chooses whether the person can see each one, and can
+  remove them. The signed offer from Hire is the first document and stays. Every opening is recorded. No ID documents.
+- **Policies (People → Policies):** write, save, then Publish (with a confirmation). Publishing asks every active team
+  member to read and accept it, with a notice; edits to a published policy stay unpublished until published again as
+  a new version, which asks everyone again. HR sees who has accepted the current version.
+- **My HR (My account, for every team member):** their job, policies to read (with a badge), their documents and their
+  own personal details and emergency contact, which only HR sees.
+

@@ -64,7 +64,7 @@ export const descriptions: Record<string, string> = {
   "Member Requests": "Assigned member sourcing and purchasing requests with verified milestone updates.",
   "Theme Studio": "Create, preview, publish, and archive member themes using safe design tokens.",
   Infrastructure: "Cloudflare tunnels, public hostnames and webhook endpoints for the FayFort platform.",
-  People: "Hiring (jobs and candidates), the team directory, roles, who is online and HR access.",
+  People: "Hiring, people records, documents and staff policies, the team directory and HR access.",
   "My account": "Your password, sign-in email, sessions and two-step verification.",
   Emails: "What FayFort emails customers, what was sent, and the newsletter.",
 };

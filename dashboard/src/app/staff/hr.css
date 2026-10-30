@@ -147,3 +147,44 @@
 .people-page .text-link-button:hover { text-decoration: underline; }
 .hr-panel .text-link-button { justify-self: start; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; text-align: left; }
 .hr-panel .text-link-button:hover { text-decoration: underline; }
+
+/* H5: records, policies and My HR */
+.hr-people-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); margin: 0; padding: 0; list-style: none; }
+.hr-person-card { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px var(--space-2); width: 100%; height: 100%; padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.hr-person-card:hover { border-color: var(--accent); }
+.hr-person-card .hr-initials { width: 40px; height: 40px; overflow: hidden; }
+.hr-person-card .hr-initials img { width: 100%; height: 100%; object-fit: cover; }
+.hr-person-card > span:nth-child(2) { display: grid; min-width: 0; }
+.hr-person-card small { color: var(--color-muted); font-size: var(--text-xs); }
+.hr-person-flags { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 2; }
+.hr-flag { padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: var(--text-xs); }
+.hr-flag.is-due { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
+.hr-status.is-closed { background: var(--color-surface); }
+.hr-probation { padding: var(--space-3); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+.hr-probation h3 { margin-top: 0; }
+.hr-record-form { display: grid; gap: var(--space-2); }
+.hr-record-form h3 { margin: 0; }
+.hr-record-form p { margin: 0; }
+.hr-record-form label, .hr-upload label { display: grid; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.hr-record-form input, .hr-record-form select, .hr-upload input:not([type=checkbox]), .hr-upload select, .hr-editor input:not([type=checkbox]):not([type=radio]) { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-text); font: inherit; font-weight: 400; }
+.hr-record-form > button, .hr-upload > button { justify-self: start; }
+.hr-documents, .hr-upload { display: grid; gap: var(--space-2); }
+.hr-upload { padding: var(--space-3); border: 1px dashed var(--color-border); border-radius: var(--radius-md); }
+.hr-upload p { margin: 0; }
+.hr-doc-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hr-doc-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--color-border-subtle); }
+.hr-doc-list li > span:first-child { display: grid; flex: 1 1 200px; min-width: 0; }
+.hr-policy-row { display: grid; flex: 1 1 260px; gap: 2px; padding: 4px 0; border: 0; background: none; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.hr-policy-row:hover strong { color: var(--accent); }
+.hr-confirm { padding: var(--space-3); border: 1px solid var(--color-warning); border-radius: var(--radius-md); }
+.hr-confirm p { margin: 0 0 8px; }
+.hr-scrim-top { z-index: 90; }
+.hr-reader { z-index: 91; width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.hr-policy-text { max-height: 50vh; overflow-y: auto; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface); font-family: var(--font-display, Georgia), serif; line-height: 1.6; white-space: pre-wrap; }
+.my-hr { display: grid; gap: var(--space-3); }
+.my-hr-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.my-hr-card { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
+.my-hr-card h3 { margin: 0; }
+.my-hr .panel-heading h2 { display: flex; align-items: center; gap: 8px; }
+/* Six tabs for owners: wrap on small screens instead of pushing the page sideways. */
+.people-page > .team-tabs { flex-wrap: wrap; }

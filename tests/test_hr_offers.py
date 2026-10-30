@@ -121,6 +121,9 @@ class HireTests(OfferCase):
                          (NEW_WORKER, "2026-11-16", "2027-02-16", 40))
         application = self.db.rows["hr_applications"][0]
         self.assertEqual((application["stage"], application["hired_worker_id"]), ("hired", NEW_WORKER))
+        # The signed offer is the first document on their record, and their timeline starts.
+        self.assertEqual((self.db.rows["hr_documents"][0]["kind"], self.db.rows["hr_documents"][0]["title"]), ("offer", "Signed offer: Sourcing agent"))
+        self.assertEqual(self.db.rows["hr_employment_events"][0]["kind"], "hired")
         again = self.client.post(f"/hr/applications/{application_id}/hire", headers=self.auth("hr"))
         self.assertEqual(again.status_code, 409)
 

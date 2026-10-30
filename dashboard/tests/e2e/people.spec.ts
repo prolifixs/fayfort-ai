@@ -115,3 +115,45 @@ test("an accepted offer and the Hire button", async ({ page }) => {
   await expect(panel.getByText("Hired. Their staff invitation is on its way by email.")).toBeVisible();
   expect(hired).toBe(true);
 });
+
+test("records: the team and one person's record", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signedInStaff(page);
+  const personal = { legal_name: "Benjamin Li", preferred_name: "Ben", phone: "+86 138 0000 0000", country: "China", city: "Guangzhou", date_of_birth: null, emergency_name: "Mei Li", emergency_relationship: "Sister", emergency_phone: "+86 139 0000 0000" };
+  const team = [
+    { worker_id: "w1", name: "Ada Eze", photo_url: null, staff_role: "staff", job_title: "HR lead", start_date: "2025-06-02", status: "active", has_record: true, probation_due: false, probation_end: null, policies_to_read: 0 },
+    { worker_id: "w2", name: "Ben Li", photo_url: null, staff_role: "staff", job_title: "Sourcing agent", start_date: "2026-07-01", status: "active", has_record: true, probation_due: true, probation_end: "2026-10-01", policies_to_read: 1 },
+    { worker_id: "w3", name: "Amaka Obi", photo_url: null, staff_role: "staff", job_title: "Sourcing agent", start_date: "2026-11-16", status: "starting", has_record: true, probation_due: false, probation_end: "2027-02-16", policies_to_read: 3 },
+  ];
+  const person = { worker_id: "w2", name: "Ben Li", photo_url: null, staff_role: "staff", account_status: "active", status: "active", desks: ["Sourcing desk"],
+    job: { job_title: "Sourcing agent", job_type: "full_time", location: "guangzhou", start_date: "2026-07-01", probation_end: "2026-10-01", hours_per_week: 40, manager_id: "w1", status: "active", probation_passed_at: null },
+    manager_name: "Ada Eze", personal,
+    documents: [{ id: "d1", kind: "offer", kind_label: "Offer letter", title: "Signed offer: Sourcing agent", file_name: null, file_size: null, offer_id: "o1", visible_to_worker: true, created_at: "2026-06-20T00:00:00Z" },
+      { id: "d2", kind: "contract", kind_label: "Contract", title: "Employment contract", file_name: "contract.pdf", file_size: 120000, offer_id: null, visible_to_worker: true, created_at: "2026-06-28T00:00:00Z" }],
+    policies: [{ id: "p1", title: "Code of conduct", summary: "", version: 1, published_at: "2026-09-01", accepted_at: "2026-09-02T00:00:00Z", accepted_before: false },
+      { id: "p2", title: "Customer data handling", summary: "", version: 2, published_at: "2026-10-28", accepted_at: null, accepted_before: true }],
+    timeline: [{ id: "e2", kind: "policy_accepted", detail: { title: "Code of conduct" }, created_at: "2026-09-02T00:00:00Z", actor_name: "Ben Li" },
+      { id: "e1", kind: "hired", detail: { job_title: "Sourcing agent" }, created_at: "2026-06-20T00:00:00Z", actor_name: "Ada Eze" }] };
+  await page.route("**/hr/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/hr/jobs") return route.fulfill({ json: { jobs: [], departments: {}, job_types: {}, locations: {} } });
+    if (path === "/hr/applications") return route.fulfill({ json: { applications: [], close_reasons: [], emailed_stages: [] } });
+    if (path === "/hr/people") return route.fulfill({ json: { people: team } });
+    if (path.startsWith("/hr/people/")) return route.fulfill({ json: { person } });
+    if (path === "/hr/policies") return route.fulfill({ json: { policies: [
+      { id: "p1", title: "Code of conduct", summary: "How we treat members, suppliers and each other.", body: "", status: "published", version: 1, published_at: "2026-09-01", has_changes: false, accepted: 3, team_size: 3 },
+      { id: "p2", title: "Customer data handling", summary: "Keeping members' details private and safe.", body: "", status: "published", version: 2, published_at: "2026-10-28", has_changes: false, accepted: 1, team_size: 3 },
+      { id: "p3", title: "Working hours and shifts", summary: "Clocking in, breaks and being reachable.", body: "", status: "draft", version: 0, published_at: null, has_changes: true, accepted: 0, team_size: 3 }] } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/?page=people");
+  await page.getByRole("tab", { name: "Policies" }).click();
+  await expect(page.getByText("v2 · 1/3 accepted")).toBeVisible();
+  await page.getByRole("heading", { name: "Policies", exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/hr/people-policies-laptop.png" });
+  await page.getByRole("tab", { name: "Records" }).click();
+  await page.getByRole("button", { name: /Ben Li/ }).click();
+  await expect(page.getByRole("dialog", { name: "Ben Li" }).getByRole("button", { name: "Pass probation" })).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "test-results/hr/people-record-laptop.png" });
+});

@@ -149,6 +149,8 @@ export const PAGE_GUIDES: Record<string, PageGuide> = {
     steps: [
       { title: "Post a job", how: "Hiring → New job: title, desk, type, location, description, what they'll do, what you're looking for and up to 5 screening questions. Save it, then press Open on the careers page. It appears on fayfort.com/careers." },
       { title: "Read applications", how: "Applications are grouped by stage. Open one to see the answers, open the CV (every opening is recorded), add notes and move it on. Not moving forward needs a short reason that stays inside FayFort." },
+      { title: "Keep records", how: "Records: open anyone on the team to keep their job, manager, dates, hours, personal details and emergency contact, add documents (never ID documents) and pass or extend probation when it's due." },
+      { title: "Publish policies", how: "Policies: write or edit a policy, then Publish. Everyone is asked to read and accept it in My account → My HR, and you see who has. Changing a published policy and publishing again asks everyone again." },
       { title: "Give HR access", how: "HR access (owner only): switch it on for the people who run hiring. The CEO always has it." },
       { title: "Add someone who already has an account", how: "Add staff → Existing account: search their email, name or username, pick them, choose the role and departments, and press Send invitation. They open the emailed link, sign in with their usual account and press Accept. Their member account stays as it is." },
       { title: "Invite a new person", how: "Add staff → New person: enter their email, role and departments. They set a password from the email and are on the team. If the email already has an account, it is sent as an existing-account invitation instead." },

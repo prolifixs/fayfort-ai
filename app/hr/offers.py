@@ -294,6 +294,8 @@ def hire(application_id: str, actor_id: str, invite=None) -> dict:
     db().table("hr_applications").update({"stage": "hired", "hired_worker_id": worker_id, "stage_changed_at": service.now_iso(),
                                           "updated_at": service.now_iso()}).eq("id", application_id).execute()
     service.add_event(application_id, "hired", actor_id, {"invitation": result.get("kind")})
+    from app.hr import people
+    people.on_hired(worker_id, offer, actor_id)
     audit(actor_id, "hr.hired", {"application_id": application_id, "worker_id": worker_id})
     return {"worker_id": worker_id, "invitation": result.get("kind"), "email": candidate["email"]}
 
