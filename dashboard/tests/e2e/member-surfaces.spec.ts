@@ -8,6 +8,13 @@ for (const size of [{ n: "laptop", w: 1280, h: 800 }, { n: "phone", w: 390, h: 8
   await page.waitForTimeout(800);
   const shot = async (name: string) => { await page.waitForTimeout(350); await page.screenshot({ path: `test-results/facelift/surfaces-${name}-${size.n}.png` }); };
   const openAccount = async () => { if (size.n === "phone") await page.getByRole("button", { name: "Open menu" }).click(); await page.getByRole("button", { name: "Open member account menu" }).click(); };
+  if (size.n === "laptop") {
+    // Release C: kept chats carry a lock and a bright dot, and points sit in a pill under the name.
+    await expect(page.locator(".member-chat-row.kept")).toHaveCount(1);
+    await expect(page.locator(".member-chat-row.kept .member-chat-kept-icon")).toBeVisible();
+    await expect(page.locator(".mapp-account-button .mapp-points-pill")).toContainText("pts");
+    await shot("sidebar");
+  }
   await openAccount(); await shot("account-menu");
   await page.getByRole("menuitem", { name: /Virtual points/ }).click(); await shot("points"); await page.keyboard.press("Escape");
   await openAccount(); await page.getByRole("menuitem", { name: /Member tier/ }).click(); await shot("tier"); await page.keyboard.press("Escape");

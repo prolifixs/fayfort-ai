@@ -1,6 +1,10 @@
 # HR and hiring: structure and design plan
 
-Status: **proposed 27 Oct 2026, waiting for the owner's decisions (section 9).** Nothing is built yet.
+Status: **proposed 27 Oct 2026, checked against the code and given screen designs 30 Oct 2026, owner decisions taken
+30 Oct 2026 (section 9).** Ready to build H1.
+
+Screen designs: the "FayFort HR and hiring screens" canvas (careers page, role page and application, candidate status
+link on a phone, Control Center People → Hiring with a candidate open, Operations My HR).
 
 Owner ask: "an HR and hiring system, a simple platform that integrates with the system accordingly."
 
@@ -16,9 +20,10 @@ twice: **apply → screen → interview → trial task → offer → hire → st
 | --- | --- |
 | Staff invitations, roles (staff, assistant, CEO), job titles and departments (`fayfort_workers`, `app/workforce/onboarding.py`) | "Hire" sends the existing invitation with the role, desks and job title filled in from the offer |
 | Welcome tour and first-week checklist by desk (Operations R7) | The new hire's first days, unchanged |
-| Clock in and out, timesheets, corrections, CSV (`worker_shifts`) | Hours for pay summaries and time off |
+| Clock in and out, timesheets, corrections, CSV (`worker_shifts`) | Hours and time off |
 | Customer ratings, admin reviews, fresh start (`worker_ratings`, `worker_reviews`) | Performance and probation reviews |
-| Booking engine, CEO calendar, staff availability, Google Calendar plan | Interview slots and invitations |
+| Booking engine, CEO calendar, staff availability, Google Calendar plan | Interview slots and invitations. Interviews become a new booking kind (`interview`) so the existing no-overlap rule stops double booking an interviewer |
+| `staff_time_off` (booking engine: blocks a host's bookable slots) | Time off: extended with a leave type, status (requested, approved, declined), half days and the approver, instead of a new table. Only approved rows block slots |
 | Email system (Resend, templates, unsubscribe) and notifications | Candidate and staff emails |
 | Worker profile photo, presence, audit log (`app/workforce/audit.py`) | People records and an audit trail for every HR action |
 | Website (fayfort.com, brand fonts) and the /go pages | The public careers page |
@@ -31,9 +36,9 @@ twice: **apply → screen → interview → trial task → offer → hire → st
 | --- | --- | --- |
 | Candidates (public) | fayfort.com/careers and /careers/{job} | Open roles, the role page, the application form, a "we got it" page |
 | Candidates (after applying) | A private link in their email (/careers/status/{token}) | Their application status, interview time picker, trial task upload, offer to accept |
-| Owner, CEO and hiring managers | Control Center → **People** (replaces "FayFort Workers") | Hiring, Team (today's Workforce), Time off, Documents, Policies, Settings |
+| Owner, CEO and HR staff | Control Center → **People** (replaces "FayFort Workers") | Hiring, Team (today's Workforce), Time off, Documents, Policies, Settings |
 | Interviewers | Operations Center → **My work** | Interviews to run and scorecards to fill in, as work items |
-| Every staff member | Operations Center → **My account → My HR** | Own profile, time off, documents to sign, policies, pay summaries |
+| Every staff member | Operations Center → **My account → My HR** | Own profile, time off, documents to sign, policies |
 
 ### 3.2 Control Center → People
 
@@ -44,7 +49,8 @@ Tabs along the top, same layout as today's Workforce:
 3. **Time off:** requests to approve, a calendar of who's away, balances.
 4. **Documents:** contracts and signed policies per person, templates.
 5. **Policies:** the staff handbook pages and who has acknowledged each version.
-6. **Settings:** leave types and allowances, pay schedule, probation length, data retention, email wording.
+6. **Settings:** leave types and allowances (annual, sick and public holidays, changeable any time), probation length,
+   data retention, email wording.
 
 ### 3.3 Hiring pipeline
 
@@ -59,7 +65,7 @@ closing states at any point.
   Status: draft, open, paused, closed. Open jobs show on the careers page.
 - **Application form:** name, email, phone (WhatsApp), country and city, languages (English, Chinese, others), CV
   upload (PDF or Word, 5 MB), optional portfolio or LinkedIn link, the job's questions, how they heard about FayFort,
-  and consent to keep their details (section 7). Bot protection with the existing Turnstile check.
+  and consent to keep their details (section 7). Bot protection with the Turnstile check the app's sign-in already uses (the website's content security policy gets Turnstile's script and frame hosts added).
 - **Candidate card:** everything they sent, a CV preview, the stage history, notes, scorecards, emails sent, and a
   duplicate warning when the same email applied before.
 - **Board view:** columns per stage with drag and drop on a computer; a list grouped by stage on phones. Filters: job,
@@ -72,14 +78,14 @@ closing states at any point.
   1 hour before.
 - **Scorecard:** each interviewer rates 4 to 6 skills the job lists (1 to 4 stars) and gives Yes, Maybe or No with a
   note. The decision is only shown to others after they submit their own, so nobody is swayed.
-- **Trial task (optional per job):** a short paid or unpaid task with a brief and a due date; the candidate uploads
+- **Trial task (optional, set per job):** a short task, marked paid or unpaid on each job, with a brief and a due date; the candidate uploads
   the result from their link.
-- **Offer:** job title, desks, role, start date, job type, pay and currency, probation length, and a contract made
+- **Offer:** job title, desks, role, start date, job type, probation length, and a contract made
   from a template. The candidate accepts from their link (typed name and date as a simple signature, with the time and
   IP stored).
 - **Hire:** one button, available once the offer is accepted, that
   1. creates the staff invitation with the role, desks and job title (or links an existing FayFort account by email),
-  2. creates the employment record with the start date, probation end and pay,
+  2. creates the employment record with the start date and probation end,
   3. moves the signed offer and CV into the person's Documents,
   4. sets the first-week checklist to start on the start date.
 
@@ -89,9 +95,7 @@ Each team member's profile (today's Workforce profile) gains an **Employment** s
 
 - **Job:** title, desks, role, manager, job type, location, start date, probation end, contracted hours a week.
 - **Personal:** legal name, preferred name, phone, country, city, date of birth (optional), emergency contact.
-- **Pay** (owner and CEO only): rate, rate type (hourly or monthly), currency, pay schedule (weekly, every two weeks,
-  monthly), payment method note.
-- **Status timeline:** applied, hired, started, probation passed, role or pay changes, leave, finished; each change
+- **Status timeline:** applied, hired, started, probation passed, role changes, leave, finished; each change
   dated and audited.
 
 ### 3.5 Time off
@@ -106,18 +110,14 @@ Each team member's profile (today's Workforce profile) gains an **Employment** s
   they're on leave.
 - **Calendar:** a month view of who's away by desk, so coverage gaps are visible.
 
-### 3.6 Pay summaries (no payroll processing)
+### 3.6 Pay
 
-- Monthly or per pay period, from the timesheets: hours worked, breaks, approved time off, overtime above the
-  contracted hours, the rate, and the amount due.
-- The owner or CEO reviews, adjusts with a reason (bonus, deduction) and marks it **Paid** with the date and method.
-- Staff see their own summaries in My HR. CSV export for the accountant.
-- FayFort never sends money; paying stays outside the system, as you prefer for payments.
+Pay stays outside FayFort (owner decision 30 Oct 2026): no pay rates, pay summaries or payroll. Timesheets and their
+CSV export stay as they are.
 
 ### 3.7 Documents and policies
 
-- **Documents per person:** offer and contract, signed policies, ID copy (only if you decide to keep one, section 9),
-  certificates. A private storage bucket, signed links that expire, admin only, every view audited.
+- **Documents per person:** offer and contract, signed policies, certificates. ID documents are never stored. A private storage bucket, signed links that expire, admin only, every view audited.
 - **Templates:** offer letter and contract with fields filled from the offer.
 - **Policies:** handbook pages (conduct, customer data, working hours, leave, payments and refunds rules for staff).
   A new version asks everyone to read and acknowledge it in My HR; the People → Policies tab shows who hasn't.
@@ -126,14 +126,15 @@ Each team member's profile (today's Workforce profile) gains an **Employment** s
 
 - Probation review on the probation end date: a task for the manager with the person's ratings, hours, completed work
   and first-week checklist, and a Pass, Extend or End decision.
-- Regular reviews every 3 or 6 months (set in Settings) reuse the private admin review (Speed, Care, Accuracy) with a
-  note, plus the person's own short self-review from My HR.
+- Regular reviews every 3 or 6 months (set in Settings): three scores (speed, care, accuracy) and a note from the
+  manager, shown next to the person's customer ratings and hours, plus their own short self-review from My HR. Stored in
+  a new `hr_reviews` table (customer ratings stay in `worker_ratings`).
 
 ### 3.9 Offboarding
 
 A checklist from the profile's "Finish employment" button: last day, reason (internal), reassign their open work
 items and chats, cancel their future bookings, deactivate the account on the last day (the existing deactivate),
-final pay summary, return of equipment, exit note. The record stays read-only for the retention period.
+return of equipment, exit note. The record stays read-only for the retention period.
 
 ## 4. Data (new tables)
 
@@ -146,12 +147,12 @@ final pay summary, return of equipment, exit note. The record stays read-only fo
 | `hr_interviews` | Application, interviewers, time, link, status (uses the booking engine's slots) |
 | `hr_scorecards` | Interviewer, ratings per skill, decision, note |
 | `hr_offers` | Terms, contract document, accepted at, signature name, IP |
-| `hr_employment` | One per worker: job, manager, type, dates, hours, pay (pay columns readable by owner and CEO only) |
-| `hr_time_off` and `hr_leave_types` | Requests, approvals, allowances |
-| `hr_pay_periods` and `hr_pay_lines` | Summaries per person per period, adjustments, paid status |
+| `hr_employment` | One per worker: job, manager, type, dates, hours (no pay) |
+| `hr_leave_types` (+ new columns on the existing `staff_time_off`) | Allowances per type; requests and approvals live on `staff_time_off` |
+| `hr_reviews` | Probation and regular reviews: scores, notes, self-review, decision (there is no admin review table today) |
 | `hr_documents` and `hr_policies`, `hr_policy_acknowledgements` | Files and handbook versions |
 
-Row-level security as elsewhere: staff read only their own employment, time off, documents and pay; candidates are
+Row-level security as elsewhere: staff read only their own employment, time off and documents; candidates are
 reached only through their private link (token stored as a hash, like staff invitations). Two private buckets:
 `hr-cvs` and `hr-documents`.
 
@@ -170,8 +171,7 @@ Same design language as the facelift (Fraunces headings, Inter text, FayFort Nav
   per stage, candidate cards with photo initials, country flag, rating stars and days in stage). The candidate card
   opens as a side panel with tabs: Application, Interviews, Scorecards, Activity.
 - **Team profile:** today's worker profile with an Employment card, a Time off card (balance bars) and Documents.
-- **My HR (Operations, staff):** four cards: Time off (balance and Request), Pay (latest summary), Documents to sign,
-  Policies to read; badges on My account when something needs them.
+- **My HR (Operations, staff):** three cards: Time off (balance and Request), Documents to sign, Policies to read; badges on My account when something needs them.
 
 Wireframes for these screens can go on the facelift design canvas once the structure is agreed.
 
@@ -180,13 +180,13 @@ Wireframes for these screens can go on the facelift design canvas once the struc
 | Person | Can |
 | --- | --- |
 | Owner (platform admin) | Everything |
-| CEO | Everything except platform settings; sees pay |
-| Hiring manager (new flag on a worker, per job) | Their jobs' candidates, interviews and offers (without pay unless the owner allows it) |
+| CEO | Everything except platform settings |
+| HR (new flag on a worker, set by the owner) | All jobs, candidates, interviews, offers and the Hire button; time off approvals and policies |
 | Interviewer | The candidates they interview, their own scorecards |
 | Manager (on the employment record) | Approve their team's time off, run their probation reviews |
 | Every staff member | Their own My HR |
 
-Every view of a CV, document or pay line, and every stage change, is written to the workforce audit log.
+Every view of a CV or document, and every stage change, is written to the workforce audit log.
 
 ## 7. Candidate data and privacy
 
@@ -205,19 +205,19 @@ Every view of a CV, document or pay line, and every stage change, is written to 
 | H4 | Offer and hire | Offer templates, accept by link, the Hire button into invitations and onboarding |
 | H5 | People records | Employment section, status timeline, documents, policies and acknowledgements |
 | H6 | Time off | Leave types, requests, approvals, calendar, effects on bookings and the clock-in gate |
-| H7 | Pay summaries, reviews, offboarding | Pay periods from timesheets, probation and regular reviews, finish employment checklist |
+| H7 | Reviews and offboarding | Probation and regular reviews, finish employment checklist |
 
 Each phase ships with migrations, API, screens, emails, tests and screenshots at phone, iPad and desktop, and updates
 to this document and the system map. H1 to H4 give you a working hiring flow; H5 to H7 can follow when needed.
 
-## 9. Decisions for the owner
+## 9. Owner decisions (30 Oct 2026)
 
-1. **Name in the menu:** "People" for the Control Center section (it replaces "FayFort Workers"). Yes, or another name?
-2. **Careers page address:** fayfort.com/careers. Yes?
-3. **Who hires:** owner and CEO only, or also hiring managers chosen per job?
-4. **Pay:** keep pay rates and pay summaries in FayFort (owner and CEO only), or leave pay out entirely?
-5. **ID documents:** store a copy of each hire's ID in Documents, or never store IDs?
-6. **Candidate data:** keep applications for 12 months, then anonymise?
-7. **Trial tasks:** paid, unpaid, or decided per job?
-8. **Leave allowances:** your annual and sick day numbers, and which public holidays to follow (China, the person's
-   country, or both).
+1. **Menu name:** "People" in the Control Center, replacing "FayFort Workers".
+2. **Careers address:** fayfort.com/careers.
+3. **Who hires:** HR. The owner gives a worker the HR flag; HR staff, with the owner and CEO, run jobs, candidates,
+   interviews, offers and the Hire button. No per-job hiring managers.
+4. **Pay:** stays out of FayFort entirely. No pay rates, pay summaries or payroll screens.
+5. **ID documents:** never stored.
+6. **Candidate data:** kept for 12 months, then anonymised and the CV deleted, unless hired.
+7. **Trial tasks:** decided per job (paid or unpaid is a setting on the job).
+8. **Leave allowances:** set and changed in People → Settings, not fixed in code.

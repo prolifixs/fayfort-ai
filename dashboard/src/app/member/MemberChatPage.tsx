@@ -1116,11 +1116,22 @@ export function MemberChatPage() {
               const kept = !!(chat.retention_hold || chat.linked_request_id);
               return (
                 <div
-                  className={activeChat?.id === chat.id && activePanel === "chat" ? "member-chat-row active" : "member-chat-row"}
+                  className={
+                    "member-chat-row" +
+                    (activeChat?.id === chat.id && activePanel === "chat" ? " active" : "") +
+                    (kept && !chat.archived_at ? " kept" : "")
+                  }
                   key={chat.id}
                 >
                   <button className="member-chat-list-item" onClick={() => void chooseChat(chat)}>
-                    <strong>{chat.title}</strong>
+                    <strong>
+                      {kept && !chat.archived_at && (
+                        <svg className="member-chat-kept-icon" aria-hidden="true" viewBox="0 0 24 24">
+                          <path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z" />
+                        </svg>
+                      )}
+                      {chat.title}
+                    </strong>
                     <small>
                       {chat.archived_at
                         ? `Archived ${new Date(chat.archived_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
@@ -1267,8 +1278,9 @@ export function MemberChatPage() {
             </span>
             <span className="mapp-account-text">
               <strong>{memberName}</strong>
-              <small>
+              <small className="mapp-account-rank">
                 {RANK_NAMES[Math.min(5, Math.max(1, Number(profile?.rank_level) || 1))]} · {Number(profile?.subrank) || 1}
+                <CountUpPoints value={Number(profile?.points_balance ?? 0) || 0} />
               </small>
               {completion && completion.percent < 100 && (
                 <span className="mapp-account-meter">
@@ -2403,5 +2415,37 @@ export function MemberWorkspacePanel({
         </section>
       )}
     </section>
+  );
+}
+
+/** The points under the member's name: a bright pill that counts up when the balance changes. */
+export function CountUpPoints({ value }: { value: number }) {
+  const [shown, setShown] = useState(value);
+  const shownRef = useRef(value);
+  useEffect(() => {
+    const from = shownRef.current;
+    if (from === value) return;
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || typeof requestAnimationFrame !== "function") {
+      shownRef.current = value;
+      setShown(value);
+      return;
+    }
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 700);
+      const next = Math.round(from + (value - from) * (1 - Math.pow(1 - t, 3)));
+      shownRef.current = next;
+      setShown(next);
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return (
+    <span className="mapp-points-pill" aria-label={`${value} virtual points`}>
+      {new Intl.NumberFormat().format(shown)} pts
+    </span>
   );
 }

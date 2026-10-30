@@ -127,3 +127,38 @@
 .member-reward > span { flex: 1 1 200px; justify-items: start; text-align: left; }
 .member-reward > .primary-button { flex: none; }
 .shop-cart-lines img, .shop-cart-lines li > span { background: var(--color-surface-2); }
+
+/* ---------- Release C: chats kept with a request, points under the name, update notice ---------- */
+/* A kept chat can't be deleted: a lock, a bright dot and a soft glow on the left edge. */
+.member-chat-row.kept { box-shadow: inset 3px 0 0 #f20789; }
+.member-chat-row.kept::after {
+  content: ""; position: absolute; top: 50%; right: 40px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%;
+  background: #f20789; box-shadow: 0 0 0 0 rgb(242 7 137 / 55%); animation: kept-pulse 2.4s var(--ease-out) infinite;
+  pointer-events: none;
+}
+.member-chat-row.kept .member-chat-list-item small { color: #ff7ac0; font-weight: var(--weight-strong); }
+.member-chat-kept-icon {
+  width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; fill: none; stroke: #ff7ac0;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+@keyframes kept-pulse { 70% { box-shadow: 0 0 0 7px rgb(242 7 137 / 0%); } 100% { box-shadow: 0 0 0 0 rgb(242 7 137 / 0%); } }
+@media (prefers-reduced-motion: reduce) { .member-chat-row.kept::after { animation: none; } }
+
+/* Points in the account footer: the bright pill next to the rank. */
+.mapp-account-rank { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mapp-points-pill {
+  display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill);
+  background: #f20789; color: #ffffff; font-size: var(--text-2xs); font-weight: 700; font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 12px rgb(242 7 137 / 45%);
+}
+.mapp.menu-folded .mapp-points-pill { display: none; }
+
+/* A newer release is out while this tab was open. */
+.app-update-notice {
+  position: fixed; z-index: 2000; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 10px 12px 10px 18px;
+  border-radius: 16px; background: #02144e; color: #ffffff; box-shadow: 0 18px 40px rgb(2 20 78 / 35%);
+  font-size: var(--text-sm); animation: surface-rise var(--duration-slow) var(--ease-out);
+}
+.app-update-notice .link-button { color: #c9d3f5; }
+.app-update-notice .primary-button { min-height: 40px; }

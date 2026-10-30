@@ -23,6 +23,7 @@ import "./member/shell.css";
 import "./member/surfaces.css";
 import { FayfortLoader } from "./brand/FayfortLogo";
 import { ConsentLayer } from "./consent/ConsentLayer";
+import { UpdateNotice } from "./UpdateNotice";
 
 /** Every app.fayfort.com page, plus the cookie banner (one choice shared with fayfort.com). */
 export function App() {
@@ -30,6 +31,7 @@ export function App() {
     <>
       <AppRoutes />
       <ConsentLayer />
+      <UpdateNotice />
     </>
   );
 }
