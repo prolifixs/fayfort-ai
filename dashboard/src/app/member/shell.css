@@ -496,7 +496,7 @@
 .member-home-fan li:nth-child(2) .member-home-fan-locked { filter: hue-rotate(40deg); }
 .member-home-fan li:nth-child(3) .member-home-fan-locked { filter: hue-rotate(-50deg); }
 .member-home-fan-locked svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 25%)); }
-.member-home-fan-locked small { max-width: 90%; overflow: hidden; font-size: var(--text-2xs, 11px); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgb(0 0 0 / 25%); }
+.member-home-fan-locked small { font-size: var(--text-2xs, 11px); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgb(0 0 0 / 25%); }
 @media (max-width: 599px) {
   .member-home-finds, .member-home-feature.is-solo .member-home-finds { grid-template-columns: minmax(0, 1fr); }
   .member-home-fan { order: -1; height: 170px; }
@@ -540,3 +540,24 @@
 @media (max-width: 599px) { .member-home-strip { flex-wrap: wrap; } .member-home-strip a { margin-left: 48px; } }
 /* On phones and tablets the Chat button sits inside the sheet, above the menu bar or its handle. */
 .mapp.has-tabbar .member-chat-restore { position: absolute; right: var(--space-4); bottom: var(--space-4); }
+
+/* Phones and tablets: the bars slide away while scrolling down a section and come back on scrolling up or stopping
+   (scrollAwayBars.ts). The status-bar gap stays so the sheet never runs under the notch. */
+@media (max-width: 1023px) {
+  .mapp-topbar { max-height: calc(var(--topbar-h) + var(--safe-top) + 24px); transition: max-height var(--duration) var(--ease-out), min-height var(--duration) var(--ease-out); }
+  .mapp-topbar > * { transition: opacity var(--duration-fast) var(--ease); }
+  .mapp.bars-hidden .mapp-topbar { min-height: var(--safe-top); max-height: var(--safe-top); overflow: hidden; }
+  .mapp.bars-hidden .mapp-topbar > * { opacity: 0; pointer-events: none; }
+  .mapp-tabbar, .mapp-tabbar-handle {
+    transition: height var(--duration) var(--ease-out), margin var(--duration) var(--ease-out), padding var(--duration) var(--ease-out),
+      opacity var(--duration-fast) var(--ease), border-width var(--duration) var(--ease-out);
+  }
+  .mapp.bars-hidden .mapp-tabbar { height: 0; margin-top: 0; margin-bottom: var(--safe-bottom); border-width: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+  .mapp-tabbar-handle { height: calc(var(--tap) + 8px + var(--safe-bottom)); box-sizing: border-box; }
+  .mapp.bars-hidden .mapp-tabbar-handle { height: var(--safe-bottom); padding: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+  .member-chat-restore { transition: opacity var(--duration-fast) var(--ease), transform var(--duration) var(--ease-out); }
+  .mapp.bars-hidden .member-chat-restore { opacity: 0; transform: translateY(12px); pointer-events: none; }
+}
+@media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
+  .mapp-topbar, .mapp-topbar > *, .mapp-tabbar, .mapp-tabbar-handle, .member-chat-restore { transition: none; }
+}

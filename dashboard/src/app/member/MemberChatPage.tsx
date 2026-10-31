@@ -1,5 +1,6 @@
 import { playMemberSound } from "../memberSound";
 import { FindsPanel } from "./FindsPanel";
+import { useScrollAwayBars } from "./scrollAwayBars";
 import { rememberReturn } from "../../lib/returnTo";
 import { WorkerRatingPrompts } from "./WorkerRatingPrompts";
 import { setOpenChat } from "./activeChat";
@@ -194,6 +195,7 @@ export function MemberChatPage() {
   const [shopLoaded, setShopLoaded] = useState(false);
   const [tabsFolded, setTabsFolded] = useState(() => FOLDED_TAB_PANELS.includes(panelFromUrl()));
   useEffect(() => setTabsFolded(FOLDED_TAB_PANELS.includes(activePanel)), [activePanel]);
+  const barsHidden = useScrollAwayBars(!isDesktop, activePanel);
   const [chatExpanded, setChatExpanded] = useState(() => panelFromUrl() === "product");
   /** `href` keeps a deep link inside the section, for example /member/orders#request-… from Home. */
   function selectMemberPanel(panel: MemberPanel, href?: string) {
@@ -1002,7 +1004,7 @@ export function MemberChatPage() {
   return (
     <AdsProvider accessToken={verified ? token : null} planKey={memberPlan?.tier} onUpgrade={openPlans}>
     <div
-      className={["mapp", sidebarOpen && !isDesktop ? "sidebar-open" : "", showTabs ? "has-tabbar" : "", isDesktop && menuFolded ? "menu-folded" : ""]
+      className={["mapp", sidebarOpen && !isDesktop ? "sidebar-open" : "", showTabs ? "has-tabbar" : "", isDesktop && menuFolded ? "menu-folded" : "", barsHidden && !sidebarOpen ? "bars-hidden" : ""]
         .filter(Boolean)
         .join(" ")}
     >
